@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+    environment:
+      - DEBUG=true
+      - LLM_PROVIDER=mock
+      - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+    environment:
+      - VITE_API_PROXY=http://backend:8000
+    depends_on:
+      - backend

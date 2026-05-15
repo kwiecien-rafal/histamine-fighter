@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+*.local
+
+# Local env file (committed template lives in .env.example)
+.env
