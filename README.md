@@ -8,7 +8,7 @@ Agentic AI meal suggestions for people managing histamine intolerance.
 
 - **Backend:** FastAPI, SQLAlchemy (async), Pydantic v2
 - **Frontend:** React, Vite, TypeScript, Tailwind
-- **LLM:** Swappable provider (Modal, OpenAI, Anthropic, Gemini, Ollama)
+- **LLM:** Swappable provider (Modal, OpenAI, Anthropic, Gemini, OpenRouter, Ollama)
 
 ## License
 

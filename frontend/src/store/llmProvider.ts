@@ -6,7 +6,7 @@ export type Provider =
   | "openai"
   | "anthropic"
   | "gemini"
-  | "groq"
+  | "openrouter"
   | "modal";
 
 interface LLMProviderState {

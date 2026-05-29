@@ -16,7 +16,7 @@ const PROVIDERS: ProviderRow[] = [
   { id: "openai", label: "OpenAI", note: "Coming in a later release." },
   { id: "anthropic", label: "Anthropic", note: "Coming in a later release." },
   { id: "gemini", label: "Google Gemini", note: "Coming in a later release." },
-  { id: "groq", label: "Groq (free, fast)", note: "Coming in a later release." },
+  { id: "openrouter", label: "OpenRouter (many models)", note: "Coming in a later release." },
 ];
 
 interface SettingsDrawerProps {

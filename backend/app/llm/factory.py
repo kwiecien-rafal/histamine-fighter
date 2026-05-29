@@ -6,7 +6,7 @@ from app.llm.config import LLMRequestConfig
 from app.llm.mock_client import MockLLMClient
 from app.llm.ollama_client import OllamaClient
 
-_NOT_YET_AVAILABLE = {"openai", "anthropic", "gemini", "groq", "modal"}
+_NOT_YET_AVAILABLE = {"openai", "anthropic", "gemini", "openrouter", "modal"}
 
 
 def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
