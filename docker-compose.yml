@@ -7,8 +7,12 @@ services:
       - ./backend/app:/app/app
     environment:
       - DEBUG=true
-      - LLM_PROVIDER=mock
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
       - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:20b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   frontend:
     build: ./frontend
