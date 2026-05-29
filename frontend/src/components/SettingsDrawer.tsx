@@ -20,7 +20,7 @@ const PROVIDERS: ProviderRow[] = [
   { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true, defaultModel: "gpt-4o-mini" },
   { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release.", ready: false, needsKey: false },
   { id: "anthropic", label: "Anthropic", note: "Use your own Anthropic API key.", ready: true, needsKey: true, defaultModel: "claude-sonnet-4-6" },
-  { id: "gemini", label: "Google Gemini", note: "Coming in a later release.", ready: false, needsKey: true },
+  { id: "gemini", label: "Google Gemini", note: "Use your own Gemini API key.", ready: true, needsKey: true, defaultModel: "gemini-2.5-flash" },
   { id: "openrouter", label: "OpenRouter (many models)", note: "Coming in a later release.", ready: false, needsKey: true },
 ];
 
