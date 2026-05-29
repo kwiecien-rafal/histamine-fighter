@@ -7,7 +7,12 @@ class Settings(BaseSettings):
     debug: bool = True
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
+    public_deployment: bool = False
+
     llm_provider: str = "mock"
+
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gpt-oss:20b"
 
 
 settings = Settings()
