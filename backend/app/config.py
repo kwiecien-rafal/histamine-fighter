@@ -14,5 +14,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "gpt-oss:20b"
 
+    openai_api_key: str | None = None
+
 
 settings = Settings()

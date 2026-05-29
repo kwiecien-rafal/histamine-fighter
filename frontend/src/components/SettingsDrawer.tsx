@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { useLLMProviderStore, type Provider } from "../store/llmProvider";
 
 const PUBLIC_DEPLOYMENT = import.meta.env.VITE_PUBLIC_DEPLOYMENT === "true";
@@ -8,15 +10,17 @@ interface ProviderRow {
   id: Provider;
   label: string;
   note: string;
+  ready: boolean;
+  needsKey: boolean;
 }
 
 const PROVIDERS: ProviderRow[] = [
-  { id: "ollama", label: "Local Ollama", note: "Self-hosted, free, no API key." },
-  { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release." },
-  { id: "openai", label: "OpenAI", note: "Coming in a later release." },
-  { id: "anthropic", label: "Anthropic", note: "Coming in a later release." },
-  { id: "gemini", label: "Google Gemini", note: "Coming in a later release." },
-  { id: "openrouter", label: "OpenRouter (many models)", note: "Coming in a later release." },
+  { id: "ollama", label: "Local Ollama", note: "Self-hosted, free, no API key.", ready: true, needsKey: false },
+  { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true },
+  { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release.", ready: false, needsKey: false },
+  { id: "anthropic", label: "Anthropic", note: "Coming in a later release.", ready: false, needsKey: true },
+  { id: "gemini", label: "Google Gemini", note: "Coming in a later release.", ready: false, needsKey: true },
+  { id: "openrouter", label: "OpenRouter (many models)", note: "Coming in a later release.", ready: false, needsKey: true },
 ];
 
 interface SettingsDrawerProps {
@@ -26,11 +30,14 @@ interface SettingsDrawerProps {
 
 export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const provider = useLLMProviderStore((s) => s.provider);
+  const apiKey = useLLMProviderStore((s) => s.apiKey);
   const model = useLLMProviderStore((s) => s.model);
   const ollamaBaseUrl = useLLMProviderStore((s) => s.ollamaBaseUrl);
   const setProvider = useLLMProviderStore((s) => s.setProvider);
+  const setApiKey = useLLMProviderStore((s) => s.setApiKey);
   const setModel = useLLMProviderStore((s) => s.setModel);
   const setOllamaBaseUrl = useLLMProviderStore((s) => s.setOllamaBaseUrl);
+  const [showKey, setShowKey] = useState(false);
 
   if (!open) return null;
 
@@ -57,9 +64,9 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
         <ul className="divide-y divide-stone-100">
           {PROVIDERS.map((row) => {
             const isOllamaOnPublic = row.id === "ollama" && PUBLIC_DEPLOYMENT;
-            const isPending = row.id !== "ollama";
-            const disabled = isOllamaOnPublic || isPending;
+            const disabled = !row.ready || isOllamaOnPublic;
             const selected = provider === row.id;
+            const expanded = selected && !disabled;
 
             return (
               <li key={row.id} className="px-5 py-4">
@@ -105,7 +112,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   </div>
                 </label>
 
-                {row.id === "ollama" && !disabled && selected && (
+                {expanded && row.id === "ollama" && (
                   <div className="mt-3 pl-7 space-y-3">
                     <label className="block">
                       <span className="text-xs uppercase tracking-wide text-stone-500">
@@ -139,6 +146,50 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         http://host.docker.internal:11434
                       </code>
                       , which routes to Ollama on your host machine.
+                    </p>
+                  </div>
+                )}
+
+                {expanded && row.needsKey && (
+                  <div className="mt-3 pl-7 space-y-3">
+                    <label className="block">
+                      <span className="text-xs uppercase tracking-wide text-stone-500">
+                        API key
+                      </span>
+                      <div className="mt-1 flex gap-2">
+                        <input
+                          type={showKey ? "text" : "password"}
+                          value={apiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder="sk-…"
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="flex-1 rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowKey((v) => !v)}
+                          className="text-xs text-stone-500 hover:text-stone-900 px-2"
+                        >
+                          {showKey ? "Hide" : "Show"}
+                        </button>
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs uppercase tracking-wide text-stone-500">
+                        Model
+                      </span>
+                      <input
+                        type="text"
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        placeholder="provider default (e.g. gpt-4o-mini)"
+                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                      />
+                    </label>
+                    <p className="text-xs text-stone-500">
+                      Stored only in this browser and sent with each request —
+                      never saved on our servers.
                     </p>
                   </div>
                 )}

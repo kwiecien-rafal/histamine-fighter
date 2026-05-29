@@ -5,8 +5,9 @@ from app.llm.base import LLMClient
 from app.llm.config import LLMRequestConfig
 from app.llm.mock_client import MockLLMClient
 from app.llm.ollama_client import OllamaClient
+from app.llm.openai_compatible import OpenAICompatibleClient
 
-_NOT_YET_AVAILABLE = {"openai", "anthropic", "gemini", "openrouter", "modal"}
+_NOT_YET_AVAILABLE = {"anthropic", "gemini", "openrouter", "modal"}
 
 
 def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
@@ -33,6 +34,14 @@ def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
             model=cfg.model or settings.ollama_model,
         )
 
+    if provider == "openai":
+        return OpenAICompatibleClient(
+            base_url="https://api.openai.com/v1",
+            api_key=_require_api_key(provider, cfg.api_key, settings.openai_api_key),
+            model=cfg.model or "gpt-4o-mini",
+            label="openai",
+        )
+
     if provider in _NOT_YET_AVAILABLE:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -43,3 +52,13 @@ def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=f"Unknown LLM provider: '{provider}'.",
     )
+
+
+def _require_api_key(provider: str, header_key: str | None, settings_key: str | None) -> str:
+    key = header_key or settings_key
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"API key required for provider '{provider}'.",
+        )
+    return key
