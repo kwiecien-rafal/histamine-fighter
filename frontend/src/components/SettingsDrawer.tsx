@@ -31,8 +31,8 @@ interface SettingsDrawerProps {
 
 export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const provider = useLLMProviderStore((s) => s.provider);
-  const apiKey = useLLMProviderStore((s) => s.apiKey);
-  const model = useLLMProviderStore((s) => s.model);
+  const apiKeys = useLLMProviderStore((s) => s.apiKeys);
+  const models = useLLMProviderStore((s) => s.models);
   const ollamaBaseUrl = useLLMProviderStore((s) => s.ollamaBaseUrl);
   const setProvider = useLLMProviderStore((s) => s.setProvider);
   const setApiKey = useLLMProviderStore((s) => s.setApiKey);
@@ -133,8 +133,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                       </span>
                       <input
                         type="text"
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
+                        value={models[row.id] ?? ""}
+                        onChange={(e) => setModel(row.id, e.target.value)}
                         placeholder="server default (e.g. gpt-oss:20b)"
                         className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
                       />
@@ -160,8 +160,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                       <div className="mt-1 flex gap-2">
                         <input
                           type={showKey ? "text" : "password"}
-                          value={apiKey}
-                          onChange={(e) => setApiKey(e.target.value)}
+                          value={apiKeys[row.id] ?? ""}
+                          onChange={(e) => setApiKey(row.id, e.target.value)}
                           placeholder="sk-…"
                           autoComplete="off"
                           spellCheck={false}
@@ -182,8 +182,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                       </span>
                       <input
                         type="text"
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
+                        value={models[row.id] ?? ""}
+                        onChange={(e) => setModel(row.id, e.target.value)}
                         placeholder={
                           row.defaultModel
                             ? `provider default (e.g. ${row.defaultModel})`

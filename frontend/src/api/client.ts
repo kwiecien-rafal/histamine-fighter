@@ -10,14 +10,16 @@ export interface DishLookupResponse {
 }
 
 function buildLLMHeaders(): Record<string, string> {
-  const { provider, apiKey, model, ollamaBaseUrl } =
+  const { provider, apiKeys, models, ollamaBaseUrl } =
     useLLMProviderStore.getState();
+  const apiKey = (apiKeys[provider] ?? "").trim();
+  const model = (models[provider] ?? "").trim();
   const headers: Record<string, string> = { "X-LLM-Provider": provider };
-  if (model.trim()) headers["X-LLM-Model"] = model.trim();
+  if (model) headers["X-LLM-Model"] = model;
   if (provider === "ollama" && ollamaBaseUrl.trim()) {
     headers["X-LLM-Base-URL"] = ollamaBaseUrl.trim();
   }
-  if (apiKey.trim()) headers["X-LLM-API-Key"] = apiKey.trim();
+  if (apiKey) headers["X-LLM-API-Key"] = apiKey;
   return headers;
 }
 
