@@ -12,13 +12,14 @@ interface ProviderRow {
   note: string;
   ready: boolean;
   needsKey: boolean;
+  defaultModel?: string;
 }
 
 const PROVIDERS: ProviderRow[] = [
   { id: "ollama", label: "Local Ollama", note: "Self-hosted, free, no API key.", ready: true, needsKey: false },
-  { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true },
+  { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true, defaultModel: "gpt-4o-mini" },
   { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release.", ready: false, needsKey: false },
-  { id: "anthropic", label: "Anthropic", note: "Coming in a later release.", ready: false, needsKey: true },
+  { id: "anthropic", label: "Anthropic", note: "Use your own Anthropic API key.", ready: true, needsKey: true, defaultModel: "claude-sonnet-4-6" },
   { id: "gemini", label: "Google Gemini", note: "Coming in a later release.", ready: false, needsKey: true },
   { id: "openrouter", label: "OpenRouter (many models)", note: "Coming in a later release.", ready: false, needsKey: true },
 ];
@@ -183,7 +184,11 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         type="text"
                         value={model}
                         onChange={(e) => setModel(e.target.value)}
-                        placeholder="provider default (e.g. gpt-4o-mini)"
+                        placeholder={
+                          row.defaultModel
+                            ? `provider default (e.g. ${row.defaultModel})`
+                            : "provider default"
+                        }
                         className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
                       />
                     </label>

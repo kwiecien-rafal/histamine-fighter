@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ollama_model: str = "gpt-oss:20b"
 
     openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
 
 
 settings = Settings()
