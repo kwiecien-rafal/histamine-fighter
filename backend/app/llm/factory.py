@@ -4,11 +4,12 @@ from app.config import settings
 from app.llm.anthropic_client import AnthropicClient
 from app.llm.base import LLMClient
 from app.llm.config import LLMRequestConfig
+from app.llm.gemini_client import GeminiClient
 from app.llm.mock_client import MockLLMClient
 from app.llm.ollama_client import OllamaClient
 from app.llm.openai_compatible import OpenAICompatibleClient
 
-_NOT_YET_AVAILABLE = {"gemini", "openrouter", "modal"}
+_NOT_YET_AVAILABLE = {"openrouter", "modal"}
 
 
 def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
@@ -47,6 +48,12 @@ def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
         return AnthropicClient(
             api_key=_require_api_key(provider, cfg.api_key, settings.anthropic_api_key),
             model=cfg.model or "claude-sonnet-4-6",
+        )
+
+    if provider == "gemini":
+        return GeminiClient(
+            api_key=_require_api_key(provider, cfg.api_key, settings.gemini_api_key),
+            model=cfg.model or "gemini-2.5-flash",
         )
 
     if provider in _NOT_YET_AVAILABLE:
