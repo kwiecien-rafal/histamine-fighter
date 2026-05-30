@@ -2,10 +2,17 @@ import { useLLMProviderStore } from "../store/llmProvider";
 
 export type Verdict = "safe" | "depends" | "avoid";
 
+export interface Replacement {
+  ingredient: string;
+  swap: string;
+  reason: string;
+}
+
 export interface DishLookupResponse {
   dish: string;
   verdict: Verdict;
   explanation: string;
+  replacements: Replacement[];
   model: string;
 }
 

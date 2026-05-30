@@ -1,9 +1,12 @@
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from app.llm.base import LLMClient
+from app.llm.structured import parse_json
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)
 
@@ -43,6 +46,31 @@ class OllamaClient(LLMClient):
         if not isinstance(content, str):
             raise RuntimeError("Ollama response missing 'message.content' string")
         return content
+
+    async def generate_structured[ModelT: BaseModel](
+        self, system: str, user: str, schema: type[ModelT]
+    ) -> ModelT:
+        # Ollama 0.5+ constrains decoding to the JSON Schema given in `format`.
+        # temperature 0 keeps the structured output stable.
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": _messages(system, user),
+            "stream": False,
+            "format": schema.model_json_schema(),
+            "options": {"temperature": 0},
+        }
+        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
+            try:
+                response = await client.post(f"{self._base_url}/api/chat", json=payload)
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"Ollama request failed: {exc}") from exc
+
+        data = response.json()
+        content = data.get("message", {}).get("content", "")
+        if not isinstance(content, str):
+            raise RuntimeError("Ollama response missing 'message.content' string")
+        return parse_json(content, schema, "ollama")
 
     async def stream(self, system: str, user: str) -> AsyncIterator[str]:
         payload = {

@@ -2,8 +2,10 @@ from collections.abc import AsyncIterator
 
 from google import genai
 from google.genai import errors, types
+from pydantic import BaseModel
 
 from app.llm.base import LLMClient
+from app.llm.structured import parse_json
 
 
 class GeminiClient(LLMClient):
@@ -33,6 +35,23 @@ class GeminiClient(LLMClient):
         except errors.APIError as exc:
             raise RuntimeError(f"gemini request failed: {exc}") from exc
         return response.text or ""
+
+    async def generate_structured[ModelT: BaseModel](
+        self, system: str, user: str, schema: type[ModelT]
+    ) -> ModelT:
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=self._model,
+                contents=user,
+                config=types.GenerateContentConfig(
+                    system_instruction=system,
+                    response_mime_type="application/json",
+                    response_schema=schema,
+                ),
+            )
+        except errors.APIError as exc:
+            raise RuntimeError(f"gemini request failed: {exc}") from exc
+        return parse_json(response.text or "", schema, "gemini")
 
     async def stream(self, system: str, user: str) -> AsyncIterator[str]:
         try:
