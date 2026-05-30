@@ -3,6 +3,7 @@ import { useState } from "react";
 import { lookupDish, type DishLookupResponse } from "./api/client";
 import { LLMProviderBadge } from "./components/LLMProviderBadge";
 import { SettingsDrawer } from "./components/SettingsDrawer";
+import { VerdictBadge } from "./components/VerdictBadge";
 
 export function App() {
   const [dish, setDish] = useState("");
@@ -63,17 +64,47 @@ export function App() {
         {error && <p className="text-red-700">{error}</p>}
 
         {result && (
-          <article className="rounded border border-stone-200 bg-white p-4">
-            <header className="flex items-center justify-between mb-2 gap-3">
-              <h2 className="font-medium">{result.dish}</h2>
-              <div className="flex items-center gap-2">
-                <span className="text-xs uppercase tracking-wide text-stone-500">
-                  {result.verdict}
-                </span>
-                <LLMProviderBadge model={result.model} />
-              </div>
+          <article className="rounded border border-stone-200 bg-white p-5">
+            <header className="flex items-start justify-between gap-3 mb-4">
+              <h2 className="text-lg font-medium">{result.dish}</h2>
+              <LLMProviderBadge model={result.model} />
             </header>
-            <p className="text-stone-700">{result.explanation}</p>
+
+            <section className="mb-4">
+              <VerdictBadge verdict={result.verdict} />
+            </section>
+
+            <section className="mb-4">
+              <h3 className="text-xs uppercase tracking-wide text-stone-500 mb-1">
+                Why
+              </h3>
+              <p className="text-stone-700">{result.explanation}</p>
+            </section>
+
+            {result.verdict !== "safe" && result.replacements.length > 0 && (
+              <section>
+                <h3 className="text-xs uppercase tracking-wide text-stone-500 mb-2">
+                  Safer swaps
+                </h3>
+                <ul className="flex flex-col gap-2">
+                  {result.replacements.map((r) => (
+                    <li
+                      key={`${r.ingredient}-${r.swap}`}
+                      className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm"
+                    >
+                      <span className="text-stone-500 line-through">
+                        {r.ingredient}
+                      </span>
+                      <span className="mx-2 text-stone-400">→</span>
+                      <span className="font-medium text-emerald-800">
+                        {r.swap}
+                      </span>
+                      <p className="text-stone-600 mt-0.5">{r.reason}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </article>
         )}
       </div>

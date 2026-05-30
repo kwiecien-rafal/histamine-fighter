@@ -1,9 +1,12 @@
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
+from pydantic import BaseModel
 
 from app.llm.base import LLMClient
+from app.llm.structured import openai_strict_schema, parse_json
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0)
 
@@ -29,30 +32,30 @@ class OpenAICompatibleClient(LLMClient):
         return f"{self._label}/{self._model}"
 
     async def complete(self, system: str, user: str) -> str:
-        payload = {
-            "model": self._model,
-            "messages": _messages(system, user),
-            "stream": False,
-        }
-        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
-            try:
-                response = await client.post(
-                    f"{self._base_url}/chat/completions",
-                    json=payload,
-                    headers=self._auth_headers(),
-                )
-                response.raise_for_status()
-            except httpx.HTTPError as exc:
-                raise RuntimeError(f"{self._label} request failed: {exc}") from exc
+        data = await self._chat(
+            {"model": self._model, "messages": _messages(system, user), "stream": False}
+        )
+        return self._message_content(data)
 
-        data = response.json()
-        choices = data.get("choices") or []
-        if not choices:
-            raise RuntimeError(f"{self._label} response contained no choices")
-        content = choices[0].get("message", {}).get("content")
-        if not isinstance(content, str):
-            raise RuntimeError(f"{self._label} response missing message content")
-        return content
+    async def generate_structured[ModelT: BaseModel](
+        self, system: str, user: str, schema: type[ModelT]
+    ) -> ModelT:
+        data = await self._chat(
+            {
+                "model": self._model,
+                "messages": _messages(system, user),
+                "stream": False,
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": schema.__name__,
+                        "schema": openai_strict_schema(schema),
+                        "strict": True,
+                    },
+                },
+            }
+        )
+        return parse_json(self._message_content(data), schema, self._label)
 
     async def stream(self, system: str, user: str) -> AsyncIterator[str]:
         payload = {
@@ -75,6 +78,29 @@ class OpenAICompatibleClient(LLMClient):
                             yield piece
             except httpx.HTTPError as exc:
                 raise RuntimeError(f"{self._label} stream failed: {exc}") from exc
+
+    async def _chat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
+            try:
+                response = await client.post(
+                    f"{self._base_url}/chat/completions",
+                    json=payload,
+                    headers=self._auth_headers(),
+                )
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"{self._label} request failed: {exc}") from exc
+        data: dict[str, Any] = response.json()
+        return data
+
+    def _message_content(self, data: dict[str, Any]) -> str:
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError(f"{self._label} response contained no choices")
+        content = choices[0].get("message", {}).get("content")
+        if not isinstance(content, str):
+            raise RuntimeError(f"{self._label} response missing message content")
+        return content
 
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._api_key}"}

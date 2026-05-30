@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from app.agents.base import BaseAgent
+from app.schemas.meal import DishLookupResponse, DishVerdict
 
 
 class DishLookupAgent(BaseAgent):
@@ -9,13 +10,9 @@ class DishLookupAgent(BaseAgent):
 
     async def run(self, **kwargs: Any) -> dict[str, Any]:
         dish = str(kwargs["dish"])
-        text = await self.llm.complete(self.system_prompt, dish)
-        return {
-            "dish": dish,
-            "verdict": "avoid",
-            "explanation": text,
-            "model": self.llm.model_name,
-        }
+        verdict = await self.llm.generate_structured(self.system_prompt, dish, DishVerdict)
+        response = DishLookupResponse(**verdict.model_dump(), model=self.llm.model_name)
+        return response.model_dump()
 
     async def stream(self, **kwargs: Any) -> AsyncIterator[str]:
         dish = str(kwargs["dish"])
