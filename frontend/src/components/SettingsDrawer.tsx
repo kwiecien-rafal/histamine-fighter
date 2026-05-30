@@ -13,6 +13,7 @@ interface ProviderRow {
   ready: boolean;
   needsKey: boolean;
   defaultModel?: string;
+  requiresModel?: boolean;
 }
 
 const PROVIDERS: ProviderRow[] = [
@@ -21,7 +22,7 @@ const PROVIDERS: ProviderRow[] = [
   { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release.", ready: false, needsKey: false },
   { id: "anthropic", label: "Anthropic", note: "Use your own Anthropic API key.", ready: true, needsKey: true, defaultModel: "claude-sonnet-4-6" },
   { id: "gemini", label: "Google Gemini", note: "Use your own Gemini API key.", ready: true, needsKey: true, defaultModel: "gemini-2.5-flash" },
-  { id: "openrouter", label: "OpenRouter (many models)", note: "Coming in a later release.", ready: false, needsKey: true },
+  { id: "openrouter", label: "OpenRouter", note: "Use your own OpenRouter key.", ready: true, needsKey: true, requiresModel: true },
 ];
 
 interface SettingsDrawerProps {
@@ -72,9 +73,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
             return (
               <li key={row.id} className="px-5 py-4">
                 <label
-                  className={`flex items-start gap-3 ${
-                    disabled ? "opacity-60" : "cursor-pointer"
-                  }`}
+                  className={`flex items-start gap-3 ${disabled ? "opacity-60" : "cursor-pointer"
+                    }`}
                 >
                   <input
                     type="radio"
@@ -178,20 +178,36 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                     </label>
                     <label className="block">
                       <span className="text-xs uppercase tracking-wide text-stone-500">
-                        Model
+                        Model{row.requiresModel ? " (required)" : ""}
                       </span>
                       <input
                         type="text"
                         value={models[row.id] ?? ""}
                         onChange={(e) => setModel(row.id, e.target.value)}
                         placeholder={
-                          row.defaultModel
-                            ? `provider default (e.g. ${row.defaultModel})`
-                            : "provider default"
+                          row.requiresModel
+                            ? "e.g. anthropic/claude-sonnet-4"
+                            : row.defaultModel
+                              ? `provider default (e.g. ${row.defaultModel})`
+                              : "provider default"
                         }
                         className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
                       />
                     </label>
+                    {row.requiresModel && (
+                      <p className="text-xs text-stone-500">
+                        Browse available model IDs at{" "}
+                        <a
+                          href="https://openrouter.ai/models"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline hover:text-stone-900"
+                        >
+                          openrouter.ai/models
+                        </a>
+                        .
+                      </p>
+                    )}
                     <p className="text-xs text-stone-500">
                       Stored only in this browser and sent with each request —
                       never saved on our servers.

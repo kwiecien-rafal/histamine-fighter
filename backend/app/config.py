@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
+    openrouter_api_key: str | None = None
 
 
 settings = Settings()
