@@ -5,7 +5,6 @@ from app.llm.anthropic_client import AnthropicClient
 from app.llm.base import LLMClient
 from app.llm.config import LLMRequestConfig
 from app.llm.gemini_client import GeminiClient
-from app.llm.mock_client import MockLLMClient
 from app.llm.ollama_client import OllamaClient
 from app.llm.openai_compatible import OpenAICompatibleClient
 
@@ -21,9 +20,6 @@ def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
     public deployment) raise 400 with a clear message for the frontend.
     """
     provider = (cfg.provider or settings.llm_provider).lower()
-
-    if provider == "mock":
-        return MockLLMClient()
 
     if provider == "ollama":
         if settings.public_deployment:

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     public_deployment: bool = False
 
-    llm_provider: str = "mock"
+    llm_provider: str = "ollama"
 
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "gpt-oss:20b"
