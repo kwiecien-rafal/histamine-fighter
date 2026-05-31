@@ -6,10 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import meals
 from app.config import settings
+from app.core.logging import configure_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Configure logging at startup."""
+    configure_logging()
     yield
 
 
