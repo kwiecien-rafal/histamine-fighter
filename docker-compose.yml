@@ -1,4 +1,20 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=histamine
+      - POSTGRES_PASSWORD=histamine
+      - POSTGRES_DB=histamine
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U histamine -d histamine"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
@@ -7,12 +23,16 @@ services:
       - ./backend/app:/app/app
     environment:
       - DEBUG=true
+      - DATABASE_URL=postgresql+asyncpg://histamine:histamine@db:5432/histamine
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:20b}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
@@ -27,3 +47,6 @@ services:
       - VITE_API_PROXY=http://backend:8000
     depends_on:
       - backend
+
+volumes:
+  db_data:

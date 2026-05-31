@@ -9,6 +9,9 @@ class Settings(BaseSettings):
 
     public_deployment: bool = False
 
+    # Database connection. Default points at the Postgres in docker-compose.
+    database_url: str = "postgresql+asyncpg://histamine:histamine@localhost:5432/histamine"
+
     llm_provider: str = "ollama"
 
     ollama_base_url: str = "http://localhost:11434"

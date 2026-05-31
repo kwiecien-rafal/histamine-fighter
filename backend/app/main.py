@@ -1,19 +1,33 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.api.v1 import meals
 from app.config import settings
 from app.core.logging import configure_logging
+from app.db.engine import engine
+
+logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Configure logging at startup."""
+    """Set up logging and check the database is reachable before serving requests."""
     configure_logging()
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("startup.database_unreachable")
+        raise
+    logger.info("startup.complete")
     yield
+    await engine.dispose()
+    logger.info("shutdown.complete")
 
 
 def create_app() -> FastAPI:
