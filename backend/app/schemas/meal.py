@@ -1,8 +1,6 @@
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
-Verdict = Literal["safe", "depends", "avoid"]
+from app.enums import SafetyLevel
 
 
 class DishLookupRequest(BaseModel):
@@ -25,7 +23,7 @@ class DishVerdict(BaseModel):
     """
 
     dish: str = Field(description="The dish found in the user's message.")
-    verdict: Verdict = Field(description="Overall histamine safety of the dish.")
+    verdict: SafetyLevel = Field(description="Overall histamine safety of the dish.")
     explanation: str = Field(description="Short reason for the verdict.")
     replacements: list[Replacement] = Field(
         default_factory=list,
