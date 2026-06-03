@@ -1,0 +1,5114 @@
+[
+  {
+    "name": "Egg White",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "egg",
+    "aliases": [
+      "egg whites",
+      "albumen"
+    ],
+    "notes": "Histamine liberator (mast-cell activating), strongest raw but still active when cooked. The yolk is well tolerated, so the white is the part to avoid or swap. Note: UK dietitians (BDA) rate whole eggs as freely tolerated, so reactions are individual.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Egg Yolk",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "egg",
+    "aliases": [
+      "egg yolks",
+      "yolk"
+    ],
+    "notes": "Well tolerated and free of histamine concerns — the safe part of the egg, unlike the white.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Whole Egg",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "egg",
+    "aliases": [
+      "egg",
+      "eggs",
+      "chicken egg"
+    ],
+    "notes": "The yolk is fine but the white is a histamine liberator (especially raw), so whole egg is best limited. BDA considers eggs freely tolerated, so sensitivity varies.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Quail Egg",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "egg",
+    "aliases": [
+      "quail eggs",
+      "quail's egg"
+    ],
+    "notes": "Well tolerated, no histamine concerns.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Blue Cheese",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "blue cheeses",
+      "mold cheese",
+      "mould cheese",
+      "mould-ripened cheese"
+    ],
+    "notes": "Mould-ripened and aged — among the highest-histamine cheeses, also rich in tyramine and cadaverine. Avoid; swap for a fresh cheese like ricotta or mozzarella.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Cultured Butter",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "dairy",
+    "aliases": [
+      "soured butter",
+      "mildly soured butter"
+    ],
+    "notes": "Soured with bacteria, so carries small amounts of histamine; usually still tolerated. Sweet-cream butter is the safer choice.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sweet Cream Butter",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [
+      "butter"
+    ],
+    "notes": "Ordinary unfermented butter, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Butterkäse",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "butterkaese",
+      "butter cheese"
+    ],
+    "notes": "Young, mild cheese, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Buttermilk",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "dairy",
+    "aliases": [],
+    "notes": "Lactic-acid fermented, so slightly histamine-forming; small amounts are often tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cheddar",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "cheddar cheese"
+    ],
+    "notes": "Aged hard cheese — high in histamine and other amines, with reported levels spanning 0–2000 mg/kg, and one of the cheeses named in histamine-poisoning outbreaks. Avoid; swap for a fresh cheese.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Raw Milk Cheese",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "unpasteurised cheese",
+      "unpasteurized cheese",
+      "raw milk products",
+      "products from raw milk"
+    ],
+    "notes": "Made from unpasteurised milk, so a higher bacterial load means more histamine and amines; riskier than pasteurised cheese.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Hard Cheese",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "matured cheese",
+      "aged cheese",
+      "mature cheese"
+    ],
+    "notes": "All well-matured cheeses are strongly histamine-rich and also high in tyramine, building up the longer they age — a classic trigger. Choose fresh, unripened cheese instead.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Cream Cheese",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "cream cheeses",
+      "young cheese"
+    ],
+    "notes": "Very young, unripened cheese — well tolerated if additive-free.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sweet Cream",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [
+      "cream",
+      "fresh cream"
+    ],
+    "notes": "Plain unfermented cream is well tolerated; check for thickeners and stabilisers, which are often the real problem.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Curd Cheese",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [],
+    "notes": "Fresh, unripened cheese, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sheep's Milk",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [
+      "ewe's milk",
+      "sheep milk",
+      "ewe milk"
+    ],
+    "notes": "Plain sheep's milk is well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Farmer's Cheese",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [],
+    "notes": "A fresh, unripened cheese, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Feta",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "feta cheese"
+    ],
+    "notes": "Brined cheese with some histamine and amines; small amounts are often tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Fontina",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "fontina cheese"
+    ],
+    "notes": "Semi-aged cheese, histamine-rich — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Geheimratskäse",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "geheimratskaese",
+      "geheimrats cheese"
+    ],
+    "notes": "Mild young cheese, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Goat's Milk",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [
+      "goat milk"
+    ],
+    "notes": "Plain goat's milk is well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Young Gouda",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "gouda (young)",
+      "young gouda cheese"
+    ],
+    "notes": "Only lightly aged — tolerated in small amounts, unlike aged Gouda.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Aged Gouda",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "old gouda",
+      "mature gouda"
+    ],
+    "notes": "Long-matured, so histamine builds up, unlike young Gouda; Gouda is among the cheeses linked to histamine-poisoning outbreaks. Best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Kefir",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "dairy",
+    "aliases": [
+      "keefir",
+      "kephir"
+    ],
+    "notes": "Fermented milk drink carrying histamine and amines; small amounts are sometimes tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mascarpone",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "mascarpone cheese"
+    ],
+    "notes": "Fresh cream cheese, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lactose-Free Milk",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "dairy",
+    "aliases": [
+      "lactosefree milk"
+    ],
+    "notes": "Plain milk with lactose removed; may carry a little histamine and is sometimes slightly less tolerated than regular milk.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pasteurised Milk",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [
+      "milk",
+      "pasteurized milk",
+      "UHT milk",
+      "ultra-heat treated milk"
+    ],
+    "notes": "Fresh pasteurised or UHT milk is low in histamine and well tolerated (may bother an already-irritated gut).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Milk Powder",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [
+      "powdered milk",
+      "milkpowder",
+      "dried milk"
+    ],
+    "notes": "Dried milk; tolerance varies, sometimes slightly worse than fresh.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mozzarella",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "mozzarella cheese"
+    ],
+    "notes": "Fresh, unripened cheese, well tolerated — a good swap for aged cheese.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Processed Cheese",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [],
+    "notes": "Made from aged cheese plus additives — histamine-rich, best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Quark",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [],
+    "notes": "Fresh, unripened dairy, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Raclette",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "raclette cheese"
+    ],
+    "notes": "Melting cheese, matured and histamine-rich — avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Raw Milk",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "dairy",
+    "aliases": [
+      "unpasteurised milk",
+      "unpasteurized milk"
+    ],
+    "notes": "Highly perishable from its bacterial load; histamine forms quickly as it sits, so use only very fresh.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Ready-Made Cheese Preparation",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "cheese preparation"
+    ],
+    "notes": "Mixed cheese product with added ingredients; tolerance depends on contents and freshness — treat as risky.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Ricotta",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "cheese",
+    "aliases": [
+      "ricotta cheese"
+    ],
+    "notes": "Fresh whey cheese, well tolerated — a good swap for aged cheese.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Roquefort",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "cheese",
+    "aliases": [
+      "roquefort cheese",
+      "rochefort cheese"
+    ],
+    "notes": "Blue mould cheese — among the highest in histamine, tyramine and cadaverine. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Sour Cream",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "dairy",
+    "aliases": [
+      "soured cream",
+      "sourcream"
+    ],
+    "notes": "Lactic-acid fermented, so slightly histamine-containing; small amounts are often tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Whey",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "dairy",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Yoghurt",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "dairy",
+    "aliases": [
+      "yogurt",
+      "natural yoghurt",
+      "plain yoghurt"
+    ],
+    "notes": "Fermented, so histamine varies by product and culture; small amounts are often tolerated. BDA notes levels depend on the bacterial strain.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Beef",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "fresh beef"
+    ],
+    "notes": "Fresh beef is well tolerated, but meat forms histamine fast as it ages — use very fresh or freshly frozen.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chicken",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "chicken meat"
+    ],
+    "notes": "Fresh chicken is well tolerated; freshness is key as poultry spoils quickly.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Dried Meat",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "meat",
+    "aliases": [
+      "air-dried meat",
+      "biltong",
+      "jerky"
+    ],
+    "notes": "Any dried or aged meat is histamine-rich with other amines — a classic trigger. Avoid; use fresh meat.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Dry-Cured Ham",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "meat",
+    "aliases": [
+      "cured ham",
+      "dried ham",
+      "prosciutto",
+      "serrano ham"
+    ],
+    "notes": "Cured and aged (prosciutto, serrano) — a ripened meat high in histamine and tyramine. Avoid; swap for fresh cooked meat.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Duck",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [],
+    "notes": "Fresh duck is well tolerated; depends on freshness.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Entrails",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "meat",
+    "aliases": [
+      "innards",
+      "offal"
+    ],
+    "notes": "Offal spoils very fast and acts as a histamine liberator — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Game",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "meat",
+    "aliases": [
+      "game meat",
+      "wild meat",
+      "wild game"
+    ],
+    "notes": "Usually hung or matured, so histamine builds up; fresh game is better tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Venison",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "meat",
+    "aliases": [
+      "deer meat"
+    ],
+    "notes": "Typically matured meat, so somewhat histamine-rich; fresh is better tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Minced Meat",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "meat",
+    "aliases": [
+      "ground meat",
+      "mince",
+      "ground beef"
+    ],
+    "notes": "Large surface area spoils fast, so open or pre-packed mince is histamine-rich. Only fresh, just-ground meat eaten immediately is safe.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Ostrich",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "ostrich meat"
+    ],
+    "notes": "Fresh ostrich is well tolerated; depends on freshness.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pork",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "fresh pork"
+    ],
+    "notes": "Fresh pork is mostly tolerated but very perishable and can act as a mild liberator (itching). BDA lists pork, bacon and ham as higher-risk.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Poultry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "poultry meat"
+    ],
+    "notes": "Fresh poultry is well tolerated; freshness matters as it spoils quickly.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Quail",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "quail meat"
+    ],
+    "notes": "Fresh quail is well tolerated; depends on freshness.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Salami",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "meat",
+    "aliases": [],
+    "notes": "Dry-fermented sausage — consistently high in histamine and among the highest of any fermented food for tyramine, a classic trigger. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Sausage",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "meat",
+    "aliases": [
+      "sausages"
+    ],
+    "notes": "Most sausages are histamine-rich, and fermented types are also high in tyramine; only a few fresh ones are exceptions. Best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Smoked Fish",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "fish",
+    "aliases": [],
+    "notes": "Smoked and stored — high in histamine. Avoid; choose fresh or freshly frozen fish.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Smoked Meat",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "meat",
+    "aliases": [],
+    "notes": "Smoked and aged — high in histamine. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tongue",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "meat",
+    "aliases": [
+      "veal tongue",
+      "beef tongue",
+      "ox tongue"
+    ],
+    "notes": "Tolerated if fresh and unprocessed; avoid smoked or ready-to-eat versions.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Turkey",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "turkey meat"
+    ],
+    "notes": "Fresh turkey is well tolerated; freshness matters.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Veal",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "meat",
+    "aliases": [
+      "fresh veal"
+    ],
+    "notes": "Fresh veal is well tolerated; perishable, so use fresh.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Anchovies",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "fish",
+    "aliases": [
+      "anchovy"
+    ],
+    "notes": "Small oily fish, salted and aged — when dried they top the rankings for histamine among all foods, and they also carry other amines. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Fresh Fish",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable",
+      "other_amines"
+    ],
+    "category": "fish",
+    "aliases": [
+      "freshly caught fish",
+      "frozen fish"
+    ],
+    "notes": "Freshly caught or frozen fish is tolerated, but fish forms histamine extremely fast — freshness is everything. Oily scombroid species (tuna, mackerel) are riskiest.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "Nutrients 2021-04-21",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Stored Fish",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "perishable",
+      "other_amines"
+    ],
+    "category": "fish",
+    "aliases": [
+      "fish",
+      "fish on ice",
+      "chilled fish"
+    ],
+    "notes": "Fish left on ice or chilled slowly accumulates histamine — the leading cause of histamine food poisoning (scombroid poisoning), and the histamine isn't removed by later cooking. Only very fresh or freshly frozen fish is safe.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Trout",
+    "compatibility": "well_tolerated",
+    "mechanisms": [
+      "perishable"
+    ],
+    "category": "fish",
+    "aliases": [
+      "brown trout",
+      "brook trout",
+      "rainbow trout"
+    ],
+    "notes": "Freshwater trout is tolerated only when very fresh; it forms histamine rapidly.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tuna",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "fish",
+    "aliases": [],
+    "notes": "Scombroid fish high in free histidine — builds histamine fast if not chilled quickly, and once it has formed, cooking or canning will not remove it. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Bivalves",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [
+      "mussels",
+      "oysters",
+      "clams",
+      "scallops"
+    ],
+    "notes": "Mussels, oysters and similar spoil fast and act as histamine liberators. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Crab",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [],
+    "notes": "Spoils fast and acts as a histamine liberator. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Crawfish",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [
+      "crayfish"
+    ],
+    "notes": "Spoils fast and acts as a histamine liberator. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Langouste",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [
+      "spiny lobster",
+      "rock lobster"
+    ],
+    "notes": "Spiny lobster — perishable and a histamine liberator. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lobster",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [],
+    "notes": "Perishable and a histamine liberator. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Prawn",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [
+      "prawns",
+      "shrimp",
+      "shrimps"
+    ],
+    "notes": "Prawns and shrimp spoil fast and act as histamine liberators. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Shellfish",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [],
+    "notes": "Perishable and histamine-liberating — a common trigger. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Seafood",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "perishable",
+      "liberator"
+    ],
+    "category": "seafood",
+    "aliases": [
+      "sea food"
+    ],
+    "notes": "Seafood generally spoils fast and liberates histamine. Avoid; choose fresh white fish instead.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lard",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Pure animal fat, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Amaranth",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "amaranthus"
+    ],
+    "notes": "Pseudo-grain, well tolerated (may loosen stools in some).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Baked Goods",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "pastry",
+      "pastries"
+    ],
+    "notes": "Usually fine; any trouble comes from malt, long yeast or sourdough fermentation, or certain wheat proteins rather than histamine.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Barley",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Generally tolerated; watch for added malt.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Malt",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "barley malt"
+    ],
+    "notes": "From long fermentation — a common hidden trigger in breads and cereals. Best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Bread",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Usually tolerated; issues come from malt, long fermentation, or wheat proteins, not histamine itself.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Buckwheat",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Reported as poorly tolerated unless thoroughly peeled; use with caution.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chestnut",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "sweet chestnut",
+      "chestnuts"
+    ],
+    "notes": "Sweet chestnut, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cornflakes",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated if free of malt or folic-acid additives.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Hemp Seeds",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "seed",
+    "aliases": [
+      "hemp seed",
+      "cannabis sativa seeds"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Khorasan Wheat",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "kamut",
+      "oriental wheat",
+      "triticum turanicum"
+    ],
+    "notes": "Old wheat variety (Kamut), usually well tolerated; modern high-ATI wheats are worse.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Maltodextrin",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Millet",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Oats",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "oat",
+      "rolled oats"
+    ],
+    "notes": "Well tolerated (may cause wind in some).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sago",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "pearl sago"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Potato",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "potatoes",
+      "new potato",
+      "peeled potato"
+    ],
+    "notes": "Well tolerated; store dark and cut away any green spots.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Quinoa",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Generally well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rice",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated; refrigerate cooked rice promptly and use within a day.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rice Cakes",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "rice biscuits"
+    ],
+    "notes": "Well tolerated; slightly less so than freshly cooked rice.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rice Crispies",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [
+      "puffed rice"
+    ],
+    "notes": "Well tolerated; watch for malt or folic acid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rice Noodles",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated; slightly less so than freshly cooked rice.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rye",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Barely tolerated for some; usually fine in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Spelt",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated, especially old varieties; modern high-ATI strains less so.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sunflower Seeds",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "seed",
+    "aliases": [
+      "sunflower seed"
+    ],
+    "notes": "Act as a histamine liberator — best avoided despite being a plant food.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sweet Corn",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "corn",
+      "maize",
+      "corn on the cob",
+      "maize kernels"
+    ],
+    "notes": "Well tolerated; can be hard to digest.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sweet Potato",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Wheat",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Usually tolerated; any trouble is typically digestive (wind) rather than histamine.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Wheat Germ",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Rich in other amines (putrescine, spermidine) and acts as a liberator — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Wild Rice",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "grain",
+    "aliases": [],
+    "notes": "Well tolerated (not botanically rice).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Yam",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Almond",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "almonds"
+    ],
+    "notes": "Usually tolerated in small amounts; can occasionally cause issues. BDA rates almonds as freely tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Brazil Nut",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "brazil nuts"
+    ],
+    "notes": "Well tolerated; 1–2 a day is a good selenium source.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cashew",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "nut",
+    "aliases": [
+      "cashew nut",
+      "cashews"
+    ],
+    "notes": "Carries some amines and can liberate histamine; small amounts are often tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tiger Nut",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "chufa",
+      "chufa sedge",
+      "earth almond",
+      "nut grass",
+      "yellow nutsedge",
+      "tiger nut sedge",
+      "cyperus esculentus"
+    ],
+    "notes": "Actually a tuber, not a nut — well tolerated raw.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Roasted Tiger Nut",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "roasted chufa",
+      "roasted chufa sedge"
+    ],
+    "notes": "Roasting makes this tuber less tolerated than raw; best limited.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Hazelnut",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "nut",
+    "aliases": [
+      "hazelnuts"
+    ],
+    "notes": "Mild histamine liberator; small amounts are usually tolerated. BDA rates hazelnuts as freely tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Macadamia",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "macadamia nut"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Nuts",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "mixed nuts"
+    ],
+    "notes": "Mixed or unspecified nuts vary widely; some (walnut, cashew) are triggers — check the specific nut. BDA considers most nuts freely tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Peanut",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "peanuts",
+      "groundnut"
+    ],
+    "notes": "SIGHI rates peanuts as incompatible, though BDA lists them as freely tolerated — tolerance is individual.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Pine Nuts",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "pine nut",
+      "pignoli"
+    ],
+    "notes": "Usually tolerated in small amounts; species vary.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pistachio",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "nut",
+    "aliases": [
+      "pistachios"
+    ],
+    "notes": "SIGHI rates pistachios as tolerated; usually fine in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Walnut",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "nut",
+    "aliases": [
+      "walnuts"
+    ],
+    "notes": "Rich in other amines and a histamine liberator — a common trigger. Use sparingly.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Black Caraway Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [
+      "nigella sativa oil",
+      "fennel flower oil",
+      "nutmeg flower oil",
+      "roman coriander oil",
+      "black seed oil"
+    ],
+    "notes": "Nigella / black-seed oil, well tolerated and noted as anti-allergic.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Canola Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [
+      "rapeseed oil",
+      "rape seed oil"
+    ],
+    "notes": "Rapeseed oil, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Coconut Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [
+      "coconut fat",
+      "copra oil"
+    ],
+    "notes": "Well tolerated and recommended.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Margarine",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Tolerated; check for incompatible additives.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Olive Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Well tolerated (may bother those with salicylate intolerance).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Palm Kernel Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Palm Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [
+      "dende oil"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pumpkin Seed Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Safflower Oil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sunflower Oil",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Fine in a single dose; inflammatory if used heavily long-term.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Walnut Oil",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Reported as incompatible — best avoided; use olive or coconut oil instead.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Artichoke",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Asparagus",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Aubergine",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "eggplant",
+      "brinjal"
+    ],
+    "notes": "One of the few plant foods genuinely high in histamine, and very variable. Avoid; boiling lowers the histamine.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Avocado",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Notably high in histamine and a liberator — a common trigger despite being a 'healthy fat'.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Bamboo Shoots",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Beans",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "pulses",
+      "borlotti beans",
+      "kidney beans",
+      "legumes"
+    ],
+    "notes": "Pulses act as histamine liberators; most varieties are best avoided, though some are tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Broad Bean",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "fava bean",
+      "vicia faba",
+      "broad beans"
+    ],
+    "notes": "Fava beans are reported as incompatible — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Beetroot",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "beet",
+      "beets"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Hot Bell Pepper",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "hot pepper"
+    ],
+    "notes": "Hot peppers are irritating and reported as incompatible; use sweet pepper instead.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sweet Bell Pepper",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "bell pepper",
+      "sweet pepper",
+      "capsicum"
+    ],
+    "notes": "Well tolerated — a good swap for tomato in sauces.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Bok Choy",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "bok choi",
+      "pak choi",
+      "pak choy"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Broccoli",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Brussels Sprouts",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "brussel sprouts"
+    ],
+    "notes": "Mild liberator; small amounts are usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cabbage",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "green cabbage",
+      "white cabbage"
+    ],
+    "notes": "Well tolerated raw or cooked (fermented cabbage is not).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Carrot",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "carrots"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cauliflower",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Celery",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Napa Cabbage",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "celery cabbage",
+      "chinese cabbage",
+      "brassica rapa pekinensis"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chard",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "chard stalks",
+      "swiss chard"
+    ],
+    "notes": "Usually tolerated in moderate amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chayote",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "choko"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chickpeas",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "chickpea",
+      "garbanzo beans"
+    ],
+    "notes": "Reported as incompatible; their polyamine content may explain it. Best limited.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Chicory",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "cichorium intybus"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chili Pepper",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "chilli pepper",
+      "red chili",
+      "fresh chili"
+    ],
+    "notes": "Hot and irritating to the gut — reported as incompatible.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lamb's Lettuce",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "corn salad",
+      "valerianella locusta"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Courgette",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "zucchini",
+      "marrow"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cucumber",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Garden Cress",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "cress",
+      "lepidium sativum"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Endive",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "cichorium endivia"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Fennel",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "fennel bulb"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Garlic",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Usually tolerated in small amounts, especially cooked.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Kohlrabi",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "german turnip",
+      "turnip cabbage"
+    ],
+    "notes": "Usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Gourds",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "gourd"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Green Beans",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "french beans",
+      "string beans"
+    ],
+    "notes": "Often tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Green Peas",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "peas",
+      "garden peas"
+    ],
+    "notes": "Usually tolerated in small amounts (can be higher in putrescine).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Split Peas",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "green split peas",
+      "yellow split peas"
+    ],
+    "notes": "Usually tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Horseradish",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Acts as a mild liberator; small amounts are usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Leek",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Usually tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lentils",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "lentil"
+    ],
+    "notes": "Reported as incompatible; a higher polyamine content may explain it. Best limited.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Iceberg Lettuce",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lettuce",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "leaf lettuce",
+      "head lettuce"
+    ],
+    "notes": "Well tolerated (rating is for the plain leaf, no dressing).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mung Bean Sprouts",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "mungbeans",
+      "sprouted mung beans"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Olives",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "olive"
+    ],
+    "notes": "Usually fermented and brined, so reported as incompatible; check for added ingredients.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Onion",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "onions"
+    ],
+    "notes": "Usually tolerated in small amounts; a mild liberator and harder to tolerate in quantity.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Parsnip",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Wall Rocket",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "perennial wall-rocket",
+      "diplotaxis tenuifolia",
+      "wild rocket"
+    ],
+    "notes": "Wild rocket acts as a liberator — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pickled Cabbage",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Fermented — high in histamine. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pickled Cucumber",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "pickled gherkin",
+      "gherkin",
+      "pickle"
+    ],
+    "notes": "Pickled and fermented, so histamine-rich. Avoid; use fresh cucumber.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pickled Vegetables",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Pickling and fermentation build histamine, and fermented vegetables are a high-histamine food category. Avoid; use fresh.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Pumpkin",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "pumpkins",
+      "squash",
+      "squashes"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Radish",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "red radish",
+      "white radish",
+      "daikon"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Red Cabbage",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sauerkraut",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "fermented cabbage"
+    ],
+    "notes": "Fermented cabbage — fermented vegetables rank among the highest-histamine food categories, and it is unanimously excluded across low-histamine diets. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Savoy Cabbage",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Snow Peas",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "mangetout",
+      "sugar snap peas"
+    ],
+    "notes": "Usually tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Soy",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "soya",
+      "soy beans",
+      "soybeans",
+      "soy flour"
+    ],
+    "notes": "Soybeans and soy flour are reported as incompatible; a high polyamine content may explain it. Best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Spinach",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "One of the few plant foods genuinely high in histamine, and very variable — rises further with storage. Boiling lowers it.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14",
+      "Nutrients 2021-04-21"
+    ]
+  },
+  {
+    "name": "Stinging Nettle",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "nettle",
+      "urtica dioica"
+    ],
+    "notes": "Reported high in histamine — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tomato",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "liberator"
+    ],
+    "category": "vegetable",
+    "aliases": [
+      "tomatoes"
+    ],
+    "notes": "High in histamine and a liberator — a classic trigger, even more concentrated as puree or ketchup. Swap with roasted red pepper or a carrot-based sauce.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Turnip",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "White Onion",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "Mild, sweet onion variety — well tolerated, unlike common onion in quantity.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Basil",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Wild Garlic",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "herb",
+    "aliases": [
+      "bear's garlic",
+      "bear leek",
+      "ramsons",
+      "buckrams",
+      "broad-leaved garlic",
+      "wood garlic",
+      "allium ursinum"
+    ],
+    "notes": "Mild liberator; small amounts are well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Blue Fenugreek",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [
+      "trigonella caerulea"
+    ],
+    "notes": "A clover / trigonella herb reported as incompatible — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chives",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Usually tolerated; harder to tolerate in large amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Clover",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [
+      "trifolium",
+      "trigonella"
+    ],
+    "notes": "Trigonella and trifolium herbs (e.g. fenugreek) are reported as incompatible — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Dill",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Small amounts are usually fine (high in salicylates).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Fenugreek",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [
+      "trigonella foenum-graecum"
+    ],
+    "notes": "Reported as incompatible — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mint",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Well tolerated (may bother salicylate-sensitive people).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Oregano",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Parsley",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rosemary",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sage",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Savory",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "herb",
+    "aliases": [
+      "satureja hortensis"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Acerola",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "barbados cherry",
+      "west indian cherry"
+    ],
+    "notes": "Well tolerated; rich in vitamin C.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Apple",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "golden delicious"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Apricot",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Aronia",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "chokeberry",
+      "chokeberries",
+      "aronia melanocarpa"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Asimina Triloba",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "common pawpaw",
+      "north american pawpaw"
+    ],
+    "notes": "Pawpaw — no reliable rating, tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Banana",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "ladyfinger banana",
+      "sugar banana"
+    ],
+    "notes": "Low in histamine but high in putrescine, which can block histamine breakdown — a common trigger; greener fruit is better tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Prickly Pear",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "barbary fig",
+      "cactus pear",
+      "opuntia ficus-indica",
+      "indian fig",
+      "spineless cactus",
+      "tuna fruit"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Blackberry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "blackberries"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Blackcurrant",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "black currant",
+      "blackcurrants"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Blueberry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "blueberries"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Boysenberry",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Starfruit",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "carambola"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cherry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "cherries"
+    ],
+    "notes": "Well tolerated (somewhat debated).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Citrus Fruits",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "citrus fruit"
+    ],
+    "notes": "Low in histamine but high in putrescine and acting as liberators — frequently trigger symptoms despite little actual histamine.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14",
+      "Nutrients 2021-04-21"
+    ]
+  },
+  {
+    "name": "Cocoa Butter",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fat",
+    "aliases": [],
+    "notes": "Mostly well tolerated (the fat, not the cocoa solids).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cocoa",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "cocoa powder",
+      "cacao"
+    ],
+    "notes": "Cocoa and chocolate carry amines (tyramine, phenylethylamine) and liberate histamine — a common trigger.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21"
+    ]
+  },
+  {
+    "name": "Coconut",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "coconut milk",
+      "coconut shavings",
+      "desiccated coconut"
+    ],
+    "notes": "Well tolerated; a good selenium source.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sea Buckthorn",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "common sea-buckthorn",
+      "hippophae rhamnoides",
+      "sallow thorn"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cowberry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "lingonberry"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cranberry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "cranberries"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Dates",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "dried dates",
+      "date"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rose Hip",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "dog rose",
+      "rosa canina",
+      "rosehip"
+    ],
+    "notes": "Mild liberator; usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Dragon Fruit",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "pitaya",
+      "pitahaya"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Figs",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "fig",
+      "fresh figs",
+      "dried figs"
+    ],
+    "notes": "Usually tolerated; may be slightly laxative.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Goji Berry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "chinese wolfberry",
+      "tibetan goji",
+      "wolfberry"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Gooseberry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "gooseberries"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Grapefruit",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Citrus — high in putrescine and a liberator; a frequent trigger despite low histamine.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Grapes",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "grape"
+    ],
+    "notes": "Well tolerated as fresh fruit (wine is not).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Guava",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Reported as incompatible — best limited.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Jostaberry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Kaki",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "persimmon",
+      "sharon fruit"
+    ],
+    "notes": "Persimmon / sharon fruit, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Kiwi",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "kiwi fruit",
+      "kiwifruit"
+    ],
+    "notes": "Acts as a histamine liberator; SIGHI flags it while milder lists rate it lower-risk — usually fine in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Lemon",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Citrus — putrescine-rich and a liberator; a frequent trigger despite low histamine.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lemon Zest",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "lemon peel"
+    ],
+    "notes": "Concentrated citrus peel — a liberator; best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lime",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Citrus, more poorly tolerated than lemon — a putrescine-rich liberator. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Loganberry",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lychee",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "litchi"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mandarin",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "mandarine",
+      "mandarin orange",
+      "tangerine",
+      "citrus reticulata"
+    ],
+    "notes": "Citrus — very high in putrescine; a common trigger.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Mango",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Usually well tolerated (somewhat debated).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Melon",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "melons",
+      "cantaloupe",
+      "honeydew"
+    ],
+    "notes": "Well tolerated (except watermelon, which is debated).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Morello Cherry",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "sour cherry"
+    ],
+    "notes": "Sour cherry, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mulberry",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Nashi Pear",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "asian pear"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Nectarine",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Orange",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Citrus — a putrescine-rich liberator and poorly tolerated; a frequent trigger.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Orange Zest",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "orange peel"
+    ],
+    "notes": "Concentrated citrus peel — a liberator; best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Papaya",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "pawpaw"
+    ],
+    "notes": "Carries amines and acts as a liberator — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Passion Fruit",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "passionfruit",
+      "purple granadilla",
+      "granadilla"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Peach",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pear",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "other_amines"
+    ],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Usually tolerated; carries a little of the other amines.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pineapple",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Acts as a liberator and carries amines — a common trigger.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Plum",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "prune",
+      "damson",
+      "zwetschge",
+      "prunus domestica"
+    ],
+    "notes": "Mild liberator; usually tolerated in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pomegranate",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Quince",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Raisins",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "sultanas",
+      "raisin"
+    ],
+    "notes": "Well tolerated if unsulphured and preservative-free; high in salicylates.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Raspberry",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "raspberries"
+    ],
+    "notes": "Reported as incompatible — best limited.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Redcurrant",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "red currant",
+      "currant",
+      "redcurrants"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rhubarb",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Usually tolerated (contains oxalic acid; somewhat debated).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Strawberry",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines",
+      "liberator"
+    ],
+    "category": "fruit",
+    "aliases": [
+      "strawberries"
+    ],
+    "notes": "A classic histamine 'liberator' — frequently triggers symptoms though it contains little actual histamine.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14",
+      "Nutrients 2021-04-21"
+    ]
+  },
+  {
+    "name": "Tamarillo",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [
+      "solanum betaceum",
+      "tree tomato"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Watermelon",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "fruit",
+    "aliases": [],
+    "notes": "Usually tolerated; a suspected mild liberator.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chia Seeds",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "seed",
+    "aliases": [
+      "chia",
+      "salvia hispanica"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Psyllium Husk",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "seed",
+    "aliases": [
+      "psyllium seed husks",
+      "isabgol",
+      "ispaghula",
+      "plantago ovata"
+    ],
+    "notes": "Well tolerated; useful fibre.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pumpkin Seeds",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "seed",
+    "aliases": [
+      "pepitas",
+      "pumpkin seed"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sesame",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "seed",
+    "aliases": [
+      "sesame seeds"
+    ],
+    "notes": "Usually tolerated in small amounts (may loosen stools).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Algae",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "mushroom",
+    "aliases": [
+      "seaweed",
+      "kelp",
+      "brown algae",
+      "green algae",
+      "red algae",
+      "kombu",
+      "nori",
+      "wakame"
+    ],
+    "notes": "Seaweeds (nori, kombu, wakame, kelp) act as liberators and are extremely iodine-rich — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cep",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "mushroom",
+    "aliases": [
+      "porcino",
+      "porcini",
+      "boletus edulis"
+    ],
+    "notes": "Porcini — reported as incompatible like most mushrooms.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Morel",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "mushroom",
+    "aliases": [],
+    "notes": "Reported as incompatible.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mushroom",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "mushroom",
+    "aliases": [
+      "mushrooms"
+    ],
+    "notes": "Mushrooms are generally reported as incompatible and are high in polyamines. Best limited.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Foods 2018-12-14"
+    ]
+  },
+  {
+    "name": "Button Mushroom",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "other_amines"
+    ],
+    "category": "mushroom",
+    "aliases": [
+      "white button mushroom",
+      "champignon"
+    ],
+    "notes": "Carries some amines; small amounts are usually tolerated — better than aged mushrooms.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Yeast",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "mushroom",
+    "aliases": [
+      "baker's yeast",
+      "dried yeast",
+      "fresh yeast"
+    ],
+    "notes": "Generally tolerated fresh; long-fermented doughs can be a problem, and it is high in glutamate.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Agave Syrup",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "agave nectar"
+    ],
+    "notes": "Well tolerated (high in fructose).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Artificial Sweeteners",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "artificial sweetener"
+    ],
+    "notes": "Generally tolerated (sucralose in particular).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Xylitol",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "birch sugar",
+      "xylite"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Caramel",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "browned sugar"
+    ],
+    "notes": "Plain browned sugar, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Dextrose",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "glucose"
+    ],
+    "notes": "Pure glucose, well tolerated and fructose-free.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sorbitol",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "glucitol"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Malt Extract",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "extract of malt"
+    ],
+    "notes": "From fermentation — reported as incompatible; best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Fructose",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "fruit sugar"
+    ],
+    "notes": "Well tolerated (excess can upset digestion).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Honey",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [],
+    "notes": "Generally tolerated (naturally contains benzoic acid; somewhat debated).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Invert Sugar",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "inverted sugar syrup",
+      "invert sugar syrup"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lactose",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "milk sugar"
+    ],
+    "notes": "Milk sugar, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Liquorice Root",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "licorice root"
+    ],
+    "notes": "Reported as incompatible — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Maltose",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "malt sugar"
+    ],
+    "notes": "Pure malt sugar, well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Maple Syrup",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Palm Sugar",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Stevia",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "steviol glycosides"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sugar",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "sucrose",
+      "table sugar",
+      "beet sugar",
+      "cane sugar"
+    ],
+    "notes": "Well tolerated; use sparingly.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Anise",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "aniseed"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Bay Leaf",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "bay laurel",
+      "laurel",
+      "sweet bay",
+      "true laurel"
+    ],
+    "notes": "Small amounts are well tolerated; less is known about larger quantities.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Black Caraway",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "nigella sativa",
+      "black seed",
+      "fennel flower",
+      "nutmeg flower",
+      "roman coriander"
+    ],
+    "notes": "Nigella / black seed, well tolerated and noted as anti-allergic.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Bouillon",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "stock cube",
+      "broth cube"
+    ],
+    "notes": "Stock cubes usually contain glutamate or yeast extract — reported as incompatible. Use fresh homemade stock.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Caraway",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "carum carvi",
+      "meridian fennel",
+      "persian cumin"
+    ],
+    "notes": "Well tolerated (don't confuse with cumin, which is a trigger).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cardamom",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Generally well tolerated; use modestly.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cilantro",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "coriander leaf"
+    ],
+    "notes": "Fresh coriander leaf, tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cinnamon",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cloves",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "clove"
+    ],
+    "notes": "Small amounts are well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Coriander",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "coriander seed"
+    ],
+    "notes": "Tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cumin",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "spice",
+    "aliases": [
+      "cummin",
+      "jeera",
+      "cuminum cyminum"
+    ],
+    "notes": "Acts as a liberator — reported as incompatible. Swap with caraway.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Curry",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "curry powder"
+    ],
+    "notes": "Spice blend reported as incompatible (often contains chilli and more). Best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "White Vinegar",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "distilled white vinegar",
+      "spirit vinegar"
+    ],
+    "notes": "Distilled / spirit vinegar is low in histamine and usually tolerated in small amounts, unlike wine vinegars. BDA also rates vinegars as low.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Ginger",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Small amounts are well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Juniper Berries",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "juniper"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Meat Extract",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Concentrated, carrying amines and glutamate — reported as incompatible. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mustard Seeds",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "spice",
+    "aliases": [
+      "mustard seed",
+      "mustardseed powder"
+    ],
+    "notes": "Act as a liberator — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Nutmeg",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Small amounts are well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Hot Paprika",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Irritating to the gut — reported as incompatible; use sweet paprika.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sweet Paprika",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "paprika"
+    ],
+    "notes": "Well tolerated — a good swap for hot paprika.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Black Pepper",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Reported as incompatible; small amounts are tolerated by some.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "White Pepper",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Reported as incompatible; small amounts are tolerated by some.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Poppy Seeds",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "poppy seed"
+    ],
+    "notes": "Small amounts are well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Red Wine Vinegar",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Made from wine — high in histamine. Avoid; use distilled white vinegar.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Hydrolysed Protein Seasoning",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "hydrolyzed protein",
+      "protein hydrolysate"
+    ],
+    "notes": "Contains glutamate, histamine and other amines — reported as incompatible. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Soy Sauce",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines"
+    ],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Fermented — high in histamine and other amines. Avoid; try a tamarind-based seasoning instead.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Star Anise",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "badiam",
+      "chinese star anise"
+    ],
+    "notes": "No reliable rating — tolerance unknown.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Thyme",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "thymus vulgaris"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Turmeric",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "curcuma longa"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Vanilla Extract",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Tolerated in small amounts (from fermentation; alcoholic).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Vanilla",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "vanilla pod",
+      "vanilla powder",
+      "vanilla sugar"
+    ],
+    "notes": "Tolerated in small amounts (fermentation; possible sulphite traces).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Apple Cider Vinegar",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "spice",
+    "aliases": [
+      "apple vinegar",
+      "cider vinegar"
+    ],
+    "notes": "Carries a little histamine; check for additives — usually tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Balsamic Vinegar",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Aged wine vinegar — high in histamine. Avoid; use distilled white vinegar.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "White Wine Vinegar",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Made from wine — high in histamine. Avoid; use distilled white vinegar.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Yeast Extract",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator"
+    ],
+    "category": "spice",
+    "aliases": [],
+    "notes": "Concentrated yeast (Marmite-type) — reported to contain histamine and tyramine, converts to glutamate, and acts as a liberator. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Still Mineral Water",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "mineral water"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tap Water",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Ethanol",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [
+      "pure alcohol",
+      "ethyl alcohol"
+    ],
+    "notes": "Pure alcohol both releases histamine and blocks the enzyme that clears it — poorly tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Alcoholic Beverages",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [
+      "alcohol"
+    ],
+    "notes": "Alcohol carries histamine and amines, liberates histamine, and blocks DAO — a strong, well-known trigger overall.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21"
+    ]
+  },
+  {
+    "name": "Beer",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "Fermented and alcoholic — carries histamine and is a notable source of tyramine, while the alcohol blocks DAO; unanimously excluded across low-histamine diets. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Brandy",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "Distilled from wine — histamine-rich and DAO-blocking. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Champagne",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [
+      "sparkling wine"
+    ],
+    "notes": "Sparkling wine — histamine-rich, a liberator and a DAO-blocker. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Clear Liquor",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [
+      "clear schnapps",
+      "clear spirits",
+      "colourless spirits"
+    ],
+    "notes": "Clear spirits liberate histamine and block DAO, though lower in histamine than dark or cloudy ones. BDA allows spirits in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Cloudy Liquor",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [
+      "cloudy spirits",
+      "schnapps"
+    ],
+    "notes": "Cloudy spirits carry histamine and amines and block DAO. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rum",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "Histamine-rich spirit that also blocks DAO. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Wine",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "Fermented and alcoholic — histamine-rich, a liberator and a DAO-blocker; unanimously excluded across low-histamine diets. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Histamine-Free Wine",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "Specially made low-histamine wine; still contains alcohol and sulphite. Better tolerated, especially once cooked off in food.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Red Wine",
+    "compatibility": "poorly_tolerated",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "The highest-histamine wine, also a liberator and DAO-blocker. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "White Wine",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "other_amines",
+      "liberator",
+      "dao_blocker"
+    ],
+    "category": "alcohol",
+    "aliases": [],
+    "notes": "Histamine-rich, liberating and DAO-blocking. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21",
+      "EFSA 2011"
+    ]
+  },
+  {
+    "name": "Chamomile Tea",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Green Tea",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "dao_blocker"
+    ],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Mildly blocks DAO; usually tolerated in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Herbal Tea",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "herbal infusion"
+    ],
+    "notes": "Usually tolerated; complex blends with many herbs can occasionally cause issues.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lime Blossom Tea",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "limeflower tea",
+      "linden tea"
+    ],
+    "notes": "Well tolerated; calming.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Mate Tea",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "dao_blocker"
+    ],
+    "category": "beverage",
+    "aliases": [
+      "yerba mate"
+    ],
+    "notes": "Mildly blocks DAO; tolerated in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Peppermint Tea",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rooibos Tea",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Well tolerated; check blends for added citrus peel.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Sage Tea",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Nettle Tea",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [
+      "high_histamine"
+    ],
+    "category": "beverage",
+    "aliases": [
+      "stinging nettle tea"
+    ],
+    "notes": "Carries a little histamine; usually tolerated in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Black Tea",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "dao_blocker"
+    ],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "High in histamine and blocks DAO — best avoided; choose herbal or rooibos.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Verbena Tea",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "lemon verbena tea"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cranberry Juice",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "cranberry nectar"
+    ],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Orange Juice",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Citrus juice acts as a liberator and is putrescine-rich — a common trigger.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tomato Juice",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Concentrated tomato — a liberator and common trigger. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Cola",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "coca-cola",
+      "coke",
+      "cola drinks"
+    ],
+    "notes": "Usually tolerated in moderation (caffeine can stimulate).",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Coffee",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Usually tolerated; caffeine can stimulate the gut and mast cells. BDA lists coffee as higher-risk (pods lowest).",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Energy Drink",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "dao_blocker"
+    ],
+    "category": "beverage",
+    "aliases": [
+      "energy drinks"
+    ],
+    "notes": "Contains theobromine, which blocks DAO — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Espresso",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Usually tolerated; gentler than regular coffee but still caffeinated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Oat Milk",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "oat drink"
+    ],
+    "notes": "Often slightly histamine-containing from enzymatic processing; usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Rice Milk",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "rice drink"
+    ],
+    "notes": "Often slightly histamine-containing from processing; usually tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Soy Milk",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "soy drink",
+      "soya milk"
+    ],
+    "notes": "Made from soy — reported as incompatible. Try oat or rice milk.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Chocolate Drink",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "cocoa drink",
+      "hot chocolate",
+      "ovaltine"
+    ],
+    "notes": "Cocoa-based — carries amines and liberates histamine. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Elderflower Cordial",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Well tolerated.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Lemonade",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [],
+    "notes": "Tolerance depends on ingredients; usually fine.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Soda",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "beverage",
+    "aliases": [
+      "soft drinks",
+      "soft drink"
+    ],
+    "notes": "Tolerance depends on ingredients; usually fine in moderation.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Iodized Salt",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "spice",
+    "aliases": [
+      "iodised table salt",
+      "iodized table salt"
+    ],
+    "notes": "Added iodine acts as a liberator — choose plain non-iodised salt.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Liquorice",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "liberator"
+    ],
+    "category": "sweetener",
+    "aliases": [
+      "licorice"
+    ],
+    "notes": "Acts as a liberator — best avoided.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Marzipan",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [
+      "marchpane"
+    ],
+    "notes": "Almond paste, tolerated in small amounts if additive-free.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Dark Chocolate",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "other_amines"
+    ],
+    "category": "sweetener",
+    "aliases": [
+      "brown chocolate",
+      "black chocolate"
+    ],
+    "notes": "Carries tyramine and phenylethylamine — a common trigger. White chocolate is milder.",
+    "sources": [
+      "SIGHI 2023-04-01",
+      "Nutrients 2021-04-21"
+    ]
+  },
+  {
+    "name": "White Chocolate",
+    "compatibility": "moderately_compatible",
+    "mechanisms": [],
+    "category": "sweetener",
+    "aliases": [],
+    "notes": "Contains no cocoa solids, so milder — usually tolerated in small amounts.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Prepared Mustard",
+    "compatibility": "incompatible",
+    "mechanisms": [
+      "high_histamine",
+      "liberator"
+    ],
+    "category": "spice",
+    "aliases": [
+      "table mustard"
+    ],
+    "notes": "Made with mustard seed and vinegar — histamine-rich and liberating. Avoid.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Tofu",
+    "compatibility": "incompatible",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [
+      "bean curd"
+    ],
+    "notes": "Reported as incompatible; fermented soy products are worse. Best limited.",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  }
+]
