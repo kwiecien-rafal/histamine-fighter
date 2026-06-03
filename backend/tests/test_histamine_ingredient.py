@@ -16,7 +16,7 @@ async def test_compatibility_and_mechanisms_round_trip(session: AsyncSession) ->
             normalized_name="tomato",
             compatibility=Compatibility.INCOMPATIBLE,
             mechanisms=[HistamineMechanism.HIGH_HISTAMINE, HistamineMechanism.LIBERATOR],
-            source="SIGHI 2023",
+            sources=["test source"],
         )
     )
     await session.flush()
@@ -35,7 +35,7 @@ async def test_compatibility_stored_as_value_not_name(session: AsyncSession) -> 
             name="Tomato",
             normalized_name="tomato",
             compatibility=Compatibility.INCOMPATIBLE,
-            source="SIGHI 2023",
+            sources=["test source"],
         )
     )
     await session.flush()
@@ -53,7 +53,7 @@ async def test_array_and_timestamp_defaults(session: AsyncSession) -> None:
             name="Apple",
             normalized_name="apple",
             compatibility=Compatibility.WELL_TOLERATED,
-            source="SIGHI 2023",
+            sources=["test source"],
         )
     )
     await session.flush()
@@ -66,9 +66,13 @@ async def test_array_and_timestamp_defaults(session: AsyncSession) -> None:
 
 
 async def test_normalized_name_must_be_unique(session: AsyncSession) -> None:
-    session.add(HistamineIngredient(name="Tomato", normalized_name="tomato", source="SIGHI 2023"))
+    session.add(
+        HistamineIngredient(name="Tomato", normalized_name="tomato", sources=["test source"])
+    )
     await session.flush()
-    session.add(HistamineIngredient(name="Tomate", normalized_name="tomato", source="SIGHI 2023"))
+    session.add(
+        HistamineIngredient(name="Tomate", normalized_name="tomato", sources=["test source"])
+    )
     with pytest.raises(IntegrityError):
         await session.flush()
 
@@ -80,7 +84,7 @@ async def test_check_constraint_rejects_unknown_compatibility(session: AsyncSess
         await session.execute(
             text(
                 "INSERT INTO histamine_ingredients "
-                "(id, name, normalized_name, compatibility, source) "
-                "VALUES (gen_random_uuid(), 'X', 'x', 'banana', 'SIGHI 2023')"
+                "(id, name, normalized_name, compatibility, sources) "
+                "VALUES (gen_random_uuid(), 'X', 'x', 'banana', ARRAY['test source'])"
             )
         )

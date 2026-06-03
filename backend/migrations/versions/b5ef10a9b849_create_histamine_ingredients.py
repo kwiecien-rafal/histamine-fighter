@@ -27,9 +27,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("normalized_name", sa.String(), nullable=False),
-        # SIGHI compatibility scale (0-3). NULL mirrors SIGHI's "-" and "?".
         sa.Column("compatibility", sa.String(length=24), nullable=True),
-        # SIGHI mechanism flags (H!, H, A, L, B). Element values validated in the app.
         sa.Column(
             "mechanisms",
             postgresql.ARRAY(sa.String(length=16)),

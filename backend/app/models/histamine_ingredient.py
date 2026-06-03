@@ -17,7 +17,7 @@ def _enum_values(enum_cls: type[StdEnum]) -> list[str]:
 
 
 class HistamineIngredient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """An ingredient and its histamine tolerance, sourced from the SIGHI list.
+    """An ingredient and its histamine tolerance, curated from public references.
 
     The curated, human-reviewed reference the dish lookup agent reads from.
     Rows are seeded from published sources, never written by the model.
@@ -55,7 +55,8 @@ class HistamineIngredient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ARRAY(String), default=list, server_default=text("'{}'")
     )
     notes: Mapped[str | None]
-    source: Mapped[str]
+    # At least one reference per row is required; non-emptiness is enforced when seeding.
+    sources: Mapped[list[str]] = mapped_column(ARRAY(String))
 
     __table_args__ = (
         Index(
