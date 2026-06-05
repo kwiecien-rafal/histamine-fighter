@@ -29,7 +29,9 @@ from app.models import HistamineIngredient
 
 log = structlog.get_logger()
 
-SEED_FILE = Path(__file__).resolve().parents[2] / "seed_data" / "histamine_ingredients.json"
+SEED_FILE = (
+    Path(__file__).resolve().parents[2] / "seed_data" / "histamine_ingredients.json"
+)
 
 
 class IngredientSeedRow(BaseModel):
@@ -59,12 +61,18 @@ def load_rows(path: Path) -> list[IngredientSeedRow]:
     keys = [normalize_ingredient_name(row.name) for row in rows]
     duplicates = sorted({key for key in keys if keys.count(key) > 1})
     if duplicates:
-        raise ValueError(f"Duplicate ingredient names in {path.name}: {', '.join(duplicates)}")
+        raise ValueError(
+            f"Duplicate ingredient names in {path.name}: {', '.join(duplicates)}"
+        )
     return rows
 
 
 def _to_values(rows: list[IngredientSeedRow]) -> list[dict[str, Any]]:
-    """Map validated rows to insert parameters, deriving the normalized key."""
+    """Map validated rows to insert parameters, deriving the normalized keys.
+
+    This is a Core bulk insert, so the model's validators do not run; the same
+    normalization helper is applied here to keep the stored keys in lockstep.
+    """
     return [
         {
             "name": row.name,
@@ -73,6 +81,9 @@ def _to_values(rows: list[IngredientSeedRow]) -> list[dict[str, Any]]:
             "mechanisms": list(row.mechanisms),
             "category": row.category,
             "aliases": list(row.aliases),
+            "normalized_aliases": [
+                normalize_ingredient_name(alias) for alias in row.aliases
+            ],
             "notes": row.notes,
             "sources": list(row.sources),
         }
@@ -96,6 +107,7 @@ async def upsert_ingredients(
             "mechanisms": excluded.mechanisms,
             "category": excluded.category,
             "aliases": excluded.aliases,
+            "normalized_aliases": excluded.normalized_aliases,
             "notes": excluded.notes,
             "sources": excluded.sources,
             "updated_at": func.now(),

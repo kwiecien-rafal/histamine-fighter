@@ -2,24 +2,24 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.normalization import normalize_ingredient_name
 from app.enums import Compatibility, MatchType
 from app.models import HistamineIngredient
-from app.services.ingredient_service import IngredientMatch, IngredientService, is_ambiguous
+from app.services.ingredient_service import (
+    IngredientMatch,
+    IngredientService,
+    is_ambiguous,
+)
 
 
 def _ingredient(name: str, **kwargs: object) -> HistamineIngredient:
-    """Build an ingredient with its normalized key derived, like the seeder does."""
-    return HistamineIngredient(
-        name=name,
-        normalized_name=normalize_ingredient_name(name),
-        sources=["test source"],
-        **kwargs,
-    )
+    """Build an ingredient; the model derives the normalized lookup keys."""
+    return HistamineIngredient(name=name, sources=["test source"], **kwargs)
 
 
 def _match(compatibility: Compatibility | None) -> IngredientMatch:
-    return IngredientMatch(_ingredient("x", compatibility=compatibility), MatchType.FUZZY, 0.5)
+    return IngredientMatch(
+        _ingredient("x", compatibility=compatibility), MatchType.FUZZY, 0.5
+    )
 
 
 async def test_exact_returns_single_candidate(session: AsyncSession) -> None:
@@ -50,7 +50,9 @@ async def test_fuzzy_handles_typos(session: AsyncSession) -> None:
     assert candidates[0].match_type is MatchType.FUZZY
 
 
-async def test_ambiguous_query_surfaces_the_risky_reading(session: AsyncSession) -> None:
+async def test_ambiguous_query_surfaces_the_risky_reading(
+    session: AsyncSession,
+) -> None:
     # "egg" must not hide egg white behind egg yolk: both have to be returned so
     # the caller can see the conflict instead of being told it is safe.
     session.add(_ingredient("Egg Yolk", compatibility=Compatibility.WELL_TOLERATED))
@@ -73,7 +75,10 @@ async def test_relevance_cutoff_drops_weaker_fuzzy(session: AsyncSession) -> Non
     session.add(_ingredient("Tomato Juice"))
     await session.flush()
 
-    names = {c.ingredient.name for c in await IngredientService(session).find_candidates("tomatos")}
+    names = {
+        c.ingredient.name
+        for c in await IngredientService(session).find_candidates("tomatos")
+    }
     assert "Tomato" in names
     assert "Tomato Juice" not in names
 
@@ -119,8 +124,20 @@ async def test_exact_name_short_circuits_even_for_an_ambiguous_term(
     assert [c.ingredient.name for c in candidates] == ["Egg"]
 
 
+def test_model_derives_normalized_keys_from_name_and_aliases() -> None:
+    # The matcher relies on these keys; the model derives them so no caller has
+    # to set them by hand and risk them drifting from name/aliases.
+    ingredient = _ingredient(
+        "  Aged   Parmesan ", aliases=["Grana Padano", "  PARMIGIANO "]
+    )
+    assert ingredient.normalized_name == "aged parmesan"
+    assert ingredient.normalized_aliases == ["grana padano", "parmigiano"]
+
+
 def test_is_ambiguous_when_verdicts_differ() -> None:
-    assert is_ambiguous([_match(Compatibility.WELL_TOLERATED), _match(Compatibility.INCOMPATIBLE)])
+    assert is_ambiguous(
+        [_match(Compatibility.WELL_TOLERATED), _match(Compatibility.INCOMPATIBLE)]
+    )
 
 
 def test_is_ambiguous_treats_unrated_as_a_distinct_verdict() -> None:

@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.normalization import normalize_ingredient_name
@@ -77,7 +77,9 @@ class IngredientService:
         """
         query = normalize_ingredient_name(name)
         if not query or len(query) > self.max_query_length:
-            log.debug("ingredient.lookup.rejected_input", chars=len(query), preview=name[:60])
+            log.debug(
+                "ingredient.lookup.rejected_input", chars=len(query), preview=name[:60]
+            )
             return []
 
         exact = await self._match_exact(query)
@@ -93,18 +95,19 @@ class IngredientService:
         return self._rank_unique(matches)[: self.candidate_limit]
 
     async def _match_exact(self, query: str) -> IngredientMatch | None:
-        stmt = select(HistamineIngredient).where(HistamineIngredient.normalized_name == query)
+        stmt = select(HistamineIngredient).where(
+            HistamineIngredient.normalized_name == query
+        )
         row = (await self._session.scalars(stmt)).first()
         return IngredientMatch(row, MatchType.EXACT, 1.0) if row is not None else None
 
     async def _match_aliases(self, query: str) -> list[IngredientMatch]:
-        # Aliases are stored as written, so normalize each one the same way the
-        # query was before comparing. A sequential scan is fine at this size.
-        predicate = text(
-            "EXISTS (SELECT 1 FROM unnest(aliases) AS alias "
-            r"WHERE regexp_replace(lower(btrim(alias)), '\s+', ' ', 'g') = :query)"
-        ).bindparams(query=query)
-        rows = (await self._session.scalars(select(HistamineIngredient).where(predicate))).all()
+        # Aliases are normalized at write time, so the query (already normalized)
+        # compares by plain array membership. A sequential scan is fine at this size.
+        stmt = select(HistamineIngredient).where(
+            HistamineIngredient.normalized_aliases.contains([query])
+        )
+        rows = (await self._session.scalars(stmt)).all()
         return [IngredientMatch(row, MatchType.ALIAS, 1.0) for row in rows]
 
     async def _match_fuzzy(self, query: str) -> list[IngredientMatch]:
@@ -117,12 +120,18 @@ class IngredientService:
             .order_by(score.desc(), HistamineIngredient.id)
             .limit(self.candidate_limit * 2)
         )
-        rows = [(ing, float(sim)) for ing, sim in (await self._session.execute(stmt)).all()]
+        rows = [
+            (ing, float(sim)) for ing, sim in (await self._session.execute(stmt)).all()
+        ]
         if not rows:
             return []
         # Keep the relevant cluster, drop the weak tail (relative to the best hit).
         cutoff = rows[0][1] * self.relevance_ratio
-        return [IngredientMatch(ing, MatchType.FUZZY, sim) for ing, sim in rows if sim >= cutoff]
+        return [
+            IngredientMatch(ing, MatchType.FUZZY, sim)
+            for ing, sim in rows
+            if sim >= cutoff
+        ]
 
     @staticmethod
     def _rank_unique(matches: list[IngredientMatch]) -> list[IngredientMatch]:

@@ -15,7 +15,10 @@ async def test_compatibility_and_mechanisms_round_trip(session: AsyncSession) ->
             name="Tomato",
             normalized_name="tomato",
             compatibility=Compatibility.INCOMPATIBLE,
-            mechanisms=[HistamineMechanism.HIGH_HISTAMINE, HistamineMechanism.LIBERATOR],
+            mechanisms=[
+                HistamineMechanism.HIGH_HISTAMINE,
+                HistamineMechanism.LIBERATOR,
+            ],
             sources=["test source"],
         )
     )
@@ -24,7 +27,10 @@ async def test_compatibility_and_mechanisms_round_trip(session: AsyncSession) ->
 
     row = (await session.scalars(select(HistamineIngredient))).one()
     assert row.compatibility is Compatibility.INCOMPATIBLE
-    assert row.mechanisms == [HistamineMechanism.HIGH_HISTAMINE, HistamineMechanism.LIBERATOR]
+    assert row.mechanisms == [
+        HistamineMechanism.HIGH_HISTAMINE,
+        HistamineMechanism.LIBERATOR,
+    ]
 
 
 async def test_compatibility_stored_as_value_not_name(session: AsyncSession) -> None:
@@ -41,7 +47,9 @@ async def test_compatibility_stored_as_value_not_name(session: AsyncSession) -> 
     await session.flush()
 
     stored = await session.scalar(
-        text("SELECT compatibility FROM histamine_ingredients WHERE normalized_name = :n"),
+        text(
+            "SELECT compatibility FROM histamine_ingredients WHERE normalized_name = :n"
+        ),
         {"n": "tomato"},
     )
     assert stored == "incompatible"
@@ -67,17 +75,23 @@ async def test_array_and_timestamp_defaults(session: AsyncSession) -> None:
 
 async def test_normalized_name_must_be_unique(session: AsyncSession) -> None:
     session.add(
-        HistamineIngredient(name="Tomato", normalized_name="tomato", sources=["test source"])
+        HistamineIngredient(
+            name="Tomato", normalized_name="tomato", sources=["test source"]
+        )
     )
     await session.flush()
     session.add(
-        HistamineIngredient(name="Tomate", normalized_name="tomato", sources=["test source"])
+        HistamineIngredient(
+            name="Tomate", normalized_name="tomato", sources=["test source"]
+        )
     )
     with pytest.raises(IntegrityError):
         await session.flush()
 
 
-async def test_check_constraint_rejects_unknown_compatibility(session: AsyncSession) -> None:
+async def test_check_constraint_rejects_unknown_compatibility(
+    session: AsyncSession,
+) -> None:
     # Insert a raw bad value to prove the database guards the column even when
     # the enum is bypassed.
     with pytest.raises(IntegrityError):
