@@ -15,12 +15,15 @@ from collections.abc import AsyncIterator
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import URL, make_url, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 import app.models  # noqa: F401  (registers the models on Base.metadata)
 from app.config import settings
 from app.db.base import Base
+from app.db.session import get_session
+from app.main import create_app
 
 
 def _test_database_url() -> URL:
@@ -78,3 +81,22 @@ async def session(_database_schema: None) -> AsyncIterator[AsyncSession]:
             await transaction.rollback()
         await connection.close()
         await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    """An HTTP client whose requests run on the test transaction.
+
+    get_session is overridden to hand each request the same rolled-back session
+    the test uses, so rows a test adds are visible to the endpoint and cleaned
+    up afterwards.
+    """
+    app = create_app()
+
+    async def _use_test_session() -> AsyncIterator[AsyncSession]:
+        yield session
+
+    app.dependency_overrides[get_session] = _use_test_session
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+        yield http_client

@@ -19,6 +19,7 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import configure_logging
 from app.core.normalization import normalize_ingredient_name
@@ -79,13 +80,10 @@ def _to_values(rows: list[IngredientSeedRow]) -> list[dict[str, Any]]:
     ]
 
 
-async def seed() -> None:
-    """Upsert every row from the seed file and log inserted/updated counts."""
-    rows = load_rows(SEED_FILE)
-    if not rows:
-        log.warning("seed.empty", file=str(SEED_FILE))
-        return
-
+async def upsert_ingredients(
+    session: AsyncSession, rows: list[IngredientSeedRow]
+) -> tuple[int, int]:
+    """Upsert rows on their normalized name, returning (inserted, updated) counts."""
     insert_stmt = pg_insert(HistamineIngredient).values(_to_values(rows))
     excluded = insert_stmt.excluded
     # xmax is 0 for a freshly inserted row and non-zero for one updated by the
@@ -103,14 +101,21 @@ async def seed() -> None:
             "updated_at": func.now(),
         },
     ).returning(text("(xmax = 0) AS inserted"))
-
-    async with SessionLocal() as session:
-        result = await session.execute(upsert)
-        flags = result.scalars().all()
-        await session.commit()
-
+    flags = (await session.execute(upsert)).scalars().all()
     inserted = sum(1 for was_inserted in flags if was_inserted)
-    log.info("seed.done", total=len(flags), inserted=inserted, updated=len(flags) - inserted)
+    return inserted, len(flags) - inserted
+
+
+async def seed() -> None:
+    """Load the seed file and upsert it, logging inserted/updated counts."""
+    rows = load_rows(SEED_FILE)
+    if not rows:
+        log.warning("seed.empty", file=str(SEED_FILE))
+        return
+    async with SessionLocal() as session:
+        inserted, updated = await upsert_ingredients(session, rows)
+        await session.commit()
+    log.info("seed.done", total=inserted + updated, inserted=inserted, updated=updated)
 
 
 def main() -> None:

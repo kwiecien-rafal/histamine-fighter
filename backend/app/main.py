@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.v1 import meals
+from app.api.v1 import histamine, meals
 from app.config import settings
 from app.core.logging import configure_logging
 from app.db.engine import engine
@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(histamine.router)
     app.include_router(meals.router)
 
     @app.get("/health")
