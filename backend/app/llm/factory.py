@@ -1,4 +1,4 @@
-from fastapi import HTTPException, status
+from typing import assert_never
 
 from app.config import settings
 from app.llm.anthropic_client import AnthropicClient
@@ -7,82 +7,47 @@ from app.llm.config import LLMRequestConfig
 from app.llm.gemini_client import GeminiClient
 from app.llm.ollama_client import OllamaClient
 from app.llm.openai_compatible import OpenAICompatibleClient
+from app.llm.providers import OPENROUTER_BASE_URL, Provider, resolve_llm_config
 
-_NOT_YET_AVAILABLE = {"modal"}
+_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 
 def build_llm_client(cfg: LLMRequestConfig) -> LLMClient:
-    """Resolve an :class:`LLMClient` for a single request.
+    """Resolve an :class:`LLMClient` for a request or a script.
 
-    Header values on ``cfg`` take precedence over server settings. Providers
-    that are reserved for later phases return 501; truly unknown names
-    return 400; provider rules gated by deployment mode (e.g. Ollama on a
-    public deployment) raise 400 with a clear message for the frontend.
+    Provider rules and defaults come from :func:`app.llm.providers.resolve_llm_config`,
+    shared with :func:`app.llm.langchain_factory.build_chat_model`. This function
+    only maps the resolved provider to its concrete client.
     """
-    provider = (cfg.provider or settings.llm_provider).lower()
+    cfg_resolved = resolve_llm_config(cfg)
 
-    if provider == "ollama":
-        if settings.public_deployment:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ollama is only available in self-hosted deployments.",
+    match cfg_resolved.provider:
+        case Provider.OLLAMA:
+            return OllamaClient(
+                base_url=cfg_resolved.base_url or settings.ollama_base_url,
+                model=cfg_resolved.model,
             )
-        return OllamaClient(
-            base_url=cfg.base_url or settings.ollama_base_url,
-            model=cfg.model or settings.ollama_model,
-        )
-
-    if provider == "openai":
-        return OpenAICompatibleClient(
-            base_url="https://api.openai.com/v1",
-            api_key=_require_api_key(provider, cfg.api_key, settings.openai_api_key),
-            model=cfg.model or "gpt-4o-mini",
-            label="openai",
-        )
-
-    if provider == "anthropic":
-        return AnthropicClient(
-            api_key=_require_api_key(provider, cfg.api_key, settings.anthropic_api_key),
-            model=cfg.model or "claude-sonnet-4-6",
-        )
-
-    if provider == "gemini":
-        return GeminiClient(
-            api_key=_require_api_key(provider, cfg.api_key, settings.gemini_api_key),
-            model=cfg.model or "gemini-2.5-flash",
-        )
-
-    if provider == "openrouter":
-        api_key = _require_api_key(provider, cfg.api_key, settings.openrouter_api_key)
-        if not cfg.model:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A model is required for OpenRouter — see https://openrouter.ai/models.",
+        case Provider.OPENAI:
+            return OpenAICompatibleClient(
+                base_url=_OPENAI_BASE_URL,
+                api_key=cfg_resolved.require_key(),
+                model=cfg_resolved.model,
+                label=cfg_resolved.provider.value,
             )
-        return OpenAICompatibleClient(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-            model=cfg.model,
-            label="openrouter",
-        )
-
-    if provider in _NOT_YET_AVAILABLE:
-        raise HTTPException(
-            status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=f"LLM provider '{provider}' is not yet available.",
-        )
-
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Unknown LLM provider: '{provider}'.",
-    )
-
-
-def _require_api_key(provider: str, header_key: str | None, settings_key: str | None) -> str:
-    key = header_key or settings_key
-    if not key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"API key required for provider '{provider}'.",
-        )
-    return key
+        case Provider.OPENROUTER:
+            return OpenAICompatibleClient(
+                base_url=OPENROUTER_BASE_URL,
+                api_key=cfg_resolved.require_key(),
+                model=cfg_resolved.model,
+                label=cfg_resolved.provider.value,
+            )
+        case Provider.ANTHROPIC:
+            return AnthropicClient(
+                api_key=cfg_resolved.require_key(), model=cfg_resolved.model
+            )
+        case Provider.GEMINI:
+            return GeminiClient(
+                api_key=cfg_resolved.require_key(), model=cfg_resolved.model
+            )
+        case _:  # pragma: no cover - exhaustive over Provider
+            assert_never(cfg_resolved.provider)
