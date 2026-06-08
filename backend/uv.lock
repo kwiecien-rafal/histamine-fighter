@@ -525,11 +525,8 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "anthropic" },
     { name = "asyncpg" },
     { name = "fastapi" },
-    { name = "google-genai" },
-    { name = "httpx" },
     { name = "langchain-anthropic" },
     { name = "langchain-core" },
     { name = "langchain-google-genai" },
@@ -544,6 +541,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -553,11 +551,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
-    { name = "anthropic", specifier = ">=0.40" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "google-genai", specifier = ">=1.0" },
-    { name = "httpx", specifier = ">=0.27" },
     { name = "langchain-anthropic", specifier = ">=1.4.4" },
     { name = "langchain-core", specifier = ">=1.4.1" },
     { name = "langchain-google-genai", specifier = ">=4.2.4" },
@@ -572,6 +567,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", specifier = ">=1.13" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
