@@ -5,15 +5,15 @@ transparency-badge name — because ``BaseChatModel`` has no uniform way to repo
 its model (``ChatAnthropic.model_name`` is even ``None``). The name comes from
 the shared resolver, so the badge works the same for every provider.
 
-Provider rules are shared with :func:`app.llm.factory.build_llm_client` via
-:func:`app.llm.providers.resolve_llm_config`; this module only constructs the
-chat model. Provider packages are imported lazily so a request loads only the
-SDK it uses.
+Provider rules come from :func:`app.llm.providers.resolve_llm_config`; this module
+only constructs the chat model. Provider SDKs are imported eagerly at module load,
+so a missing dependency fails at startup rather than mid-request.
 """
 
 from dataclasses import dataclass
 from typing import assert_never
 
+import structlog
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -30,10 +30,12 @@ from app.llm.providers import (
     resolve_llm_config,
 )
 
+log = structlog.get_logger(__name__)
 
-# Per-call request timeout, matching the custom client's read timeout. The
-# agentic loop makes several model calls; this bounds any single hung one so a
-# stalled provider cannot block the request forever.
+
+# Per-call request timeout. The agentic loop makes several model calls; this
+# bounds any single hung one so a stalled provider cannot block the request
+# forever.
 _REQUEST_TIMEOUT_SECONDS = 120.0
 
 
@@ -48,7 +50,7 @@ class ChatModel:
 def build_chat_model(cfg: LLMRequestConfig, *, temperature: float = 0.0) -> ChatModel:
     """Resolve a tool-capable chat model for a request, with its badge name.
 
-    Same precedence and errors as :func:`app.llm.factory.build_llm_client`.
+    Precedence and errors come from :func:`app.llm.providers.resolve_llm_config`.
 
     This is the gateway to the agentic tool-calling loop, so the model must
     support tool calls. The hosted providers here do; a small local Ollama model
@@ -63,9 +65,8 @@ def build_chat_model(cfg: LLMRequestConfig, *, temperature: float = 0.0) -> Chat
     caching. Creative agents (recipe, learn) can pass a higher value.
     """
     resolved = resolve_llm_config(cfg)
-    return ChatModel(
-        model=_construct(resolved, temperature), model_name=resolved.model_name
-    )
+    log.debug("llm.chat_model", provider=resolved.provider.value, model=resolved.model)
+    return ChatModel(model=_construct(resolved, temperature), model_name=resolved.model_name)
 
 
 def _construct(resolved: ResolvedLLMConfig, temperature: float) -> BaseChatModel:

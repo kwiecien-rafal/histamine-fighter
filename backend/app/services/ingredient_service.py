@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.normalization import normalize_ingredient_name
-from app.enums import MatchType
+from app.enums import Compatibility, MatchType
 from app.models import HistamineIngredient
 
 log = structlog.get_logger(__name__)
@@ -77,9 +77,7 @@ class IngredientService:
         """
         query = normalize_ingredient_name(name)
         if not query or len(query) > self.max_query_length:
-            log.debug(
-                "ingredient.lookup.rejected_input", chars=len(query), preview=name[:60]
-            )
+            log.debug("ingredient.lookup.rejected_input", chars=len(query), preview=name[:60])
             return []
 
         exact = await self._match_exact(query)
@@ -89,15 +87,40 @@ class IngredientService:
             # umbrella terms: model "egg" as Whole Egg plus an "egg" alias, never
             # as a bare "Egg" row, or this would suppress the yolk/white variants
             # the ambiguity handling exists to surface.
-            return [exact]
+            result = [exact]
+        else:
+            matches = await self._match_aliases(query) + await self._match_fuzzy(query)
+            result = self._rank_unique(matches)[: self.candidate_limit]
 
-        matches = await self._match_aliases(query) + await self._match_fuzzy(query)
-        return self._rank_unique(matches)[: self.candidate_limit]
+        log.debug(
+            "ingredient.candidates",
+            query=query,
+            count=len(result),
+            names=[match.ingredient.name for match in result],
+        )
+        return result
+
+    async def find_substitutes(self, category: str, limit: int = 3) -> list[HistamineIngredient]:
+        """Return well-tolerated ingredients in a category, as grounded safe swaps.
+
+        Used to keep the dish agent's swap suggestions honest: a proposed
+        replacement should come from the index's known-good rows, not the model's
+        imagination. "Safe" here means explicitly ``well_tolerated`` — an unrated
+        row is not evidence of safety, only the absence of a recorded concern.
+        """
+        stmt = (
+            select(HistamineIngredient)
+            .where(
+                HistamineIngredient.category == category,
+                HistamineIngredient.compatibility == Compatibility.WELL_TOLERATED,
+            )
+            .order_by(HistamineIngredient.name)
+            .limit(limit)
+        )
+        return list((await self._session.scalars(stmt)).all())
 
     async def _match_exact(self, query: str) -> IngredientMatch | None:
-        stmt = select(HistamineIngredient).where(
-            HistamineIngredient.normalized_name == query
-        )
+        stmt = select(HistamineIngredient).where(HistamineIngredient.normalized_name == query)
         row = (await self._session.scalars(stmt)).first()
         return IngredientMatch(row, MatchType.EXACT, 1.0) if row is not None else None
 
@@ -120,18 +143,12 @@ class IngredientService:
             .order_by(score.desc(), HistamineIngredient.id)
             .limit(self.candidate_limit * 2)
         )
-        rows = [
-            (ing, float(sim)) for ing, sim in (await self._session.execute(stmt)).all()
-        ]
+        rows = [(ing, float(sim)) for ing, sim in (await self._session.execute(stmt)).all()]
         if not rows:
             return []
         # Keep the relevant cluster, drop the weak tail (relative to the best hit).
         cutoff = rows[0][1] * self.relevance_ratio
-        return [
-            IngredientMatch(ing, MatchType.FUZZY, sim)
-            for ing, sim in rows
-            if sim >= cutoff
-        ]
+        return [IngredientMatch(ing, MatchType.FUZZY, sim) for ing, sim in rows if sim >= cutoff]
 
     @staticmethod
     def _rank_unique(matches: list[IngredientMatch]) -> list[IngredientMatch]:

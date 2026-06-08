@@ -6,7 +6,7 @@ class LLMRequestConfig(BaseModel):
     """Per-request LLM configuration parsed from ``X-LLM-*`` headers.
 
     Each field falls through to a server-side default in
-    :func:`app.llm.factory.build_llm_client` when ``None``. Keys are
+    :func:`app.llm.langchain_factory.build_chat_model` when ``None``. Keys are
     handled here only — they must never be persisted or logged.
     """
 

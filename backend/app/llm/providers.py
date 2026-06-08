@@ -1,11 +1,10 @@
-"""The single source of provider truth for both LLM client factories.
+"""The single source of provider truth for the LLM chat-model factory.
 
 The provider identity (:class:`Provider`), the per-provider defaults, and every
 resolution rule — key requirement, the Ollama deployment gate, OpenRouter's
-required model, unknown/reserved handling — live here once. Both
-``build_llm_client`` (custom clients) and ``build_chat_model`` (LangChain chat
-models) call :func:`resolve_llm_config` and then only differ in which object
-they construct, so the rules cannot drift between them.
+required model, unknown/reserved handling — live here once. ``build_chat_model``
+calls :func:`resolve_llm_config` and then only constructs the LangChain chat
+model, so the provider rules live in one place rather than in the factory.
 """
 
 from enum import StrEnum
@@ -30,7 +29,6 @@ class Provider(StrEnum):
 # are a 501, which is clearer than "unknown provider".
 RESERVED_PROVIDERS: frozenset[str] = frozenset({"modal"})
 
-# Base URL shared by both factories for OpenRouter's OpenAI-compatible endpoint.
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Default model when the request names none. OpenRouter is absent on purpose: it
@@ -63,9 +61,7 @@ class ResolvedLLMConfig(NamedTuple):
     def require_key(self) -> str:
         """Return the API key, asserting the cloud-provider invariant for typing."""
         if self.api_key is None:
-            raise LLMConfigError(
-                f"Provider '{self.provider.value}' requires an API key."
-            )
+            raise LLMConfigError(f"Provider '{self.provider.value}' requires an API key.")
         return self.api_key
 
 
@@ -90,17 +86,15 @@ def resolve_llm_config(cfg: LLMRequestConfig) -> ResolvedLLMConfig:
         )
 
     # Resolve the key before the model so a request missing both (OpenRouter needs
-    # both) fails with one deterministic error from the single shared path, rather
-    # than a different one depending on which factory called it.
+    # both) always fails with the same deterministic error — the missing-key one —
+    # rather than one that depends on evaluation order.
     api_key = _require_api_key(provider, cfg.api_key, _settings_api_key(provider))
     model = cfg.model or DEFAULT_MODELS.get(provider)
     if model is None:
         raise LLMConfigError(
             "A model is required for OpenRouter — see https://openrouter.ai/models."
         )
-    return ResolvedLLMConfig(
-        provider=provider, model=model, api_key=api_key, base_url=None
-    )
+    return ResolvedLLMConfig(provider=provider, model=model, api_key=api_key, base_url=None)
 
 
 def _parse_provider(name: str) -> Provider:
@@ -123,9 +117,7 @@ def _settings_api_key(provider: Provider) -> str | None:
     }[provider]
 
 
-def _require_api_key(
-    provider: Provider, header_key: str | None, settings_key: str | None
-) -> str:
+def _require_api_key(provider: Provider, header_key: str | None, settings_key: str | None) -> str:
     key = header_key or settings_key
     if not key:
         raise LLMConfigError(f"API key required for provider '{provider.value}'.")

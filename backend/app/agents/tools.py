@@ -46,8 +46,10 @@ def build_dish_lookup_tools(service: IngredientService) -> list[BaseTool]:
         ("pasta with parmesan").
 
         The result has:
-        - ``found``: false when the ingredient is not in the index. Its safety is
-          then unknown, NOT safe — never claim an unlisted ingredient is safe.
+        - ``found``: false when the ingredient is not in the curated index. The
+          index records histamine-relevant foods (mostly ones to avoid, some noted
+          as well tolerated), so an absent ingredient has no known concern — treat
+          it as fine, not as risky.
         - ``ambiguous``: true when the name maps to entries that disagree (egg yolk
           vs egg white); treat the dish cautiously or say which reading you assumed.
         - ``error``: present only when the call could not be completed (bad input or

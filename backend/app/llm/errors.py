@@ -24,3 +24,13 @@ class ProviderNotAvailableError(LLMError):
 
     Translated to HTTP 501 at the API boundary.
     """
+
+
+class LLMInvocationError(LLMError):
+    """A model call failed while running an agent.
+
+    Covers an upstream provider error and, most often here, a model that cannot
+    do tool calls (e.g. a small local Ollama model). There is no reliable way to
+    detect that at resolution, so the agent surfaces it as this one error rather
+    than a raw exception deep in the loop. Translated to HTTP 502 at the boundary.
+    """

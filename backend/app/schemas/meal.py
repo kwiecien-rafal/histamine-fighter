@@ -15,23 +15,26 @@ class Replacement(BaseModel):
     reason: str = Field(description="Why the swap helps.")
 
 
-class DishVerdict(BaseModel):
-    """The fields the model fills in for a dish lookup.
+class DishExplanation(BaseModel):
+    """The prose the model writes for a dish lookup.
 
-    It sets dish to the dish it found in the message, not a copy of the raw
-    input, so extra text like "what is 2+2?" gets ignored.
+    The model does not decide the verdict: that is computed in code from the
+    curated index. The model only identifies the dish and writes the explanation
+    and swaps that justify the verdict it is given. It sets ``dish`` to the dish
+    it found in the message, not a copy of the raw input, so extra text like
+    "what is 2+2?" gets ignored.
     """
 
     dish: str = Field(description="The dish found in the user's message.")
-    verdict: SafetyLevel = Field(description="Overall histamine safety of the dish.")
     explanation: str = Field(description="Short reason for the verdict.")
     replacements: list[Replacement] = Field(
         default_factory=list,
-        description="Safer ingredient swaps. Empty when the verdict is 'safe'.",
+        description="Safer swaps for the flagged ingredients. Empty when the verdict is 'safe'.",
     )
 
 
-class DishLookupResponse(DishVerdict):
-    """The verdict plus the model that produced it, sent back to the client."""
+class DishLookupResponse(DishExplanation):
+    """The dish verdict (owned by the index), its prose, and the model that wrote it."""
 
+    verdict: SafetyLevel = Field(description="Overall histamine safety of the dish.")
     model: str = Field(description="Which model produced the verdict.")
