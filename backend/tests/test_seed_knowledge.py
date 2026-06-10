@@ -32,9 +32,7 @@ def test_parse_failure_names_the_file(tmp_path: Path) -> None:
 
 
 def test_invalid_front_matter_names_the_file(tmp_path: Path) -> None:
-    _write(
-        tmp_path, "missing-slug.md", "---\ntitle: X\nsource: S\ntopic: t\n---\n\nBody."
-    )
+    _write(tmp_path, "missing-slug.md", "---\ntitle: X\nsource: S\ntopic: t\n---\n\nBody.")
 
     with pytest.raises(ValueError, match=r"missing-slug\.md"):
         load_documents(tmp_path)

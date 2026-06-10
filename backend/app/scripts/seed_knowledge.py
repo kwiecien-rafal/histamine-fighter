@@ -56,9 +56,7 @@ async def _build_chunks(
     rows: list[KnowledgeChunk] = []
     for document in documents:
         meta = document.front_matter
-        vectors = await embedder.embed_documents(
-            [chunk.content for chunk in document.chunks]
-        )
+        vectors = await embedder.embed_documents([chunk.content for chunk in document.chunks])
         for chunk, vector in zip(document.chunks, vectors, strict=True):
             rows.append(
                 KnowledgeChunk(

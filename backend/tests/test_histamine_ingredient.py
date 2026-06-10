@@ -47,9 +47,7 @@ async def test_compatibility_stored_as_value_not_name(session: AsyncSession) -> 
     await session.flush()
 
     stored = await session.scalar(
-        text(
-            "SELECT compatibility FROM histamine_ingredients WHERE normalized_name = :n"
-        ),
+        text("SELECT compatibility FROM histamine_ingredients WHERE normalized_name = :n"),
         {"n": "tomato"},
     )
     assert stored == "incompatible"
@@ -75,15 +73,11 @@ async def test_array_and_timestamp_defaults(session: AsyncSession) -> None:
 
 async def test_normalized_name_must_be_unique(session: AsyncSession) -> None:
     session.add(
-        HistamineIngredient(
-            name="Tomato", normalized_name="tomato", sources=["test source"]
-        )
+        HistamineIngredient(name="Tomato", normalized_name="tomato", sources=["test source"])
     )
     await session.flush()
     session.add(
-        HistamineIngredient(
-            name="Tomate", normalized_name="tomato", sources=["test source"]
-        )
+        HistamineIngredient(name="Tomate", normalized_name="tomato", sources=["test source"])
     )
     with pytest.raises(IntegrityError):
         await session.flush()

@@ -28,9 +28,7 @@ async def test_roundtrip_echoes_the_callers_question(session: AsyncSession) -> N
 
     assert hit is not None
     assert hit.answer == "Grounded answer."
-    assert (
-        hit.question == "what is DAO"
-    )  # the current request's phrasing, not the stored one
+    assert hit.question == "what is DAO"  # the current request's phrasing, not the stored one
     assert [citation.slug for citation in hit.citations] == ["dao"]
 
 
@@ -71,9 +69,7 @@ async def test_put_upserts_instead_of_duplicating(session: AsyncSession) -> None
     await cache.put("what is dao", _response("what is dao", answer="Second."))
 
     hit = await cache.get("What is DAO?", "test/model")
-    rows = (
-        await session.execute(select(func.count()).select_from(LearnQueryCache))
-    ).scalar_one()
+    rows = (await session.execute(select(func.count()).select_from(LearnQueryCache))).scalar_one()
 
     assert hit is not None
     assert hit.answer == "Second."

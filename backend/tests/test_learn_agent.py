@@ -17,9 +17,7 @@ from app.schemas.learn import LearnAnswer
 from app.services.knowledge_service import KnowledgeMatch
 
 
-def _match(
-    slug: str, *, title: str = "Title", source: str = "Source"
-) -> KnowledgeMatch:
+def _match(slug: str, *, title: str = "Title", source: str = "Source") -> KnowledgeMatch:
     chunk = KnowledgeChunk(
         slug=slug,
         title=title,
@@ -106,9 +104,7 @@ async def test_cites_only_passages_the_answer_used() -> None:
 
 async def test_out_of_range_passage_numbers_are_ignored() -> None:
     service = _StubService([_match("dao"), _match("foods")])
-    chat = _ScriptedChat(
-        LearnAnswer(answer="ok", sufficient=True, used_passages=[0, 2, 7, -1])
-    )
+    chat = _ScriptedChat(LearnAnswer(answer="ok", sufficient=True, used_passages=[0, 2, 7, -1]))
 
     result = await _agent(chat, service).run("question")
 
@@ -119,9 +115,7 @@ async def test_out_of_range_passage_numbers_are_ignored() -> None:
 async def test_sufficient_answer_without_valid_citations_declines() -> None:
     """An answer that attributes no real passage is uncited — decline, don't serve."""
     service = _StubService([_match("dao")])
-    chat = _ScriptedChat(
-        LearnAnswer(answer="confident prose", sufficient=True, used_passages=[9])
-    )
+    chat = _ScriptedChat(LearnAnswer(answer="confident prose", sufficient=True, used_passages=[9]))
 
     result = await _agent(chat, service).run("question")
 
@@ -154,12 +148,8 @@ async def test_no_context_declines_without_calling_model() -> None:
 
 
 async def test_duplicate_document_is_cited_once() -> None:
-    service = _StubService(
-        [_match("dao", title="DAO part 1"), _match("dao", title="DAO part 2")]
-    )
-    chat = _ScriptedChat(
-        LearnAnswer(answer="ok", sufficient=True, used_passages=[1, 2])
-    )
+    service = _StubService([_match("dao", title="DAO part 1"), _match("dao", title="DAO part 2")])
+    chat = _ScriptedChat(LearnAnswer(answer="ok", sufficient=True, used_passages=[1, 2]))
 
     result = await _agent(chat, service).run("question")
 

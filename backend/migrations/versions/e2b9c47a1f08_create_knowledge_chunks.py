@@ -49,9 +49,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_knowledge_chunks")),
-        sa.UniqueConstraint(
-            "slug", "chunk_index", name="uq_knowledge_chunks_slug_chunk_index"
-        ),
+        sa.UniqueConstraint("slug", "chunk_index", name="uq_knowledge_chunks_slug_chunk_index"),
     )
     # No ANN index. At a small corpus an exact cosine scan is both faster and
     # exact; add HNSW/IVFFlat only past ~10k chunks.

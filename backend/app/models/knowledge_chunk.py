@@ -30,9 +30,7 @@ class KnowledgeChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         # The seed re-chunks a whole document on each run; (slug, chunk_index) is
         # the stable identity it upserts/refreshes against.
-        UniqueConstraint(
-            "slug", "chunk_index", name="uq_knowledge_chunks_slug_chunk_index"
-        ),
+        UniqueConstraint("slug", "chunk_index", name="uq_knowledge_chunks_slug_chunk_index"),
     )
 
     def __repr__(self) -> str:

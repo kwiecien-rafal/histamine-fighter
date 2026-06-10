@@ -81,9 +81,7 @@ class HistamineIngredient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     @validates("aliases")
     def _derive_normalized_aliases(self, _key: str, aliases: list[str]) -> list[str]:
-        self.normalized_aliases = [
-            normalize_ingredient_name(alias) for alias in aliases
-        ]
+        self.normalized_aliases = [normalize_ingredient_name(alias) for alias in aliases]
         return aliases
 
     def __repr__(self) -> str:

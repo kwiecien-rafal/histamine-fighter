@@ -33,9 +33,7 @@ _INVOCATION_ERROR = (
 class LearnAgent(BaseAgent):
     """Answers histamine questions grounded in the curated knowledge corpus."""
 
-    def __init__(
-        self, chat: ChatModel, service: KnowledgeService, *, k: int = 5
-    ) -> None:
+    def __init__(self, chat: ChatModel, service: KnowledgeService, *, k: int = 5) -> None:
         super().__init__(chat)
         self._service = service
         self._prompt = load_prompt(_PROMPT_FILE)
@@ -128,9 +126,7 @@ class LearnAgent(BaseAgent):
         )
 
     @staticmethod
-    def _citations(
-        chunks: list[KnowledgeMatch], used_passages: list[int]
-    ) -> list[Citation]:
+    def _citations(chunks: list[KnowledgeMatch], used_passages: list[int]) -> list[Citation]:
         """One citation per source document the answer drew on, in retrieval order.
 
         Passage numbers come from the model, so they are validated against the

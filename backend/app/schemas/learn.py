@@ -57,9 +57,7 @@ class LearnResponse(BaseModel):
         default=None,
         description="The grounded answer; null when the question was declined.",
     )
-    grounded: bool = Field(
-        description="True when the answer is backed by retrieved sources."
-    )
+    grounded: bool = Field(description="True when the answer is backed by retrieved sources.")
     citations: list[Citation] = Field(default_factory=list)
     model: str = Field(description="Which model produced the answer.")
 

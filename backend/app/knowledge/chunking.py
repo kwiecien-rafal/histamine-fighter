@@ -60,9 +60,7 @@ def parse_document(text: str) -> ParsedDocument:
         raise ValueError("document is missing the '--- front matter ---' block")
     front_matter = KnowledgeFrontMatter(**_parse_front_matter(match.group("meta")))
     pieces = chunk_body(match.group("body").strip())
-    chunks = [
-        KnowledgeChunkData(index, content) for index, content in enumerate(pieces)
-    ]
+    chunks = [KnowledgeChunkData(index, content) for index, content in enumerate(pieces)]
     return ParsedDocument(front_matter=front_matter, chunks=chunks)
 
 
@@ -169,9 +167,7 @@ def _pack_paragraphs(paragraphs: list[str], max_chars: int, overlap: int) -> lis
     # (tail + piece) could exceed the bound.
     piece_budget = max_chars - overlap - 2
     pieces = [
-        piece
-        for paragraph in paragraphs
-        for piece in _split_oversized(paragraph, piece_budget)
+        piece for paragraph in paragraphs for piece in _split_oversized(paragraph, piece_budget)
     ]
     chunks: list[str] = []
     buffer = ""
@@ -195,11 +191,7 @@ def _overlap_tail(text: str, overlap: int) -> str:
     the next chunk with a token fragment; the partial leading word is dropped.
     """
     tail = text[-overlap:]
-    if (
-        len(text) > overlap
-        and not text[-overlap - 1].isspace()
-        and not tail[0].isspace()
-    ):
+    if len(text) > overlap and not text[-overlap - 1].isspace() and not tail[0].isspace():
         parts = tail.split(maxsplit=1)
         tail = parts[1] if len(parts) > 1 else ""
     return tail.lstrip()
@@ -227,12 +219,7 @@ def _split_oversized(block: str, budget: int) -> list[str]:
 
 def _repack(pieces: list[str], separator: str, budget: int) -> list[str]:
     """Re-fit split pieces to the budget, then greedily rejoin them up to it."""
-    fitted = [
-        fit
-        for piece in pieces
-        if piece.strip()
-        for fit in _split_oversized(piece, budget)
-    ]
+    fitted = [fit for piece in pieces if piece.strip() for fit in _split_oversized(piece, budget)]
     packed: list[str] = []
     buffer = ""
     for piece in fitted:

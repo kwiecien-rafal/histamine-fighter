@@ -42,7 +42,5 @@ class FastEmbedEmbedder(Embedder):
         return (await asyncio.to_thread(self._embed, [text], True))[0]
 
     def _embed(self, texts: list[str], as_query: bool) -> list[list[float]]:
-        vectors = (
-            self._model.query_embed(texts) if as_query else self._model.embed(texts)
-        )
+        vectors = self._model.query_embed(texts) if as_query else self._model.embed(texts)
         return [vector.tolist() for vector in vectors]

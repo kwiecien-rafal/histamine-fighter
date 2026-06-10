@@ -28,9 +28,7 @@ class LearnQueryCache(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        UniqueConstraint(
-            "question_key", "model", name="uq_learn_query_cache_question_key_model"
-        ),
+        UniqueConstraint("question_key", "model", name="uq_learn_query_cache_question_key_model"),
     )
 
     def __repr__(self) -> str:

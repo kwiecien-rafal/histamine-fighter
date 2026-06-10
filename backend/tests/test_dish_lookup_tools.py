@@ -27,9 +27,7 @@ async def test_tool_reports_compatibility_for_a_known_ingredient(
     session: AsyncSession,
 ) -> None:
     session.add(
-        _ingredient(
-            "Tomato", compatibility=Compatibility.INCOMPATIBLE, category="vegetable"
-        )
+        _ingredient("Tomato", compatibility=Compatibility.INCOMPATIBLE, category="vegetable")
     )
     await session.flush()
 

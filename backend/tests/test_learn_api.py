@@ -30,9 +30,7 @@ async def test_cached_answer_is_served_without_an_llm(
     await LearnCacheService(session).put("What is DAO?", cached)
     await session.flush()
 
-    response = await client.post(
-        "/api/v1/learn/query", json={"question": "what is dao"}
-    )
+    response = await client.post("/api/v1/learn/query", json={"question": "what is dao"})
 
     assert response.status_code == 200
     body = response.json()
@@ -48,12 +46,8 @@ async def test_llm_endpoint_is_rate_limited(
     limiter.reset()
     limiter.enabled = True
 
-    first = await client.post(
-        "/api/v1/learn/query", json={"question": "what is histamine"}
-    )
-    second = await client.post(
-        "/api/v1/learn/query", json={"question": "what is histamine"}
-    )
+    first = await client.post("/api/v1/learn/query", json={"question": "what is histamine"})
+    second = await client.post("/api/v1/learn/query", json={"question": "what is histamine"})
 
     # Empty corpus: the agent declines without an LLM call, so the first request
     # succeeds; the second must be cut off by the limiter.

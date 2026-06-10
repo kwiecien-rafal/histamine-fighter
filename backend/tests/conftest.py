@@ -41,14 +41,10 @@ TEST_DATABASE_URL = _test_database_url()
 async def _create_database_and_schema() -> None:
     """Recreate the test database and build the schema from the models."""
     db_name = TEST_DATABASE_URL.database
-    admin_engine = create_async_engine(
-        settings.database_url, isolation_level="AUTOCOMMIT"
-    )
+    admin_engine = create_async_engine(settings.database_url, isolation_level="AUTOCOMMIT")
     try:
         async with admin_engine.connect() as conn:
-            await conn.execute(
-                text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
-            )
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
             await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
     finally:
         await admin_engine.dispose()
@@ -124,9 +120,7 @@ async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
     limiter.enabled = False
     transport = ASGITransport(app=app)
     try:
-        async with AsyncClient(
-            transport=transport, base_url="http://test"
-        ) as http_client:
+        async with AsyncClient(transport=transport, base_url="http://test") as http_client:
             yield http_client
     finally:
         limiter.enabled = True

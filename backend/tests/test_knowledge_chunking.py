@@ -47,8 +47,7 @@ def test_unknown_front_matter_field_raises() -> None:
 
 def test_chunking_respects_size_budget() -> None:
     body = "## H\n\n" + "\n\n".join(
-        f"Paragraph number {i} with some filler words to take up room."
-        for i in range(40)
+        f"Paragraph number {i} with some filler words to take up room." for i in range(40)
     )
     chunks = chunk_body(body, max_chars=200, overlap=40)
 
@@ -67,8 +66,7 @@ def test_each_chunk_keeps_its_heading() -> None:
 
 def test_oversized_paragraph_is_split_on_sentences_within_budget() -> None:
     body = "## H\n\n" + " ".join(
-        f"Sentence number {i} adds a little more prose to the single paragraph."
-        for i in range(30)
+        f"Sentence number {i} adds a little more prose to the single paragraph." for i in range(30)
     )
     chunks = chunk_body(body, max_chars=200, overlap=40)
 
@@ -112,9 +110,7 @@ def test_hash_inside_code_fence_is_not_a_heading() -> None:
 
 
 def test_hashtag_without_space_is_not_a_heading() -> None:
-    chunks = chunk_body(
-        "## Tags\n\n#histamine is a hashtag.", max_chars=500, overlap=50
-    )
+    chunks = chunk_body("## Tags\n\n#histamine is a hashtag.", max_chars=500, overlap=50)
 
     assert chunks == ["Tags\n\n#histamine is a hashtag."]
 

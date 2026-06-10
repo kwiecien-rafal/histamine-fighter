@@ -29,9 +29,7 @@ class LearnCacheService:
 
     def __init__(self, session: AsyncSession, *, ttl_days: int | None = None) -> None:
         self._session = session
-        self._ttl = timedelta(
-            days=settings.learn_cache_ttl_days if ttl_days is None else ttl_days
-        )
+        self._ttl = timedelta(days=settings.learn_cache_ttl_days if ttl_days is None else ttl_days)
 
     async def get(self, question: str, model: str) -> LearnResponse | None:
         """Return the cached answer for this question and model, or None.
@@ -48,9 +46,7 @@ class LearnCacheService:
             LearnQueryCache.model == model,
             LearnQueryCache.expires_at > datetime.now(UTC),
         )
-        payload: dict[str, Any] | None = (
-            await self._session.execute(stmt)
-        ).scalar_one_or_none()
+        payload: dict[str, Any] | None = (await self._session.execute(stmt)).scalar_one_or_none()
         if payload is None:
             return None
         log.info("learn.cache_hit", question=question[:80], model=model)

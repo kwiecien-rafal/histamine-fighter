@@ -78,9 +78,7 @@ def create_app() -> FastAPI:
 
     async def _rate_limited(request: Request, exc: Exception) -> JSONResponse:
         detail = exc.detail if isinstance(exc, RateLimitExceeded) else str(exc)
-        return JSONResponse(
-            status_code=429, content={"detail": f"Rate limit exceeded: {detail}"}
-        )
+        return JSONResponse(status_code=429, content={"detail": f"Rate limit exceeded: {detail}"})
 
     app.add_exception_handler(RateLimitExceeded, _rate_limited)
 

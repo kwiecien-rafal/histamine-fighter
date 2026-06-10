@@ -134,9 +134,7 @@ def _evaluate(model_name: str) -> dict[str, float] | None:
 
     negative_sims: list[float] = []
     print("  hard negatives (query -> forbidden, want LOW):")
-    for (query, forbidden), query_vector in zip(
-        HARD_NEGATIVES, negative_vectors, strict=True
-    ):
+    for (query, forbidden), query_vector in zip(HARD_NEGATIVES, negative_vectors, strict=True):
         sims = doc_vectors @ query_vector
         forbidden_sim = float(sims[index[forbidden]])
         negative_sims.append(forbidden_sim)

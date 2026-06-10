@@ -68,18 +68,14 @@ async def test_empty_query_returns_nothing(
     assert await KnowledgeService(session, fake_embedder).search("   ") == []
 
 
-async def test_oversized_query_raises(
-    session: AsyncSession, fake_embedder: FakeEmbedder
-) -> None:
+async def test_oversized_query_raises(session: AsyncSession, fake_embedder: FakeEmbedder) -> None:
     """Too-long input is a caller error, not 'nothing relevant found'."""
     service = KnowledgeService(session, fake_embedder)
     with pytest.raises(ValueError, match="exceeds"):
         await service.search("x" * (MAX_QUESTION_LENGTH + 1))
 
 
-async def test_non_positive_k_raises(
-    session: AsyncSession, fake_embedder: FakeEmbedder
-) -> None:
+async def test_non_positive_k_raises(session: AsyncSession, fake_embedder: FakeEmbedder) -> None:
     """k=0 must fail loudly, not silently fall back to the default."""
     service = KnowledgeService(session, fake_embedder)
     with pytest.raises(ValueError, match="k must be >= 1"):
@@ -88,9 +84,7 @@ async def test_non_positive_k_raises(
         await service.search("histamine", k=-3)
 
 
-async def test_search_respects_k(
-    session: AsyncSession, fake_embedder: FakeEmbedder
-) -> None:
+async def test_search_respects_k(session: AsyncSession, fake_embedder: FakeEmbedder) -> None:
     for i in range(4):
         await _add_chunk(
             session,
@@ -152,12 +146,8 @@ async def test_similarity_floor_keeps_only_relevant_chunks(
 async def test_topics_lists_one_row_per_document(
     session: AsyncSession, fake_embedder: FakeEmbedder
 ) -> None:
-    await _add_chunk(
-        session, fake_embedder, slug="dao", title="DAO", content="x", index=0
-    )
-    await _add_chunk(
-        session, fake_embedder, slug="dao", title="DAO", content="y", index=1
-    )
+    await _add_chunk(session, fake_embedder, slug="dao", title="DAO", content="x", index=0)
+    await _add_chunk(session, fake_embedder, slug="dao", title="DAO", content="y", index=1)
     await _add_chunk(
         session, fake_embedder, slug="foods", title="Foods", content="z", topic="foods"
     )

@@ -17,9 +17,7 @@ def _ingredient(name: str, **kwargs: object) -> HistamineIngredient:
 
 
 def _match(compatibility: Compatibility | None) -> IngredientMatch:
-    return IngredientMatch(
-        _ingredient("x", compatibility=compatibility), MatchType.FUZZY, 0.5
-    )
+    return IngredientMatch(_ingredient("x", compatibility=compatibility), MatchType.FUZZY, 0.5)
 
 
 async def test_exact_returns_single_candidate(session: AsyncSession) -> None:
@@ -75,10 +73,7 @@ async def test_relevance_cutoff_drops_weaker_fuzzy(session: AsyncSession) -> Non
     session.add(_ingredient("Tomato Juice"))
     await session.flush()
 
-    names = {
-        c.ingredient.name
-        for c in await IngredientService(session).find_candidates("tomatos")
-    }
+    names = {c.ingredient.name for c in await IngredientService(session).find_candidates("tomatos")}
     assert "Tomato" in names
     assert "Tomato Juice" not in names
 
@@ -127,17 +122,13 @@ async def test_exact_name_short_circuits_even_for_an_ambiguous_term(
 def test_model_derives_normalized_keys_from_name_and_aliases() -> None:
     # The matcher relies on these keys; the model derives them so no caller has
     # to set them by hand and risk them drifting from name/aliases.
-    ingredient = _ingredient(
-        "  Aged   Parmesan ", aliases=["Grana Padano", "  PARMIGIANO "]
-    )
+    ingredient = _ingredient("  Aged   Parmesan ", aliases=["Grana Padano", "  PARMIGIANO "])
     assert ingredient.normalized_name == "aged parmesan"
     assert ingredient.normalized_aliases == ["grana padano", "parmigiano"]
 
 
 def test_is_ambiguous_when_verdicts_differ() -> None:
-    assert is_ambiguous(
-        [_match(Compatibility.WELL_TOLERATED), _match(Compatibility.INCOMPATIBLE)]
-    )
+    assert is_ambiguous([_match(Compatibility.WELL_TOLERATED), _match(Compatibility.INCOMPATIBLE)])
 
 
 def test_is_ambiguous_treats_unrated_as_a_distinct_verdict() -> None:
