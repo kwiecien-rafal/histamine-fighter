@@ -26,9 +26,7 @@ def test_openai_uses_default_model() -> None:
 
 
 def test_header_model_overrides_default() -> None:
-    result = build_chat_model(
-        LLMRequestConfig(provider="openai", api_key="k", model="gpt-4o")
-    )
+    result = build_chat_model(LLMRequestConfig(provider="openai", api_key="k", model="gpt-4o"))
     assert isinstance(result.model, ChatOpenAI)
     assert result.model_name == "openai/gpt-4o"
 
@@ -99,9 +97,7 @@ def test_classifier_defaults_to_deterministic_sampling() -> None:
 
 
 def test_temperature_is_overridable_for_creative_agents() -> None:
-    result = build_chat_model(
-        LLMRequestConfig(provider="openai", api_key="k"), temperature=0.7
-    )
+    result = build_chat_model(LLMRequestConfig(provider="openai", api_key="k"), temperature=0.7)
     assert isinstance(result.model, ChatOpenAI)
     assert result.model.temperature == 0.7
 

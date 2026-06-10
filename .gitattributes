@@ -1,0 +1,17 @@
+# Normalize to LF in the repo and the working tree; the backend runs in Linux
+# containers, so CRLF leaking into mounted sources or shell scripts breaks them.
+* text=auto eol=lf
+
+# Windows-native script types need CRLF to run reliably.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
