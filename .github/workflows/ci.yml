@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  lint-and-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: histamine
+          POSTGRES_PASSWORD: histamine
+          POSTGRES_DB: histamine
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U histamine -d histamine"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run pytest
+        env:
+          DATABASE_URL: postgresql+asyncpg://histamine:histamine@localhost:5432/histamine
+
+  # The fast suite excludes the real-embedder tests (pyproject addopts); this job
+  # runs exactly those, so the actual model path is exercised on every PR. The
+  # model download (~130 MB) is cached between runs.
+  embedding-tests:
+    runs-on: ubuntu-latest
+    env:
+      FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/fastembed
+          # Bump the suffix when the embedding model in app/config.py changes.
+          key: fastembed-bge-small-en-v1.5
+      - run: uv sync --frozen
+      # The CLI -m overrides the fast-suite exclusion in pyproject addopts.
+      - run: uv run pytest -m embeddings
