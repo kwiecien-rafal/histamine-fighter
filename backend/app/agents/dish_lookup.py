@@ -155,7 +155,7 @@ class DishLookupAgent(BaseAgent):
         self._max_iterations = max_iterations
         self._max_tool_calls = max_tool_calls
 
-    def stream(self, **kwargs: Any) -> AsyncIterator[str]:
+    def stream(self, dish: str) -> AsyncIterator[str]:
         # Declared, not omitted, so the streaming contract stays explicit; deferred.
         raise NotImplementedError("Streaming dish lookup is not implemented yet.")
 

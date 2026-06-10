@@ -17,6 +17,9 @@ dependencies = [
     "langchain-anthropic>=1.4.4",
     "langchain-google-genai>=4.2.4",
     "langchain-ollama>=1.1.0",
+    "pgvector>=0.4.2",
+    "fastembed>=0.8.0",
+    "slowapi>=0.1.9",
 ]
 
 [dependency-groups]
@@ -31,6 +34,10 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "embeddings: loads the real embedding model (slow, downloads on first run)",
+]
+addopts = "-m 'not embeddings'"
 
 [tool.ruff]
 line-length = 100
@@ -39,3 +46,7 @@ target-version = "py312"
 [tool.mypy]
 strict = true
 python_version = "3.12"
+
+[[tool.mypy.overrides]]
+module = ["fastembed.*", "pgvector.*"]
+ignore_missing_imports = true

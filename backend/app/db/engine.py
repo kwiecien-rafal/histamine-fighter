@@ -4,6 +4,11 @@ One engine and connection pool per process, shared across requests.
 expire_on_commit=False lets request handlers keep reading ORM objects after
 the session commits, which is what the per-request session in session.py
 depends on.
+
+pgvector values are handled by the SQLAlchemy ``Vector`` column type, which
+serializes to/from the ``'[...]'`` text form. The raw asyncpg ``register_vector``
+codec is deliberately not installed: it expects a Python list and would clash
+with the string the SQLAlchemy type already produces.
 """
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine

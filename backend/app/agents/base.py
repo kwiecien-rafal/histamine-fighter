@@ -31,6 +31,10 @@ class BaseAgent(ABC):
         return self._chat.model_name
 
     @abstractmethod
-    def stream(self, **kwargs: Any) -> AsyncIterator[str]:
-        """Stream the agent's answer as SSE text chunks."""
+    def stream(self, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+        """Stream the agent's answer as SSE text chunks.
+
+        Declared loose here so each agent can type its own signature (mirroring
+        its ``run``) without violating the override contract.
+        """
         ...

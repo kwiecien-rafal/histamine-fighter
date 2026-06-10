@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -7,12 +8,15 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
-from app.api.v1 import histamine, meals
+from app.api.v1 import histamine, learn, meals
 from app.config import settings
 from app.core.logging import configure_logging
+from app.core.ratelimit import limiter
 from app.db.engine import engine
+from app.embeddings import warm_up_embedder
 from app.llm.errors import LLMConfigError, LLMInvocationError, ProviderNotAvailableError
 
 logger = structlog.get_logger(__name__)
@@ -31,7 +35,12 @@ def _llm_error_handler(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Set up logging and check the database is reachable before serving requests."""
+    """Set up logging, check the database, and warm the embedder before serving.
+
+    The embedder is loaded here (off the event loop) so a missing or corrupt
+    model fails the deploy at startup instead of stalling the first user's
+    request on a model download.
+    """
     configure_logging()
     try:
         async with engine.connect() as conn:
@@ -39,6 +48,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("startup.database_unreachable")
         raise
+    embedder = await asyncio.to_thread(warm_up_embedder)
+    logger.info("startup.embedder_ready", model=embedder.model_name)
     logger.info("startup.complete")
     yield
     await engine.dispose()
@@ -59,6 +70,19 @@ def create_app() -> FastAPI:
     app.add_exception_handler(LLMConfigError, _llm_error_handler(400))
     app.add_exception_handler(ProviderNotAvailableError, _llm_error_handler(501))
     app.add_exception_handler(LLMInvocationError, _llm_error_handler(502))
+
+    # slowapi looks the limiter up on app.state; routes opt in via its decorator.
+    # Own handler rather than slowapi's stock one: its signature is too narrow
+    # for Starlette's typing, and this keeps the error shape consistent.
+    app.state.limiter = limiter
+
+    async def _rate_limited(request: Request, exc: Exception) -> JSONResponse:
+        detail = exc.detail if isinstance(exc, RateLimitExceeded) else str(exc)
+        return JSONResponse(
+            status_code=429, content={"detail": f"Rate limit exceeded: {detail}"}
+        )
+
+    app.add_exception_handler(RateLimitExceeded, _rate_limited)
 
     @app.middleware("http")
     async def log_request(
@@ -89,6 +113,7 @@ def create_app() -> FastAPI:
 
     app.include_router(histamine.router)
     app.include_router(meals.router)
+    app.include_router(learn.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
