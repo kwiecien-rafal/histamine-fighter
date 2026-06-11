@@ -38,7 +38,8 @@ from langchain_core.messages import (
 )
 from langchain_core.runnables import Runnable
 
-from app.agents.base import BaseAgent, load_prompt
+from app.agents.base import BaseAgent, loggable_messages
+from app.agents.prompting import load_prompt, render_prompt, strip_closing_tag
 from app.agents.tools import build_dish_lookup_tools
 from app.enums import Compatibility, SafetyLevel
 from app.llm.errors import LLMInvocationError
@@ -48,8 +49,6 @@ from app.services.ingredient_service import IngredientMatch, IngredientService
 
 log = structlog.get_logger(__name__)
 
-_PROMPT_FILE = "dish_lookup.md"
-_SYNTHESIS_PROMPT_FILE = "dish_lookup_synthesis.md"
 _SUBSTITUTE_LIMIT = 3
 _INVOCATION_ERROR = (
     "The language model failed to complete the dish lookup. "
@@ -123,6 +122,31 @@ def _matches_safety(matches: list[IngredientMatch]) -> SafetyLevel:
     )
 
 
+def _format_flagged(flagged: list[dict[str, Any]]) -> str:
+    """The flagged ingredients as labelled lines for the synthesis prompt.
+
+    Prose-shaped rather than JSON: the model grounds its explanation in named
+    facts it can quote ("mechanisms: high histamine") instead of decoding
+    key/value structure, and the synthesis system prompt describes these labels
+    directly.
+    """
+    if not flagged:
+        return "None."
+    lines: list[str] = []
+    for entry in flagged:
+        parts = [f"{entry['ingredient']} — {entry['compatibility']}"]
+        if entry.get("category"):
+            parts.append(f"category: {entry['category']}")
+        if entry.get("matched_on") == "category":
+            parts.append(f'flagged as a member of the indexed group "{entry["matched_as"]}"')
+        if entry.get("mechanisms"):
+            parts.append("mechanisms: " + ", ".join(entry["mechanisms"]))
+        if entry.get("safe_options"):
+            parts.append("well-tolerated swaps: " + ", ".join(entry["safe_options"]))
+        lines.append(f"- {'; '.join(parts)}.")
+    return "\n".join(lines)
+
+
 def _grounded_verdict(lookups: list[dict[str, Any]]) -> SafetyLevel:
     """The dish verdict the index supports: the most cautious per-ingredient risk.
 
@@ -150,8 +174,16 @@ class DishLookupAgent(BaseAgent):
         self._service = service
         self._tools = build_dish_lookup_tools(service)
         self._tools_by_name = {tool.name: tool for tool in self._tools}
-        self._prompt = load_prompt(_PROMPT_FILE)
-        self._synthesis_prompt = load_prompt(_SYNTHESIS_PROMPT_FILE)
+        self._system_prompt = render_prompt(
+            load_prompt("dish_lookup/system"), "dish_lookup/system", input_tag="<dish>"
+        )
+        self._user_template = load_prompt("dish_lookup/user")
+        self._synthesis_prompt = render_prompt(
+            load_prompt("dish_lookup/synthesis_system"),
+            "dish_lookup/synthesis_system",
+            input_tag="<dish_text>",
+        )
+        self._synthesis_user_template = load_prompt("dish_lookup/synthesis_user")
         self._max_iterations = max_iterations
         self._max_tool_calls = max_tool_calls
 
@@ -161,13 +193,22 @@ class DishLookupAgent(BaseAgent):
 
     async def run(self, dish: str) -> DishLookupResponse:
         log.debug("dish_lookup.start", dish=dish, model=self._chat.model_name)
-        log.debug("dish_lookup.system_prompt", prompt=self._prompt)
         log.debug(
             "dish_lookup.tools",
             tools=[{"name": tool.name, "description": tool.description} for tool in self._tools],
         )
         bound = self._chat.model.bind_tools(self._tools)
-        messages: list[BaseMessage] = [SystemMessage(self._prompt), HumanMessage(dish)]
+        messages: list[BaseMessage] = [
+            SystemMessage(self._system_prompt),
+            HumanMessage(
+                render_prompt(
+                    self._user_template,
+                    "dish_lookup/user",
+                    dish=strip_closing_tag(dish, "dish"),
+                )
+            ),
+        ]
+        log.debug("dish_lookup.request", messages=loggable_messages(messages))
         lookups: list[dict[str, Any]] = []
         complete = False
         tool_calls_made = 0
@@ -264,7 +305,8 @@ class DishLookupAgent(BaseAgent):
                 if _compatibility_safety(candidate["compatibility"]) is not SafetyLevel.SAFE
             ]
             worst = max(
-                risky, key=lambda c: _SAFETY_SEVERITY[_compatibility_safety(c["compatibility"])]
+                risky,
+                key=lambda c: _SAFETY_SEVERITY[_compatibility_safety(c["compatibility"])],
             )
             flagged.append(
                 {
@@ -295,12 +337,21 @@ class DishLookupAgent(BaseAgent):
     async def _synthesize(
         self, dish: str, verdict: SafetyLevel, flagged: list[dict[str, Any]]
     ) -> DishExplanation:
-        payload = {"dish": dish, "verdict": verdict.value, "flagged": flagged}
-        log.debug("dish_lookup.synthesis_request", verdict=verdict.value, flagged=flagged)
         messages: list[BaseMessage] = [
             SystemMessage(self._synthesis_prompt),
-            HumanMessage(json.dumps(payload, ensure_ascii=False)),
+            HumanMessage(
+                render_prompt(
+                    self._synthesis_user_template,
+                    "dish_lookup/synthesis_user",
+                    dish=strip_closing_tag(dish, "dish_text"),
+                    # Ingredient names echo the model's tool args, which derive
+                    # from the user's dish text — sanitize like direct input.
+                    flagged=strip_closing_tag(_format_flagged(flagged), "flagged_ingredients"),
+                    verdict=verdict.value,
+                )
+            ),
         ]
+        log.debug("dish_lookup.synthesis_request", messages=loggable_messages(messages))
         structured = self._chat.model.with_structured_output(DishExplanation)
         try:
             result = await structured.ainvoke(messages)
@@ -311,7 +362,10 @@ class DishLookupAgent(BaseAgent):
         return explanation
 
     async def _ground_swaps(
-        self, verdict: SafetyLevel, flagged: list[dict[str, Any]], proposed: list[Replacement]
+        self,
+        verdict: SafetyLevel,
+        flagged: list[dict[str, Any]],
+        proposed: list[Replacement],
     ) -> list[Replacement]:
         """Keep only swaps the index agrees are safe, and fill gaps from it.
 
@@ -366,11 +420,16 @@ class DishLookupAgent(BaseAgent):
             result: dict[str, Any] = await tool.ainvoke(args)
         except Exception:  # args the tool's schema rejects, etc. — keep the loop alive
             log.warning("dish_lookup.tool_failed", tool=name, exc_info=True)
-            return {"error": f"Could not run '{name}' with those arguments.", "candidates": []}
+            return {
+                "error": f"Could not run '{name}' with those arguments.",
+                "candidates": [],
+            }
         return result
 
     async def _invoke(
-        self, bound: Runnable[LanguageModelInput, BaseMessage], messages: list[BaseMessage]
+        self,
+        bound: Runnable[LanguageModelInput, BaseMessage],
+        messages: list[BaseMessage],
     ) -> AIMessage:
         # Logged as deltas (start, each reply, each tool result), not re-dumped per
         # turn; these messages never carry API keys — those live in request headers.

@@ -15,7 +15,8 @@ from collections.abc import AsyncIterator
 import structlog
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
-from app.agents.base import BaseAgent, load_prompt
+from app.agents.base import BaseAgent, loggable_messages
+from app.agents.prompting import load_prompt, render_prompt, strip_closing_tag
 from app.llm.errors import LLMInvocationError
 from app.llm.langchain_factory import ChatModel
 from app.schemas.learn import Citation, LearnAnswer, LearnResponse
@@ -23,7 +24,6 @@ from app.services.knowledge_service import KnowledgeMatch, KnowledgeService
 
 log = structlog.get_logger(__name__)
 
-_PROMPT_FILE = "learn.md"
 _INVOCATION_ERROR = (
     "The language model failed to answer the knowledge question. If you selected "
     "a custom model, make sure it supports structured output."
@@ -36,7 +36,12 @@ class LearnAgent(BaseAgent):
     def __init__(self, chat: ChatModel, service: KnowledgeService, *, k: int = 5) -> None:
         super().__init__(chat)
         self._service = service
-        self._prompt = load_prompt(_PROMPT_FILE)
+        self._system_prompt = render_prompt(
+            load_prompt("learn/system"),
+            "learn/system",
+            input_tag="<context> and <question>",
+        )
+        self._user_template = load_prompt("learn/user")
         self._k = k
 
     def stream(self, question: str) -> AsyncIterator[str]:
@@ -97,11 +102,17 @@ class LearnAgent(BaseAgent):
         )
 
     async def _answer(self, question: str, chunks: list[KnowledgeMatch]) -> LearnAnswer:
-        prompt = f"Context passages:\n\n{self._format_context(chunks)}\n\nQuestion: {question}"
+        prompt = render_prompt(
+            self._user_template,
+            "learn/user",
+            passages=self._format_context(chunks),
+            question=strip_closing_tag(question, "question"),
+        )
         messages: list[BaseMessage] = [
-            SystemMessage(self._prompt),
+            SystemMessage(self._system_prompt),
             HumanMessage(prompt),
         ]
+        log.debug("learn.request", messages=loggable_messages(messages))
         structured = self._chat.model.with_structured_output(LearnAnswer)
         try:
             result = await structured.ainvoke(messages)
@@ -116,6 +127,7 @@ class LearnAgent(BaseAgent):
                 model=self._chat.model_name,
             )
             raise LLMInvocationError(_INVOCATION_ERROR)
+        log.debug("learn.reply", answer=result.model_dump())
         return result
 
     @staticmethod

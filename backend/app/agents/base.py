@@ -1,16 +1,20 @@
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
-from pathlib import Path
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
+
+from langchain_core.messages import BaseMessage
 
 from app.llm.langchain_factory import ChatModel
 
-_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
+def loggable_messages(messages: Sequence[BaseMessage]) -> list[dict[str, str]]:
+    """Messages as role/content pairs for the per-call ``*.request`` debug events.
 
-def load_prompt(filename: str) -> str:
-    """Read an agent prompt from ``app/agents/prompts`` by file name."""
-    return (_PROMPTS_DIR / filename).read_text(encoding="utf-8")
+    Prompts are logged at the invocation boundary — when they are sent, not when
+    their templates render — so one request's debug log reads chronologically:
+    each model call's ``request`` event, then its reply.
+    """
+    return [{"role": message.type, "content": str(message.content)} for message in messages]
 
 
 class BaseAgent(ABC):
