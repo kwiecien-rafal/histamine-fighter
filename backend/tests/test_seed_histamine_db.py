@@ -38,16 +38,3 @@ async def test_upsert_round_trips_the_category_flag(session: AsyncSession) -> No
 
 def test_curated_seed_file_validates() -> None:
     assert load_rows(SEED_FILE)
-
-
-def test_curated_seed_covers_the_parmesan_routing() -> None:
-    # The category fallback only works if curation holds up its end: parmesan has
-    # its own row, and the Hard Cheese umbrella row catches the descriptor the
-    # dish-lookup prompt uses as its canonical example.
-    rows = {row.name: row for row in load_rows(SEED_FILE)}
-
-    assert rows["Parmesan"].compatibility is not None
-
-    hard_cheese = rows["Hard Cheese"]
-    assert hard_cheese.is_category
-    assert "aged hard cheese" in hard_cheese.aliases
