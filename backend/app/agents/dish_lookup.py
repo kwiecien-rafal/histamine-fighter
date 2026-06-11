@@ -198,6 +198,7 @@ class DishLookupAgent(BaseAgent):
                     iteration=iteration,
                     ingredient=args.get("ingredient"),
                     found=result.get("found"),
+                    matched_on=result.get("matched_on"),
                     candidates=[
                         (candidate["name"], candidate["compatibility"])
                         for candidate in result.get("candidates", [])
@@ -271,6 +272,11 @@ class DishLookupAgent(BaseAgent):
                     "compatibility": worst["compatibility"],
                     "mechanisms": worst.get("mechanisms", []),
                     "category": worst.get("category"),
+                    # How the index flagged it: a category-matched ingredient was
+                    # caught as a member of the group in matched_as ("Hard Cheese"),
+                    # and the synthesis step phrases it that way.
+                    "matched_on": lookup.get("matched_on"),
+                    "matched_as": worst["name"],
                     "safe_options": [],
                 }
             )

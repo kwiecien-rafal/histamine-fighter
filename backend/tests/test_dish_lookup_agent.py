@@ -25,8 +25,12 @@ def _ingredient(name: str, **kwargs: object) -> HistamineIngredient:
     return HistamineIngredient(name=name, sources=["test source"], **kwargs)
 
 
-def _tool_call(ingredient: str, call_id: str = "c1") -> dict[str, Any]:
-    args = {"ingredient": ingredient}
+def _tool_call(
+    ingredient: str, call_id: str = "c1", *, category: str | None = None
+) -> dict[str, Any]:
+    args: dict[str, Any] = {"ingredient": ingredient}
+    if category is not None:
+        args["category"] = category
     return {"name": "lookup_ingredient_safety", "args": args, "id": call_id, "type": "tool_call"}
 
 
@@ -134,6 +138,69 @@ async def test_absent_ingredient_is_safe_despite_cautious_prose(session: AsyncSe
     )
 
     result = await _agent(chat, IngredientService(session)).run(dish="boiled rice")
+
+    assert result.verdict is SafetyLevel.SAFE
+
+
+# --- the category fallback --------------------------------------------------------
+
+
+async def test_unindexed_ingredient_is_caught_by_its_category(session: AsyncSession) -> None:
+    # "parmesan" misses the index, but its category resolves to the Hard Cheese
+    # umbrella row — and the swap is still filled from the cheese category.
+    session.add(
+        _ingredient(
+            "Hard Cheese",
+            compatibility=Compatibility.POORLY_TOLERATED,
+            category="cheese",
+            is_category=True,
+            aliases=["aged hard cheese"],
+        )
+    )
+    session.add(
+        _ingredient("Ricotta", compatibility=Compatibility.WELL_TOLERATED, category="cheese")
+    )
+    await session.flush()
+    chat = _ScriptedChat(
+        turns=[
+            AIMessage(content="", tool_calls=[_tool_call("parmesan", category="aged hard cheese")]),
+            AIMessage(content="done"),
+        ],
+        explanation=_explanation(dish="Pasta"),
+    )
+
+    result = await _agent(chat, IngredientService(session)).run(dish="pasta with parmesan")
+
+    assert result.verdict is SafetyLevel.AVOID
+    assert [replacement.swap for replacement in result.replacements] == ["Ricotta"]
+
+
+async def test_indexed_safe_ingredient_is_not_poisoned_by_its_category(
+    session: AsyncSession,
+) -> None:
+    # Fallback, not merge: mozzarella's own well-tolerated entry wins even when
+    # the model also passes the risky category.
+    session.add(_ingredient("Mozzarella", compatibility=Compatibility.WELL_TOLERATED))
+    session.add(
+        _ingredient(
+            "Hard Cheese",
+            compatibility=Compatibility.POORLY_TOLERATED,
+            is_category=True,
+            aliases=["aged hard cheese"],
+        )
+    )
+    await session.flush()
+    chat = _ScriptedChat(
+        turns=[
+            AIMessage(
+                content="", tool_calls=[_tool_call("mozzarella", category="aged hard cheese")]
+            ),
+            AIMessage(content="done"),
+        ],
+        explanation=_explanation(dish="Caprese"),
+    )
+
+    result = await _agent(chat, IngredientService(session)).run(dish="caprese")
 
     assert result.verdict is SafetyLevel.SAFE
 

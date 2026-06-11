@@ -24,6 +24,7 @@ in the seed script; an unknown field or invalid enum value fails the load.
 | `compatibility` | no | One of the levels below. **Omit** when there is no reliable rating; the agent must not assert safety for these. |
 | `mechanisms` | no | Any of the mechanism flags below. Defaults to `[]`. |
 | `category` | no | Coarse grouping, e.g. `"cheese"`, `"fish"`. Powers substitute lookups. |
+| `is_category` | no | `true` marks an umbrella row (e.g. `"Hard Cheese"`) that the dish agent may resolve a category descriptor against when a specific ingredient is not indexed. Defaults to `false`. |
 | `aliases` | no | Synonyms and common spellings that should match this row, e.g. `["aubergine", "eggplant"]`. |
 | `notes` | no | Plain-language note in our own words, shown in explanations. |
 | `sources` | yes | One or more references the rating draws on, e.g. `["Sánchez-Pérez et al. 2021", "SIGHI"]`. At least one is required. |
@@ -54,6 +55,9 @@ in the seed script; an unknown field or invalid enum value fails the load.
 
 - One row per ingredient. Fold spelling variants and close synonyms into
   `aliases` rather than adding near-duplicate rows.
+- Umbrella rows (`is_category: true`) should carry the phrasings a model would
+  use for the group as `aliases` (e.g. `"aged hard cheese"` on Hard Cheese) —
+  category descriptors are matched exactly, never fuzzily.
 - When in doubt, prefer caution: a too-cautious rating is safer than a
   too-permissive one, and an omitted `compatibility` ("unknown") is honest.
 - Keep `notes` short, plain, and your own words.

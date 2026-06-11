@@ -29,6 +29,7 @@ def _unusable(ingredient: str, error: str) -> dict[str, Any]:
         "ingredient": ingredient,
         "found": False,
         "ambiguous": False,
+        "matched_on": None,
         "error": error,
         "candidates": [],
     }
@@ -38,18 +39,27 @@ def build_dish_lookup_tools(service: IngredientService) -> list[BaseTool]:
     """Build the tools the dish-lookup agent may call, bound to one DB session."""
 
     @tool
-    async def lookup_ingredient_safety(ingredient: str) -> dict[str, Any]:
+    async def lookup_ingredient_safety(
+        ingredient: str, category: str | None = None
+    ) -> dict[str, Any]:
         """Look up one ingredient's histamine compatibility in the curated index.
 
         Call this for every ingredient you consider, including any swap you plan
         to suggest. Pass a single ingredient name ("parmesan"), not a dish
-        ("pasta with parmesan").
+        ("pasta with parmesan"). Also pass ``category``: a short descriptor of the
+        food group and preparation style — "aged hard cheese" for parmesan,
+        "smoked fish" for kippers, "citrus fruit" for yuzu. When the exact
+        ingredient is not indexed, the lookup falls back to its category entry; a
+        specific ingredient entry always wins over the category.
 
         The result has:
-        - ``found``: false when the ingredient is not in the curated index. The
-          index records histamine-relevant foods (mostly ones to avoid, some noted
-          as well tolerated), so an absent ingredient has no known concern — treat
-          it as fine, not as risky.
+        - ``found``: false when neither the ingredient nor its category is in the
+          curated index. The index records histamine-relevant foods (mostly ones
+          to avoid, some noted as well tolerated), so an ingredient absent with no
+          matching category has no known concern — treat it as fine, not as risky.
+        - ``matched_on``: ``"ingredient"`` when the entries are for the food
+          itself, ``"category"`` when the food matched only as a member of a
+          broader indexed group — explain it that way.
         - ``ambiguous``: true when the name maps to entries that disagree (egg yolk
           vs egg white); treat the dish cautiously or say which reading you assumed.
         - ``error``: present only when the call could not be completed (bad input or
@@ -73,6 +83,10 @@ def build_dish_lookup_tools(service: IngredientService) -> list[BaseTool]:
 
         try:
             matches = await service.find_candidates(ingredient)
+            matched_on = "ingredient" if matches else None
+            if not matches and category and category.strip():
+                matches = await service.find_category_candidates(category)
+                matched_on = "category" if matches else None
         except SQLAlchemyError:
             log.warning("ingredient.lookup.failed", ingredient=query[:60], exc_info=True)
             return _unusable(ingredient, "Index lookup failed; treat this ingredient as unknown.")
@@ -81,6 +95,7 @@ def build_dish_lookup_tools(service: IngredientService) -> list[BaseTool]:
             "ingredient": ingredient,
             "found": bool(matches),
             "ambiguous": is_ambiguous(matches),
+            "matched_on": matched_on,
             "error": None,
             "candidates": [
                 {

@@ -119,6 +119,57 @@ async def test_exact_name_short_circuits_even_for_an_ambiguous_term(
     assert [c.ingredient.name for c in candidates] == ["Egg"]
 
 
+# --- find_category_candidates (umbrella rows, exact match only) ------------------
+
+
+def _category_row(name: str, **kwargs: object) -> HistamineIngredient:
+    return _ingredient(name, is_category=True, **kwargs)
+
+
+async def test_category_matches_an_umbrella_row_by_name(session: AsyncSession) -> None:
+    session.add(_category_row("Hard Cheese", compatibility=Compatibility.POORLY_TOLERATED))
+    await session.flush()
+
+    candidates = await IngredientService(session).find_category_candidates(" Hard  Cheese ")
+    assert [c.ingredient.name for c in candidates] == ["Hard Cheese"]
+    assert candidates[0].match_type is MatchType.EXACT
+
+
+async def test_category_matches_an_umbrella_row_by_alias(session: AsyncSession) -> None:
+    session.add(_category_row("Hard Cheese", aliases=["aged hard cheese"]))
+    await session.flush()
+
+    candidates = await IngredientService(session).find_category_candidates("aged hard cheese")
+    assert [c.ingredient.name for c in candidates] == ["Hard Cheese"]
+    assert candidates[0].match_type is MatchType.ALIAS
+
+
+async def test_category_never_matches_an_ordinary_row(session: AsyncSession) -> None:
+    # Tomato is a specific ingredient, not a curated umbrella; a category
+    # descriptor must not resolve through it.
+    session.add(_ingredient("Tomato", compatibility=Compatibility.INCOMPATIBLE))
+    await session.flush()
+
+    assert await IngredientService(session).find_category_candidates("tomato") == []
+
+
+async def test_category_matching_has_no_fuzzy(session: AsyncSession) -> None:
+    # Free-text descriptors must not drift into nearby rows ("meat" -> cured
+    # meats); a near-miss is a miss, falling back to today's behaviour.
+    session.add(_category_row("Hard Cheese"))
+    await session.flush()
+
+    assert await IngredientService(session).find_category_candidates("hard chese") == []
+
+
+async def test_blank_category_returns_empty(session: AsyncSession) -> None:
+    assert await IngredientService(session).find_category_candidates("   ") == []
+
+
+async def test_overlong_category_returns_empty(session: AsyncSession) -> None:
+    assert await IngredientService(session).find_category_candidates("x" * 500) == []
+
+
 def test_model_derives_normalized_keys_from_name_and_aliases() -> None:
     # The matcher relies on these keys; the model derives them so no caller has
     # to set them by hand and risk them drifting from name/aliases.

@@ -46,6 +46,7 @@ class IngredientSeedRow(BaseModel):
     compatibility: Compatibility | None = None
     mechanisms: list[HistamineMechanism] = Field(default_factory=list)
     category: str | None = None
+    is_category: bool = False
     aliases: list[str] = Field(default_factory=list)
     notes: str | None = None
     sources: list[str] = Field(min_length=1)
@@ -76,6 +77,7 @@ def _to_values(rows: list[IngredientSeedRow]) -> list[dict[str, Any]]:
             "compatibility": row.compatibility,
             "mechanisms": list(row.mechanisms),
             "category": row.category,
+            "is_category": row.is_category,
             "aliases": list(row.aliases),
             "normalized_aliases": [normalize_ingredient_name(alias) for alias in row.aliases],
             "notes": row.notes,
@@ -100,6 +102,7 @@ async def upsert_ingredients(
             "compatibility": excluded.compatibility,
             "mechanisms": excluded.mechanisms,
             "category": excluded.category,
+            "is_category": excluded.is_category,
             "aliases": excluded.aliases,
             "normalized_aliases": excluded.normalized_aliases,
             "notes": excluded.notes,

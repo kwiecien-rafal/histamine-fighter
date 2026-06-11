@@ -55,6 +55,9 @@ class HistamineIngredient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=text("'{}'"),
     )
     category: Mapped[str | None]
+    # Marks an umbrella row ("Hard Cheese") the dish agent may fall back to when
+    # a specific ingredient misses the index. Set by curation, never by the model.
+    is_category: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     aliases: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'")
     )

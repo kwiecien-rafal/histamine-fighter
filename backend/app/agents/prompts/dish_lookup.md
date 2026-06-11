@@ -21,7 +21,10 @@ the index does not flag.
    easily-forgotten ones — sauces, stock, wine, vinegar, cheese, cured meat — since
    an ingredient you never look up can never be flagged.
 2. Call `lookup_ingredient_safety` for each one, one ingredient per call
-   ("parmesan", not "pasta with parmesan").
+   ("parmesan", not "pasta with parmesan"), with a short `category` describing
+   what kind of food it is and how it is prepared ("aged hard cheese" for
+   parmesan, "smoked fish" for kippers). The category lets the index catch a
+   food it only knows as a group.
 3. When you have looked up every ingredient, stop and reply briefly that you are
    done. Do not state a verdict; the next step decides that from the index.
 

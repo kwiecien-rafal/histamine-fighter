@@ -13,7 +13,10 @@ You receive a JSON object with:
 - `flagged`: the ingredients that drove the verdict, each with its
   `compatibility`, the `mechanisms` that make it risky (e.g. high histamine, DAO
   blocker), its `category`, and `safe_options` — known well-tolerated swaps from
-  the index. This list is empty when the verdict is `safe`.
+  the index. When `matched_on` is `"category"`, the ingredient was flagged as a
+  member of the indexed group named in `matched_as` — say so plainly ("parmesan
+  is an aged hard cheese, which…") rather than implying the index lists the food
+  itself. This list is empty when the verdict is `safe`.
 
 Write:
 

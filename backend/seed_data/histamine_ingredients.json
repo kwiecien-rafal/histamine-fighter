@@ -70,6 +70,7 @@
       "other_amines"
     ],
     "category": "cheese",
+    "is_category": true,
     "aliases": [
       "blue cheeses",
       "mold cheese",
@@ -165,6 +166,7 @@
       "other_amines"
     ],
     "category": "cheese",
+    "is_category": true,
     "aliases": [
       "unpasteurised cheese",
       "unpasteurized cheese",
@@ -184,10 +186,14 @@
       "other_amines"
     ],
     "category": "cheese",
+    "is_category": true,
     "aliases": [
       "matured cheese",
       "aged cheese",
-      "mature cheese"
+      "mature cheese",
+      "aged hard cheese",
+      "hard aged cheese",
+      "grating cheese"
     ],
     "notes": "All well-matured cheeses are strongly histamine-rich and also high in tyramine, building up the longer they age — a classic trigger. Choose fresh, unripened cheese instead.",
     "sources": [
@@ -446,6 +452,7 @@
       "other_amines"
     ],
     "category": "cheese",
+    "is_category": true,
     "aliases": [],
     "notes": "Made from aged cheese plus additives — histamine-rich, best avoided.",
     "sources": [
@@ -622,10 +629,12 @@
       "other_amines"
     ],
     "category": "meat",
+    "is_category": true,
     "aliases": [
       "air-dried meat",
       "biltong",
-      "jerky"
+      "jerky",
+      "cured meat"
     ],
     "notes": "Any dried or aged meat is histamine-rich with other amines — a classic trigger. Avoid; use fresh meat.",
     "sources": [
@@ -723,6 +732,7 @@
       "other_amines"
     ],
     "category": "meat",
+    "is_category": true,
     "aliases": [
       "ground meat",
       "mince",
@@ -832,6 +842,7 @@
       "high_histamine"
     ],
     "category": "fish",
+    "is_category": true,
     "aliases": [],
     "notes": "Smoked and stored — high in histamine. Avoid; choose fresh or freshly frozen fish.",
     "sources": [
@@ -845,6 +856,7 @@
       "high_histamine"
     ],
     "category": "meat",
+    "is_category": true,
     "aliases": [],
     "notes": "Smoked and aged — high in histamine. Avoid.",
     "sources": [
@@ -921,9 +933,11 @@
       "other_amines"
     ],
     "category": "fish",
+    "is_category": true,
     "aliases": [
       "freshly caught fish",
-      "frozen fish"
+      "frozen fish",
+      "fish"
     ],
     "notes": "Freshly caught or frozen fish is tolerated, but fish forms histamine extremely fast — freshness is everything. Oily scombroid species (tuna, mackerel) are riskiest.",
     "sources": [
@@ -941,6 +955,7 @@
       "other_amines"
     ],
     "category": "fish",
+    "is_category": true,
     "aliases": [
       "fish",
       "fish on ice",
@@ -1092,6 +1107,7 @@
       "liberator"
     ],
     "category": "seafood",
+    "is_category": true,
     "aliases": [],
     "notes": "Perishable and histamine-liberating — a common trigger. Avoid.",
     "sources": [
@@ -1598,6 +1614,7 @@
     "compatibility": "poorly_tolerated",
     "mechanisms": [],
     "category": "nut",
+    "is_category": true,
     "aliases": [
       "mixed nuts"
     ],
@@ -2962,6 +2979,7 @@
       "liberator"
     ],
     "category": "fruit",
+    "is_category": true,
     "aliases": [
       "citrus fruit"
     ],
@@ -4502,6 +4520,7 @@
       "dao_blocker"
     ],
     "category": "alcohol",
+    "is_category": true,
     "aliases": [
       "alcohol"
     ],

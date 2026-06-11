@@ -15,7 +15,7 @@ import uuid
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.normalization import normalize_ingredient_name
@@ -86,7 +86,8 @@ class IngredientService:
             # we stop here. This assumes curated names are specific, not ambiguous
             # umbrella terms: model "egg" as Whole Egg plus an "egg" alias, never
             # as a bare "Egg" row, or this would suppress the yolk/white variants
-            # the ambiguity handling exists to surface.
+            # the ambiguity handling exists to surface. Umbrella rows marked
+            # is_category are the exception; find_category_candidates serves those.
             result = [exact]
         else:
             matches = await self._match_aliases(query) + await self._match_fuzzy(query)
@@ -94,6 +95,47 @@ class IngredientService:
 
         log.debug(
             "ingredient.candidates",
+            query=query,
+            count=len(result),
+            names=[match.ingredient.name for match in result],
+        )
+        return result
+
+    async def find_category_candidates(self, category: str) -> list[IngredientMatch]:
+        """Resolve a category descriptor against umbrella rows, by exact match only.
+
+        The dish agent's fallback when a specific ingredient misses the index: a
+        descriptor like "aged hard cheese" resolves to the curated umbrella row
+        covering that group. Only rows marked ``is_category`` are eligible, and
+        matching is exact (name or alias) — deliberately no fuzzy, so a free-text
+        descriptor like "meat" cannot drift into specific cured-meat rows. An
+        empty list means the index knows no such category.
+        """
+        query = normalize_ingredient_name(category)
+        if not query or len(query) > self.max_query_length:
+            log.debug("ingredient.category.rejected_input", chars=len(query), preview=category[:60])
+            return []
+
+        stmt = select(HistamineIngredient).where(
+            HistamineIngredient.is_category.is_(True),
+            or_(
+                HistamineIngredient.normalized_name == query,
+                HistamineIngredient.normalized_aliases.contains([query]),
+            ),
+        )
+        rows = (await self._session.scalars(stmt)).all()
+        matches = [
+            IngredientMatch(
+                row,
+                MatchType.EXACT if row.normalized_name == query else MatchType.ALIAS,
+                1.0,
+            )
+            for row in rows
+        ]
+        result = self._rank_unique(matches)[: self.candidate_limit]
+
+        log.debug(
+            "ingredient.category_candidates",
             query=query,
             count=len(result),
             names=[match.ingredient.name for match in result],
