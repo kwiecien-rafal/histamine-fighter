@@ -1340,7 +1340,8 @@
     "aliases": [],
     "notes": "Generally well tolerated.",
     "sources": [
-      "SIGHI 2023-04-01"
+      "SIGHI 2023-04-01",
+      "BDA 2025"
     ]
   },
   {
@@ -1351,7 +1352,8 @@
     "aliases": [],
     "notes": "Well tolerated; refrigerate cooked rice promptly and use within a day.",
     "sources": [
-      "SIGHI 2023-04-01"
+      "SIGHI 2023-04-01",
+      "BDA 2025"
     ]
   },
   {
@@ -1364,7 +1366,8 @@
     ],
     "notes": "Well tolerated; slightly less so than freshly cooked rice.",
     "sources": [
-      "SIGHI 2023-04-01"
+      "SIGHI 2023-04-01",
+      "BDA 2025"
     ]
   },
   {
@@ -1874,12 +1877,13 @@
   },
   {
     "name": "Bamboo Shoots",
+    "compatibility": "well_tolerated",
     "mechanisms": [],
     "category": "vegetable",
     "aliases": [],
-    "notes": "No reliable rating — tolerance unknown.",
+    "notes": "Tolerance unknown in SIGHI, however BDA 2025 lists them as fine. Use them, but observe your reaction to bamboo shoots.",
     "sources": [
-      "SIGHI 2023-04-01"
+      "BDA 2025"
     ]
   },
   {
@@ -2819,7 +2823,8 @@
     ],
     "notes": "Well tolerated.",
     "sources": [
-      "SIGHI 2023-04-01"
+      "SIGHI 2023-04-01",
+      "BDA 2025"
     ]
   },
   {
@@ -5128,6 +5133,53 @@
     "notes": "Reported as incompatible; fermented soy products are worse. Best limited.",
     "sources": [
       "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Table Salt",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "spice",
+    "aliases": [
+      "table salt",
+      "plain salt",
+      "sea salt"
+    ],
+    "notes": "",
+    "sources": [
+      "SIGHI 2023-04-01"
+    ]
+  },
+  {
+    "name": "Pasta",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "carbohydrate",
+    "aliases": [
+      "spaghetti",
+      "penne",
+      "fusilli",
+      "macaroni",
+      "farfalle",
+      "rigatoni",
+      "linguine",
+      "tagliatelle",
+      "fettuccine"
+    ],
+    "notes": "Refrigerate leftover cooked pasta promptly and use within a day.",
+    "sources": [
+      "BDA 2025"
+    ]
+  },
+  {
+    "name": "Collard greens",
+    "compatibility": "well_tolerated",
+    "mechanisms": [],
+    "category": "vegetable",
+    "aliases": [],
+    "notes": "",
+    "sources": [
+      "BDA 2025"
     ]
   }
 ]
