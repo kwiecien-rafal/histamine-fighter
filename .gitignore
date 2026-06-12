@@ -222,6 +222,7 @@ node_modules/
 dist/
 .vite/
 *.local
+*.tsbuildinfo
 
 # Local env file (committed template lives in .env.example)
 .env

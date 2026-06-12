@@ -43,6 +43,9 @@ addopts = "-m 'not embeddings'"
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+extend-select = ["I"]
+
 [tool.mypy]
 strict = true
 python_version = "3.12"

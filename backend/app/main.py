@@ -66,7 +66,7 @@ def create_app() -> FastAPI:
     )
     # The LLM layer raises domain errors, not HTTPException; map them here so a
     # bad provider/key is a 400, a reserved provider a 501, and a failed model
-    # call (e.g. a model that cannot do tool calls) a 502.
+    # call (e.g. a model that cannot emit structured output) a 502.
     app.add_exception_handler(LLMConfigError, _llm_error_handler(400))
     app.add_exception_handler(ProviderNotAvailableError, _llm_error_handler(501))
     app.add_exception_handler(LLMInvocationError, _llm_error_handler(502))

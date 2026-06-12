@@ -14,8 +14,8 @@ from app.agents import prompting
 from app.agents.prompting import PromptRenderError, load_prompt, render_prompt, strip_closing_tag
 
 _TEMPLATES = [
-    "dish_lookup/system",
-    "dish_lookup/user",
+    "dish_lookup/propose_system",
+    "dish_lookup/propose_user",
     "dish_lookup/synthesis_system",
     "dish_lookup/synthesis_user",
     "learn/system",
@@ -104,7 +104,8 @@ def test_real_templates_load_with_includes_resolved(name: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "name", ["dish_lookup/system", "dish_lookup/synthesis_system", "learn/system"]
+    "name",
+    ["dish_lookup/propose_system", "dish_lookup/synthesis_system", "learn/system"],
 )
 def test_system_prompts_assemble_with_shared_identity(name: str) -> None:
     rendered = render_prompt(load_prompt(name), name, input_tag="<x>")

@@ -1,50 +1,52 @@
-"""The flagship dish-lookup agent: a grounded, tool-calling loop.
+"""The flagship dish-lookup agent: propose, confirm, assess.
 
-The agent decomposes a dish into ingredients from the model's own culinary
-knowledge, then calls ``lookup_ingredient_safety`` to read each one from the
-curated index. The index is a *risk registry*: it records the ingredients that
-matter for histamine intolerance — mostly ones to avoid, plus some noted as well
-tolerated — so an ingredient absent from it carries no known risk.
+The flow is human-in-the-loop. ``propose`` decomposes a dish into a candidate
+ingredient list from the model's own culinary knowledge; the user reviews and
+edits that list; ``assess`` reads each confirmed ingredient from the curated
+index, computes the verdict in code, and has the model write the explanation
+and swaps that justify it.
 
-The verdict is computed in code, not by the model: it is the most cautious risk
-the index records across the dish's ingredients. The model only decomposes the
-dish (the loop) and, once the verdict is known, writes the explanation and swaps
-that justify it (the synthesis). Keeping the safety call in code means the
-verdict and the prose can never disagree, and every suggested swap is checked
-against the index before it ships.
+The index is a *risk registry*: it records the ingredients that matter for
+histamine intolerance — mostly ones to avoid, plus some noted as well tolerated
+— so an ingredient absent from it carries no known risk. The verdict is the
+most cautious risk the index records across the confirmed ingredients. The
+model never decides it, so the verdict and the prose can never disagree, and
+every suggested swap is checked against the index before it ships.
 
-What this does *not* guarantee is completeness. The index scores the ingredients
-the model surfaces; an ingredient the model never lists is never looked up and so
-is never flagged. That gap is the model's recall, not the index's — the index is
-authoritative for *scoring*, not for *enumerating*. It is narrowed by a prompt
-that pushes for a full ingredient list, by a verdict that refuses to assert
-"safe" on incomplete grounding, and by logging how many ingredients were actually
-checked so a thin decomposition shows up in the logs — but it is not eliminated.
+User confirmation is what closes the enumeration gap the old tool-calling loop
+had: the index is authoritative for *scoring* ingredients, not for
+*enumerating* them, and a decomposition the model got wrong is now the user's
+to fix rather than silently trusted. One floor remains: a lookup that *errored*
+read nothing, so it is not evidence of safety — any errored lookup keeps the
+verdict at "depends" or worse.
 """
 
-import json
 from collections.abc import AsyncIterator
 from typing import Any, cast
-from uuid import uuid4
 
 import structlog
-from langchain_core.language_models import LanguageModelInput
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-    ToolMessage,
-)
-from langchain_core.runnables import Runnable
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from pydantic import BaseModel
 
 from app.agents.base import BaseAgent, loggable_messages
 from app.agents.prompting import load_prompt, render_prompt, strip_closing_tag
-from app.agents.tools import build_dish_lookup_tools
 from app.enums import Compatibility, SafetyLevel
 from app.llm.errors import LLMInvocationError
 from app.llm.langchain_factory import ChatModel
-from app.schemas.meal import DishExplanation, DishLookupResponse, Replacement
+from app.schemas.meal import (
+    MAX_CONFIRMED_INGREDIENTS,
+    MAX_INGREDIENT_CHARS,
+    ConfirmedIngredient,
+    DishAssessmentResponse,
+    DishExplanation,
+    IngredientAssessment,
+    IngredientProposalResponse,
+    ProposedIngredient,
+    ProposedIngredientDraft,
+    ProposedIngredients,
+    Replacement,
+)
+from app.services.ingredient_lookup import lookup_ingredient_safety
 from app.services.ingredient_service import IngredientMatch, IngredientService
 
 log = structlog.get_logger(__name__)
@@ -52,7 +54,7 @@ log = structlog.get_logger(__name__)
 _SUBSTITUTE_LIMIT = 3
 _INVOCATION_ERROR = (
     "The language model failed to complete the dish lookup. "
-    "If you selected a custom model, make sure it supports tool calling."
+    "If you selected a custom model, make sure it supports structured output."
 )
 
 # Dish-level severity, worst last, so caution is a simple max.
@@ -99,7 +101,7 @@ def _resolve_levels(levels: set[SafetyLevel]) -> SafetyLevel:
 
 
 def _compatibility_safety(value: str) -> SafetyLevel:
-    """Map one tool-result compatibility string to risk (``unknown`` -> safe)."""
+    """Map one lookup-result compatibility string to risk (``unknown`` -> safe)."""
     try:
         return _COMPATIBILITY_SAFETY[Compatibility(value)]
     except ValueError:
@@ -120,6 +122,18 @@ def _matches_safety(matches: list[IngredientMatch]) -> SafetyLevel:
             if match.ingredient.compatibility is not None
         }
     )
+
+
+def _worst_risky(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """One lookup's most severe risky candidate, or ``None`` when nothing is risky."""
+    risky = [
+        candidate
+        for candidate in candidates
+        if _compatibility_safety(candidate["compatibility"]) is not SafetyLevel.SAFE
+    ]
+    if not risky:
+        return None
+    return max(risky, key=lambda c: _SAFETY_SEVERITY[_compatibility_safety(c["compatibility"])])
 
 
 def _format_flagged(flagged: list[dict[str, Any]]) -> str:
@@ -159,119 +173,148 @@ def _grounded_verdict(lookups: list[dict[str, Any]]) -> SafetyLevel:
     return verdict
 
 
+def _clipped(value: str) -> str:
+    return value.strip()[:MAX_INGREDIENT_CHARS].rstrip()
+
+
+def _normalized(items: list[ProposedIngredientDraft]) -> list[ProposedIngredient]:
+    """Degrade the model's draft items into valid response items.
+
+    The draft schema is deliberately unconstrained so a sloppy model cannot fail
+    the parse; everything the response schema enforces is normalized here
+    instead — trim and truncate each field, drop blanks, dedupe
+    (case-insensitive, order kept), cap the count.
+    """
+    kept: list[ProposedIngredient] = []
+    seen: set[str] = set()
+    for item in items:
+        name = _clipped(item.name)
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        category = _clipped(item.category) if item.category else ""
+        kept.append(ProposedIngredient(name=name, category=category or None))
+        if len(kept) == MAX_CONFIRMED_INGREDIENTS:
+            break
+    return kept
+
+
+def _ingredient_assessment(name: str, lookup: dict[str, Any]) -> IngredientAssessment:
+    """One confirmed ingredient's reading for the per-ingredient badge.
+
+    A failed lookup is marked ``error`` and reads as "depends": a cautious
+    default consistent with the floored dish verdict, not an index reading.
+    """
+    if lookup.get("error"):
+        return IngredientAssessment(name=name, safety=SafetyLevel.DEPENDS, found=False, error=True)
+    candidates = lookup.get("candidates", [])
+    worst = _worst_risky(candidates)
+    return IngredientAssessment(
+        name=name,
+        safety=_candidates_safety(candidates),
+        found=bool(lookup.get("found")),
+        matched_on=lookup.get("matched_on"),
+        mechanisms=worst.get("mechanisms", []) if worst else [],
+    )
+
+
 class DishLookupAgent(BaseAgent):
     """Classifies a dish by grounding the verdict in curated ingredient data."""
 
-    def __init__(
-        self,
-        chat: ChatModel,
-        service: IngredientService,
-        *,
-        max_iterations: int = 6,
-        max_tool_calls: int = 12,
-    ) -> None:
+    def __init__(self, chat: ChatModel, service: IngredientService) -> None:
         super().__init__(chat)
         self._service = service
-        self._tools = build_dish_lookup_tools(service)
-        self._tools_by_name = {tool.name: tool for tool in self._tools}
-        self._system_prompt = render_prompt(
-            load_prompt("dish_lookup/system"), "dish_lookup/system", input_tag="<dish>"
+        self._propose_prompt = render_prompt(
+            load_prompt("dish_lookup/propose_system"),
+            "dish_lookup/propose_system",
+            input_tag="<dish>",
         )
-        self._user_template = load_prompt("dish_lookup/user")
+        self._propose_user_template = load_prompt("dish_lookup/propose_user")
         self._synthesis_prompt = render_prompt(
             load_prompt("dish_lookup/synthesis_system"),
             "dish_lookup/synthesis_system",
             input_tag="<dish_text>",
         )
         self._synthesis_user_template = load_prompt("dish_lookup/synthesis_user")
-        self._max_iterations = max_iterations
-        self._max_tool_calls = max_tool_calls
 
     def stream(self, dish: str) -> AsyncIterator[str]:
         # Declared, not omitted, so the streaming contract stays explicit; deferred.
         raise NotImplementedError("Streaming dish lookup is not implemented yet.")
 
-    async def run(self, dish: str) -> DishLookupResponse:
-        log.debug("dish_lookup.start", dish=dish, model=self._chat.model_name)
-        log.debug(
-            "dish_lookup.tools",
-            tools=[{"name": tool.name, "description": tool.description} for tool in self._tools],
-        )
-        bound = self._chat.model.bind_tools(self._tools)
+    async def propose(self, dish: str) -> IngredientProposalResponse:
+        """Decompose the dish into the ingredient list the user will confirm."""
         messages: list[BaseMessage] = [
-            SystemMessage(self._system_prompt),
+            SystemMessage(self._propose_prompt),
             HumanMessage(
                 render_prompt(
-                    self._user_template,
-                    "dish_lookup/user",
+                    self._propose_user_template,
+                    "dish_lookup/propose_user",
                     dish=strip_closing_tag(dish, "dish"),
                 )
             ),
         ]
-        log.debug("dish_lookup.request", messages=loggable_messages(messages))
-        lookups: list[dict[str, Any]] = []
-        complete = False
-        tool_calls_made = 0
+        log.debug("dish_lookup.propose_request", messages=loggable_messages(messages))
+        proposal = await self._structured_invoke(ProposedIngredients, messages)
+        log.debug("dish_lookup.propose_reply", proposal=proposal.model_dump())
+        ingredients = _normalized(proposal.ingredients)
+        # Counts only, never names: this always-on line carries no user content.
+        log.info(
+            "dish_lookup.proposed",
+            proposed=len(proposal.ingredients),
+            kept=len(ingredients),
+            model=self._chat.model_name,
+        )
+        return IngredientProposalResponse(
+            dish=dish, ingredients=ingredients, model=self._chat.model_name
+        )
 
-        for iteration in range(self._max_iterations):
-            reply = await self._invoke(bound, messages)
-            messages.append(reply)
-            if not reply.tool_calls:
-                complete = True
-                break
-            for call in reply.tool_calls:
-                if tool_calls_made >= self._max_tool_calls:
-                    # One turn must not fan out into unbounded DB round-trips.
-                    # Stop here; the run stays "incomplete" so the verdict floors.
-                    log.warning("dish_lookup.tool_budget_exhausted", made=tool_calls_made)
-                    break
-                tool_calls_made += 1
-                # A model (or odd provider) can emit a tool call with no id or a
-                # malformed shape; read defensively and never let it raise here.
-                raw_args = call.get("args")
-                name = call.get("name") or ""
-                args = raw_args if isinstance(raw_args, dict) else {}
-                call_id = call.get("id") or uuid4().hex
-                result = await self._run_tool(name, args)
-                lookups.append(result)
-                log.debug(
-                    "dish_lookup.tool",
-                    iteration=iteration,
-                    ingredient=args.get("ingredient"),
-                    found=result.get("found"),
-                    matched_on=result.get("matched_on"),
-                    candidates=[
+    async def assess(
+        self, dish: str, ingredients: list[ConfirmedIngredient]
+    ) -> DishAssessmentResponse:
+        """Read each confirmed ingredient from the index and assemble the answer."""
+        lookups = [
+            await lookup_ingredient_safety(self._service, item.name, item.category)
+            for item in ingredients
+        ]
+        log.debug(
+            "dish_lookup.lookups",
+            results=[
+                {
+                    "ingredient": lookup.get("ingredient"),
+                    "found": lookup.get("found"),
+                    "matched_on": lookup.get("matched_on"),
+                    "candidates": [
                         (candidate["name"], candidate["compatibility"])
-                        for candidate in result.get("candidates", [])
+                        for candidate in lookup.get("candidates", [])
                     ],
-                )
-                messages.append(ToolMessage(content=json.dumps(result), tool_call_id=call_id))
-            else:
-                continue  # the turn dispatched fully; keep looping
-            break  # the budget broke the inner loop; stop the run
+                }
+                for lookup in lookups
+            ],
+        )
 
-        # Grounding counts only lookups that actually succeeded; a failed tool call
-        # (bad args, DB blip) read nothing, so it is not evidence of safety.
+        # A failed lookup (DB blip) read nothing, so it is not evidence of safety:
+        # the confirmed list is complete by declaration, but its grounding is not.
         grounded = [lookup for lookup in lookups if not lookup.get("error")]
         verdict = _grounded_verdict(grounded)
-        if not complete or not grounded:
-            # Incomplete grounding is the same as no grounding: we have not read
-            # every ingredient, so we must not assert "safe". Floor at "depends".
+        if len(grounded) < len(lookups):
             verdict = _more_cautious(verdict, SafetyLevel.DEPENDS)
             log.warning(
                 "dish_lookup.incomplete_grounding",
-                complete=complete,
                 grounded=len(grounded),
-                attempted=len(lookups),
+                confirmed=len(lookups),
                 verdict=verdict.value,
             )
 
+        assessments = [
+            _ingredient_assessment(item.name, lookup)
+            for item, lookup in zip(ingredients, lookups, strict=True)
+        ]
         flagged = self._flagged(lookups)
         await self._attach_safe_options(flagged)
-        explanation = await self._synthesize(dish, verdict, flagged)
+        explanation = await self._synthesize(dish, ingredients, verdict, flagged)
         replacements = await self._ground_swaps(verdict, flagged, explanation.replacements)
         # checked is a count, not names, so this always-on line carries no user
-        # content; a low count under a "safe" verdict flags a thin decomposition.
+        # content; drivers name only what the curated index itself flagged.
         log.info(
             "dish_lookup.verdict",
             dish=explanation.dish,
@@ -280,11 +323,12 @@ class DishLookupAgent(BaseAgent):
             drivers=[entry["ingredient"] for entry in flagged],
             model=self._chat.model_name,
         )
-        return DishLookupResponse(
+        return DishAssessmentResponse(
             dish=explanation.dish,
             verdict=verdict,
             explanation=explanation.explanation,
             replacements=replacements,
+            ingredients=assessments,
             model=self._chat.model_name,
         )
 
@@ -296,18 +340,9 @@ class DishLookupAgent(BaseAgent):
         """
         flagged: list[dict[str, Any]] = []
         for lookup in lookups:
-            candidates = lookup.get("candidates", [])
-            if _candidates_safety(candidates) is SafetyLevel.SAFE:
+            worst = _worst_risky(lookup.get("candidates", []))
+            if worst is None:
                 continue
-            risky = [
-                candidate
-                for candidate in candidates
-                if _compatibility_safety(candidate["compatibility"]) is not SafetyLevel.SAFE
-            ]
-            worst = max(
-                risky,
-                key=lambda c: _SAFETY_SEVERITY[_compatibility_safety(c["compatibility"])],
-            )
             flagged.append(
                 {
                     "ingredient": lookup.get("ingredient"),
@@ -335,7 +370,11 @@ class DishLookupAgent(BaseAgent):
             entry["safe_options"] = [sub.name for sub in substitutes if sub.name.lower() != name]
 
     async def _synthesize(
-        self, dish: str, verdict: SafetyLevel, flagged: list[dict[str, Any]]
+        self,
+        dish: str,
+        ingredients: list[ConfirmedIngredient],
+        verdict: SafetyLevel,
+        flagged: list[dict[str, Any]],
     ) -> DishExplanation:
         messages: list[BaseMessage] = [
             SystemMessage(self._synthesis_prompt),
@@ -343,23 +382,39 @@ class DishLookupAgent(BaseAgent):
                 render_prompt(
                     self._synthesis_user_template,
                     "dish_lookup/synthesis_user",
+                    # The dish text and every ingredient name are direct user
+                    # input; none may close its own data region.
                     dish=strip_closing_tag(dish, "dish_text"),
-                    # Ingredient names echo the model's tool args, which derive
-                    # from the user's dish text — sanitize like direct input.
+                    ingredients=strip_closing_tag(
+                        ", ".join(item.name for item in ingredients), "confirmed_ingredients"
+                    ),
                     flagged=strip_closing_tag(_format_flagged(flagged), "flagged_ingredients"),
                     verdict=verdict.value,
                 )
             ),
         ]
         log.debug("dish_lookup.synthesis_request", messages=loggable_messages(messages))
-        structured = self._chat.model.with_structured_output(DishExplanation)
+        explanation = await self._structured_invoke(DishExplanation, messages)
+        log.debug("dish_lookup.synthesis_reply", explanation=explanation.model_dump())
+        return explanation
+
+    async def _structured_invoke[SchemaT: BaseModel](
+        self, schema: type[SchemaT], messages: list[BaseMessage]
+    ) -> SchemaT:
+        """One structured-output call with every failure mapped to the domain error.
+
+        Including the silent one: with function-calling providers, a model that
+        answers in prose instead of emitting the structured tool call yields
+        ``None`` rather than raising.
+        """
+        structured = self._chat.model.with_structured_output(schema)
         try:
             result = await structured.ainvoke(messages)
         except Exception as exc:
             raise LLMInvocationError(_INVOCATION_ERROR) from exc
-        explanation = cast(DishExplanation, result)
-        log.debug("dish_lookup.synthesis_reply", explanation=explanation.model_dump())
-        return explanation
+        if result is None:
+            raise LLMInvocationError(_INVOCATION_ERROR)
+        return cast(SchemaT, result)
 
     async def _ground_swaps(
         self,
@@ -411,38 +466,3 @@ class DishLookupAgent(BaseAgent):
         """A swap is usable only if the index does not record a concern for it."""
         matches = await self._service.find_candidates(swap)
         return _matches_safety(matches) is SafetyLevel.SAFE
-
-    async def _run_tool(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
-        tool = self._tools_by_name.get(name)
-        if tool is None:
-            return {"error": f"Unknown tool '{name}'.", "candidates": []}
-        try:
-            result: dict[str, Any] = await tool.ainvoke(args)
-        except Exception:  # args the tool's schema rejects, etc. — keep the loop alive
-            log.warning("dish_lookup.tool_failed", tool=name, exc_info=True)
-            return {
-                "error": f"Could not run '{name}' with those arguments.",
-                "candidates": [],
-            }
-        return result
-
-    async def _invoke(
-        self,
-        bound: Runnable[LanguageModelInput, BaseMessage],
-        messages: list[BaseMessage],
-    ) -> AIMessage:
-        # Logged as deltas (start, each reply, each tool result), not re-dumped per
-        # turn; these messages never carry API keys — those live in request headers.
-        try:
-            reply = await bound.ainvoke(messages)
-        except Exception as exc:  # provider/tool-calling failure, network, timeout
-            raise LLMInvocationError(_INVOCATION_ERROR) from exc
-        message = cast(AIMessage, reply)
-        log.debug(
-            "dish_lookup.reply",
-            content=message.content,
-            tool_calls=[
-                {"name": call["name"], "args": call["args"]} for call in message.tool_calls
-            ],
-        )
-        return message

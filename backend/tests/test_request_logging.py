@@ -20,7 +20,7 @@ async def test_request_id_header_on_error(client: AsyncClient) -> None:
     # A bad provider header maps to 400 via the exception handler; the handler runs
     # inside the middleware, so the error response still carries the id.
     resp = await client.post(
-        "/api/v1/meals/lookup",
+        "/api/v1/meals/propose",
         json={"dish": "omelette"},
         headers={"X-LLM-Provider": "banana"},
     )

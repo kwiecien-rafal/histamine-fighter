@@ -2,6 +2,10 @@
 {{dish}}
 </dish_text>
 
+<confirmed_ingredients>
+{{ingredients}}
+</confirmed_ingredients>
+
 <verdict>
 {{verdict}}
 </verdict>

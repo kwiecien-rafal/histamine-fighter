@@ -10,7 +10,7 @@ from httpx import AsyncClient
 
 async def test_unknown_provider_header_yields_400(client: AsyncClient) -> None:
     resp = await client.post(
-        "/api/v1/meals/lookup",
+        "/api/v1/meals/propose",
         json={"dish": "omelette"},
         headers={"X-LLM-Provider": "banana"},
     )
@@ -19,7 +19,7 @@ async def test_unknown_provider_header_yields_400(client: AsyncClient) -> None:
 
 async def test_reserved_provider_header_yields_501(client: AsyncClient) -> None:
     resp = await client.post(
-        "/api/v1/meals/lookup",
+        "/api/v1/meals/propose",
         json={"dish": "omelette"},
         headers={"X-LLM-Provider": "modal"},
     )

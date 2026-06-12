@@ -1,31 +1,30 @@
 import { useState } from "react";
 
-import { lookupDish, type DishLookupResponse } from "./api/client";
-import { LLMProviderBadge } from "./components/LLMProviderBadge";
+import { MAX_DISH_CHARS } from "./api/client";
+import { AssessmentResult } from "./components/AssessmentResult";
+import { IngredientEditor } from "./components/IngredientEditor";
 import { SettingsDrawer } from "./components/SettingsDrawer";
-import { VerdictBadge } from "./components/VerdictBadge";
+import { useDishLookupFlow } from "./hooks/useDishLookupFlow";
 
 export function App() {
   const [dish, setDish] = useState("");
-  const [result, setResult] = useState<DishLookupResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const {
+    state,
+    propose,
+    renameIngredient,
+    removeIngredient,
+    addIngredient,
+    confirm,
+    startOver,
+  } = useDishLookupFlow();
 
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!dish.trim()) return;
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      setResult(await lookupDish(dish.trim()));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
+    void propose(dish);
   }
+
+  const proposing = state.phase === "proposing";
 
   return (
     <main className="min-h-screen bg-stone-50 text-stone-900 px-6 py-12">
@@ -44,68 +43,50 @@ export function App() {
           Ask whether a dish is safe for histamine intolerance.
         </p>
 
-        <form onSubmit={onSubmit} className="flex gap-2 mb-6">
-          <input
-            type="text"
-            value={dish}
-            onChange={(e) => setDish(e.target.value)}
-            placeholder="e.g. Spaghetti Bolognese"
-            className="flex-1 rounded border border-stone-300 px-3 py-2 focus:outline-none focus:border-emerald-700"
-          />
-          <button
-            type="submit"
-            disabled={loading || !dish.trim()}
-            className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50"
-          >
-            {loading ? "Checking…" : "Check"}
-          </button>
-        </form>
-
-        {error && <p className="text-red-700">{error}</p>}
-
-        {result && (
-          <article className="rounded border border-stone-200 bg-white p-5">
-            <header className="flex items-start justify-between gap-3 mb-4">
-              <h2 className="text-lg font-medium">{result.dish}</h2>
-              <LLMProviderBadge model={result.model} />
-            </header>
-
-            <section className="mb-4">
-              <VerdictBadge verdict={result.verdict} />
-            </section>
-
-            <section className="mb-4">
-              <h3 className="text-xs uppercase tracking-wide text-stone-500 mb-1">
-                Why
-              </h3>
-              <p className="text-stone-700">{result.explanation}</p>
-            </section>
-
-            {result.verdict !== "safe" && result.replacements.length > 0 && (
-              <section>
-                <h3 className="text-xs uppercase tracking-wide text-stone-500 mb-2">
-                  Safer swaps
-                </h3>
-                <ul className="flex flex-col gap-2">
-                  {result.replacements.map((r) => (
-                    <li
-                      key={`${r.ingredient}-${r.swap}`}
-                      className="rounded border border-stone-200 bg-stone-50 px-3 py-2 text-sm"
-                    >
-                      <span className="text-stone-500 line-through">
-                        {r.ingredient}
-                      </span>
-                      <span className="mx-2 text-stone-400">→</span>
-                      <span className="font-medium text-emerald-800">
-                        {r.swap}
-                      </span>
-                      <p className="text-stone-600 mt-0.5">{r.reason}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+        {(state.phase === "idle" || proposing) && (
+          <>
+            <form onSubmit={onSubmit} className="flex gap-2 mb-6">
+              <input
+                type="text"
+                value={dish}
+                onChange={(e) => setDish(e.target.value)}
+                placeholder="e.g. Spaghetti Bolognese"
+                maxLength={MAX_DISH_CHARS}
+                disabled={proposing}
+                className="flex-1 rounded border border-stone-300 px-3 py-2 focus:outline-none focus:border-emerald-700 disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={proposing || !dish.trim()}
+                className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50"
+              >
+                {proposing ? "Finding…" : "Find ingredients"}
+              </button>
+            </form>
+            {state.phase === "idle" && state.error && (
+              <p className="text-red-700">{state.error}</p>
             )}
-          </article>
+          </>
+        )}
+
+        {(state.phase === "editing" || state.phase === "assessing") && (
+          <>
+            <h2 className="text-lg font-medium mb-3">{state.dish}</h2>
+            <IngredientEditor
+              ingredients={state.ingredients}
+              error={state.phase === "editing" ? state.error : null}
+              busy={state.phase === "assessing"}
+              onRename={renameIngredient}
+              onRemove={removeIngredient}
+              onAdd={addIngredient}
+              onConfirm={() => void confirm()}
+              onStartOver={startOver}
+            />
+          </>
+        )}
+
+        {state.phase === "result" && (
+          <AssessmentResult result={state.result} onStartOver={startOver} />
         )}
       </div>
 
