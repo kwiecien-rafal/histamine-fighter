@@ -9,8 +9,19 @@ import {
   type DishAlternativesResponse,
   type DishAssessmentResponse,
   type IngredientProposalResponse,
+  type LLMUsage,
 } from "../api/client";
 import { useDishLookupFlow } from "./useDishLookupFlow";
+
+const usage: LLMUsage = {
+  calls: 1,
+  input_tokens: 10,
+  output_tokens: 5,
+  total_tokens: 15,
+  steps: [
+    { step: "propose", input_tokens: 10, output_tokens: 5, total_tokens: 15, reported: true },
+  ],
+};
 
 vi.mock("../api/client", () => ({
   MAX_INGREDIENTS: 25,
@@ -27,6 +38,7 @@ const proposal: IngredientProposalResponse = {
   dish: "Bolognese",
   ingredients: [{ name: "tomato", category: "vegetable" }],
   model: "stub/model",
+  usage,
 };
 
 function lostAssessment(): DishAssessmentResponse {
@@ -50,6 +62,7 @@ function lostAssessment(): DishAssessmentResponse {
       },
     ],
     model: "stub/model",
+    usage,
   };
 }
 
@@ -59,6 +72,7 @@ function altResponse(goal: AlternativeGoal, names: string[]): DishAlternativesRe
     goal,
     alternatives: names.map((name) => ({ name, pitch: "" })),
     model: "stub/model",
+    usage,
   };
 }
 

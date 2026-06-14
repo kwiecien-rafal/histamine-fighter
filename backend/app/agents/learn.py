@@ -17,7 +17,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from app.agents.base import BaseAgent, loggable_messages
 from app.agents.prompting import load_prompt, render_prompt, strip_region_tags
-from app.llm.errors import LLMInvocationError
 from app.llm.langchain_factory import ChatModel
 from app.schemas.learn import Citation, LearnAnswer, LearnResponse
 from app.services.knowledge_service import KnowledgeMatch, KnowledgeService
@@ -35,6 +34,8 @@ _LEARN_TAGS = ("context", "question")
 
 class LearnAgent(BaseAgent):
     """Answers histamine questions grounded in the curated knowledge corpus."""
+
+    _invocation_error = _INVOCATION_ERROR
 
     def __init__(self, chat: ChatModel, service: KnowledgeService, *, k: int = 5) -> None:
         super().__init__(chat)
@@ -116,22 +117,9 @@ class LearnAgent(BaseAgent):
             HumanMessage(prompt),
         ]
         log.debug("learn.request", messages=loggable_messages(messages))
-        structured = self._chat.model.with_structured_output(LearnAnswer)
-        try:
-            result = await structured.ainvoke(messages)
-        except Exception as exc:
-            raise LLMInvocationError(_INVOCATION_ERROR) from exc
-        # with_structured_output can yield None (refusal/parse miss) or a dict on
-        # some providers; only a validated LearnAnswer may cross this boundary.
-        if not isinstance(result, LearnAnswer):
-            log.warning(
-                "learn.malformed_structured_output",
-                result_type=type(result).__name__,
-                model=self._chat.model_name,
-            )
-            raise LLMInvocationError(_INVOCATION_ERROR)
-        log.debug("learn.reply", answer=result.model_dump())
-        return result
+        answer = await self._structured_invoke(LearnAnswer, messages, step="answer")
+        log.debug("learn.reply", answer=answer.model_dump())
+        return answer
 
     @staticmethod
     def _format_context(chunks: list[KnowledgeMatch]) -> str:

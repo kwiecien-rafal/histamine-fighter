@@ -8,6 +8,22 @@ export const MAX_INGREDIENTS = 25;
 export const MAX_INGREDIENT_CHARS = 80;
 export const MAX_DISH_CHARS = 200;
 
+export interface StepUsage {
+  step: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  reported: boolean;
+}
+
+export interface LLMUsage {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  steps: StepUsage[];
+}
+
 export interface ProposedIngredient {
   name: string;
   category: string | null;
@@ -17,6 +33,7 @@ export interface IngredientProposalResponse {
   dish: string;
   ingredients: ProposedIngredient[];
   model: string;
+  usage: LLMUsage;
 }
 
 export interface ConfirmedIngredient {
@@ -60,6 +77,7 @@ export interface DishAssessmentResponse {
   integrity: DishIntegrity;
   ingredients: IngredientAssessment[];
   model: string;
+  usage: LLMUsage;
 }
 
 export interface DishAlternative {
@@ -72,6 +90,7 @@ export interface DishAlternativesResponse {
   goal: AlternativeGoal;
   alternatives: DishAlternative[];
   model: string;
+  usage: LLMUsage;
 }
 
 function buildLLMHeaders(): Record<string, string> {

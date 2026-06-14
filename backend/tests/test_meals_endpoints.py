@@ -36,6 +36,11 @@ from app.schemas.meal import (
     IngredientProposalResponse,
     ProposedIngredient,
 )
+from app.schemas.usage import LLMUsage
+
+# The stub makes no model calls, so every response carries the zero usage these
+# HTTP-contract tests expect; the real tallying is covered in test_dish_lookup_agent.
+_EMPTY_USAGE = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "steps": []}
 
 
 class _StubAgent:
@@ -49,6 +54,7 @@ class _StubAgent:
                 ProposedIngredient(name="parmesan", category="aged hard cheese"),
             ],
             model="stub/model",
+            usage=LLMUsage.empty(),
         )
 
     async def assess(
@@ -82,6 +88,7 @@ class _StubAgent:
             verdict=SafetyLevel.AVOID,
             ingredients=[_reading(item) for item in ingredients],
             model="stub/model",
+            usage=LLMUsage.empty(),
         )
 
     async def alternatives(
@@ -92,6 +99,7 @@ class _StubAgent:
             goal=goal,
             alternatives=[DishAlternative(name="Courgette Pasta", pitch="Fresh and herby.")],
             model="stub/model",
+            usage=LLMUsage.empty(),
         )
 
 
@@ -124,6 +132,7 @@ async def test_propose_returns_the_proposal_shape(client: AsyncClient) -> None:
             {"name": "parmesan", "category": "aged hard cheese"},
         ],
         "model": "stub/model",
+        "usage": _EMPTY_USAGE,
     }
 
 
@@ -189,6 +198,7 @@ async def test_assess_returns_the_assessment_shape(client: AsyncClient) -> None:
             },
         ],
         "model": "stub/model",
+        "usage": _EMPTY_USAGE,
     }
 
 
@@ -257,6 +267,7 @@ async def test_alternatives_returns_the_suggestion_shape(client: AsyncClient) ->
         "goal": "same_style",
         "alternatives": [{"name": "Courgette Pasta", "pitch": "Fresh and herby."}],
         "model": "stub/model",
+        "usage": _EMPTY_USAGE,
     }
 
 

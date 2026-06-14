@@ -10,6 +10,7 @@ from app.enums import (
     HistamineMechanism,
     SafetyLevel,
 )
+from app.schemas.usage import LLMUsage
 
 # Hard cap on a confirmed ingredient list; the propose step trims to it too.
 MAX_CONFIRMED_INGREDIENTS = 25
@@ -68,6 +69,7 @@ class IngredientProposalResponse(BaseModel):
     dish: str = Field(description="The dish text the proposal was made for.")
     ingredients: list[ProposedIngredient]
     model: str = Field(description="Which model proposed the ingredients.")
+    usage: LLMUsage = Field(description="Token usage of the model call behind this response.")
 
 
 class ConfirmedIngredient(BaseModel):
@@ -264,6 +266,7 @@ class DishAssessmentResponse(BaseModel):
         description="One index reading per confirmed ingredient."
     )
     model: str = Field(description="Which model produced the explanation.")
+    usage: LLMUsage = Field(description="Token usage of the model call(s) behind this response.")
 
 
 class DishAlternativesRequest(BaseModel):
@@ -321,3 +324,4 @@ class DishAlternativesResponse(BaseModel):
     goal: AlternativeGoal = Field(description="The goal the suggestions were made for.")
     alternatives: list[DishAlternative] = Field(max_length=MAX_ALTERNATIVES)
     model: str = Field(description="Which model suggested the alternatives.")
+    usage: LLMUsage = Field(description="Token usage of the model call behind this response.")

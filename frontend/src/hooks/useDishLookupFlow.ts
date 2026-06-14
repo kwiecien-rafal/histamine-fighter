@@ -11,6 +11,7 @@ import {
   type DishAssessmentResponse,
 } from "../api/client";
 import { shouldOfferAlternatives } from "../lib/assessment";
+import { useUsageStore } from "../store/usage";
 
 export interface EditableIngredient {
   id: string;
@@ -116,6 +117,7 @@ export function useDishLookupFlow() {
     setState({ phase: "proposing", dish: trimmed });
     try {
       const proposal = await proposeIngredients(trimmed);
+      useUsageStore.getState().record("propose", proposal.model, proposal.usage);
       setState({
         phase: "editing",
         dish: proposal.dish,
@@ -204,6 +206,7 @@ export function useDishLookupFlow() {
     setState({ phase: "assessing", dish, ingredients });
     try {
       const result = await assessDish(dish, confirmed);
+      useUsageStore.getState().record("assess", result.model, result.usage);
       setState({
         phase: "result",
         dish,
@@ -257,6 +260,7 @@ export function useDishLookupFlow() {
     );
     try {
       const response = await suggestAlternatives(dish, goal, avoidIngredients);
+      useUsageStore.getState().record("alternatives", response.model, response.usage);
       setState((prev) =>
         resolveAlternatives(prev, result, goal, {
           suggestions: response.alternatives,

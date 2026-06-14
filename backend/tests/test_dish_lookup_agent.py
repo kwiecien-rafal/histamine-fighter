@@ -10,6 +10,7 @@ alternatives pivot, and the error floor without any network call.
 from typing import Any
 
 import pytest
+from langchain_core.messages import AIMessage
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,16 +77,29 @@ def _swap_draft(ingredients: list[str], swap: str, role: str = "core") -> Adapta
     )
 
 
+# Token usage every scripted reply reports, so the agent's tally is assertable.
+_STEP_TOKENS = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+
+
+def _raw_reply(parsed: BaseModel | None) -> dict[str, Any]:
+    """Mimic with_structured_output(include_raw=True): the parse plus the usage-bearing reply."""
+    return {
+        "raw": AIMessage(content="", usage_metadata=_STEP_TOKENS),
+        "parsed": parsed,
+        "parsing_error": None,
+    }
+
+
 class _Structured:
     def __init__(self, chat: "_ScriptedChat", reply: BaseModel | Exception) -> None:
         self._chat = chat
         self._reply = reply
 
-    async def ainvoke(self, messages: list[Any]) -> BaseModel:
+    async def ainvoke(self, messages: list[Any]) -> dict[str, Any]:
         self._chat.seen.append(messages)
         if isinstance(self._reply, Exception):
             raise self._reply
-        return self._reply
+        return _raw_reply(self._reply)
 
 
 class _ScriptedChat:
@@ -111,7 +125,7 @@ class _ScriptedChat:
         self.seen: list[list[Any]] = []
         self.requested: list[object] = []
 
-    def with_structured_output(self, schema: object) -> _Structured:
+    def with_structured_output(self, schema: object, *, include_raw: bool = False) -> _Structured:
         self.requested.append(schema)
         reply = self._replies[schema]
         assert reply is not None, f"no scripted reply for {schema}"
@@ -144,6 +158,9 @@ async def test_propose_returns_the_proposed_list(session: AsyncSession) -> None:
         ("parmesan", "aged hard cheese"),
     ]
     assert result.model == "stub/model"
+    assert result.usage.calls == 1
+    assert [step.step for step in result.usage.steps] == ["propose"]
+    assert result.usage.total_tokens == 15
     # The user turn carries the dish inside the delimiters the system prompt names.
     assert "<dish>\npasta\n</dish>" in chat.seen[0][1].content
 
@@ -198,13 +215,13 @@ async def test_propose_model_failure_becomes_a_clean_domain_error(session: Async
 
 
 class _NoOutput:
-    """A chat model whose structured call yields None: the model answered in prose."""
+    """A chat model whose structured call yields no parse: the model answered in prose."""
 
-    def with_structured_output(self, _schema: object) -> "_NoOutput":
+    def with_structured_output(self, _schema: object, *, include_raw: bool = False) -> "_NoOutput":
         return self
 
-    async def ainvoke(self, _messages: list[Any]) -> None:
-        return None
+    async def ainvoke(self, _messages: list[Any]) -> dict[str, Any]:
+        return _raw_reply(None)
 
 
 async def test_a_none_structured_reply_becomes_a_clean_domain_error(
@@ -222,6 +239,18 @@ async def test_a_none_structured_reply_becomes_a_clean_domain_error(
         await agent.assess("anything", [_confirmed("rice")])
     with pytest.raises(LLMInvocationError):
         await agent.alternatives("anything", AlternativeGoal.ANY_MEAL, ["rice"])
+
+
+async def test_a_parse_miss_is_still_counted(session: AsyncSession) -> None:
+    # A model that spends tokens then answers in prose (no tool call) still cost
+    # money, so the call is tallied before the failure is raised.
+    wrapper = ChatModel(model=_NoOutput(), model_name="stub/model")  # type: ignore[arg-type]
+    agent = DishLookupAgent(chat=wrapper, service=IngredientService(session))
+
+    with pytest.raises(LLMInvocationError):
+        await agent.propose(dish="anything")
+
+    assert [step.step for step in agent._calls] == ["propose"]
 
 
 # --- assess: the verdict is the index's, not the model's --------------------------
@@ -574,6 +603,8 @@ async def test_disambiguation_prune_cleans_the_synthesis_prompt(session: AsyncSe
     result = await _agent(chat, IngredientService(session)).assess("dish", [_confirmed("x")])
 
     assert result.verdict is SafetyLevel.AVOID
+    # Disambiguation fired, so this assessment is two model calls, in order.
+    assert [step.step for step in result.usage.steps] == ["disambiguate", "synthesize"]
     synthesis_turn = chat.seen[-1][1].content
     assert "Anchovy" not in synthesis_turn
     assert "Aged Salami (incompatible)" in synthesis_turn
@@ -612,6 +643,8 @@ async def test_disambiguation_failure_leaves_the_lookups_untouched(session: Asyn
     result = await _agent(chat, IngredientService(session)).assess("dish", [_confirmed("x")])
 
     assert result.verdict is SafetyLevel.DEPENDS
+    # The disambiguation call raised before reporting usage, so only synthesis is counted.
+    assert result.usage.calls == 1
 
 
 async def test_disambiguation_is_skipped_when_no_lookup_is_ambiguous(session: AsyncSession) -> None:
@@ -625,6 +658,8 @@ async def test_disambiguation_is_skipped_when_no_lookup_is_ambiguous(session: As
 
     assert DisambiguationDraft not in chat.requested
     assert result.verdict is SafetyLevel.AVOID
+    # Only synthesis ran, so the common path costs a single model call.
+    assert [step.step for step in result.usage.steps] == ["synthesize"]
 
 
 async def test_disambiguation_prompt_lists_candidate_rows_without_their_safety(

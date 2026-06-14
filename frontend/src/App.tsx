@@ -5,6 +5,7 @@ import { AlternativesPanel } from "./components/AlternativesPanel";
 import { AssessmentResult } from "./components/AssessmentResult";
 import { IngredientEditor } from "./components/IngredientEditor";
 import { SettingsDrawer } from "./components/SettingsDrawer";
+import { UsagePanel } from "./components/UsagePanel";
 import { useDishLookupFlow } from "./hooks/useDishLookupFlow";
 import { pivotTone } from "./lib/assessment";
 
@@ -38,7 +39,7 @@ export function App() {
   const resultTone = state.phase === "result" ? pivotTone(state.result) : null;
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900 px-6 py-12">
+    <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
       <div className="max-w-xl mx-auto">
         <header className="flex items-start justify-between mb-2">
           <h1 className="text-3xl font-semibold">Histamine Fighter</h1>
@@ -115,6 +116,7 @@ export function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />
+      <UsagePanel />
     </main>
   );
 }

@@ -10,6 +10,7 @@ embedding model.
 from typing import Any
 
 import pytest
+from langchain_core.messages import AIMessage
 from structlog.testing import capture_logs
 
 from app.agents.learn import LearnAgent
@@ -41,20 +42,34 @@ class _StubService:
         return self._chunks
 
 
-# What structured.ainvoke can actually hand back: a parsed answer, but also None
-# or a raw dict on some provider/json-mode combinations, or an exception.
+# What a scripted call hands back: a parsed answer, but also None or a raw dict on
+# some provider/json-mode combinations (both model a parse miss), or an exception.
 _ScriptedResult = LearnAnswer | dict[str, object] | Exception | None
+
+_STEP_TOKENS = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+
+
+def _raw_reply(parsed: LearnAnswer | None) -> dict[str, Any]:
+    """Mimic with_structured_output(include_raw=True): the parse plus the usage-bearing reply."""
+    return {
+        "raw": AIMessage(content="", usage_metadata=_STEP_TOKENS),
+        "parsed": parsed,
+        "parsing_error": None,
+    }
 
 
 class _Structured:
     def __init__(self, model: "_ScriptedChat") -> None:
         self._model = model
 
-    async def ainvoke(self, messages: list[Any]) -> _ScriptedResult:
+    async def ainvoke(self, messages: list[Any]) -> dict[str, Any]:
         self._model.seen.append(messages)
-        if isinstance(self._model.result, Exception):
-            raise self._model.result
-        return self._model.result
+        result = self._model.result
+        if isinstance(result, Exception):
+            raise result
+        # include_raw parses to the schema or to None; anything that is not a
+        # LearnAnswer (a stray dict, an explicit None) models that parse miss.
+        return _raw_reply(result if isinstance(result, LearnAnswer) else None)
 
 
 class _ScriptedChat:
@@ -63,7 +78,7 @@ class _ScriptedChat:
         self.calls = 0
         self.seen: list[list[Any]] = []
 
-    def with_structured_output(self, _schema: object) -> _Structured:
+    def with_structured_output(self, _schema: object, *, include_raw: bool = False) -> _Structured:
         self.calls += 1
         return _Structured(self)
 

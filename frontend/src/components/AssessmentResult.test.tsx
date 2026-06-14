@@ -26,6 +26,13 @@ function assessment(
       },
     ],
     model: "stub/model",
+    usage: {
+      calls: 1,
+      input_tokens: 10,
+      output_tokens: 5,
+      total_tokens: 15,
+      steps: [],
+    },
   };
 }
 

@@ -36,11 +36,10 @@ verdict at "depends" or worse.
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
-from typing import assert_never, cast
+from typing import assert_never
 
 import structlog
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from pydantic import BaseModel
 
 from app.agents.base import BaseAgent, loggable_messages
 from app.agents.prompting import load_prompt, render_prompt, strip_region_tags
@@ -543,6 +542,8 @@ def _integrity(adaptations: list[Adaptation]) -> DishIntegrity:
 class DishLookupAgent(BaseAgent):
     """Classifies a dish by grounding the verdict in curated ingredient data."""
 
+    _invocation_error = _INVOCATION_ERROR
+
     def __init__(self, chat: ChatModel, service: IngredientService) -> None:
         super().__init__(chat)
         self._service = service
@@ -577,6 +578,7 @@ class DishLookupAgent(BaseAgent):
 
     async def propose(self, dish: str) -> IngredientProposalResponse:
         """Decompose the dish into the ingredient list the user will confirm."""
+        self._begin_usage()
         messages: list[BaseMessage] = [
             SystemMessage(self._propose_prompt),
             HumanMessage(
@@ -588,7 +590,7 @@ class DishLookupAgent(BaseAgent):
             ),
         ]
         log.debug("dish_lookup.propose_request", messages=loggable_messages(messages))
-        proposal = await self._structured_invoke(ProposedIngredients, messages)
+        proposal = await self._structured_invoke(ProposedIngredients, messages, step="propose")
         log.debug("dish_lookup.propose_reply", proposal=proposal.model_dump())
         ingredients = _normalized(proposal.ingredients)
         # Counts only, never names: this always-on line carries no user content.
@@ -599,13 +601,17 @@ class DishLookupAgent(BaseAgent):
             model=self._chat.model_name,
         )
         return IngredientProposalResponse(
-            dish=dish, ingredients=ingredients, model=self._chat.model_name
+            dish=dish,
+            ingredients=ingredients,
+            model=self._chat.model_name,
+            usage=self._collect_usage(),
         )
 
     async def assess(
         self, dish: str, ingredients: list[ConfirmedIngredient]
     ) -> DishAssessmentResponse:
         """Read each confirmed ingredient from the index and assemble the answer."""
+        self._begin_usage()
         lookups = await lookup_ingredients(
             self._service, [(item.name, item.category) for item in ingredients]
         )
@@ -684,6 +690,7 @@ class DishLookupAgent(BaseAgent):
             integrity=integrity,
             ingredients=assessments,
             model=self._chat.model_name,
+            usage=self._collect_usage(),
         )
 
     async def _disambiguate(self, dish: str, lookups: list[LookupResult]) -> list[LookupResult]:
@@ -716,7 +723,9 @@ class DishLookupAgent(BaseAgent):
         ]
         log.debug("dish_lookup.disambiguation_request", messages=loggable_messages(messages))
         try:
-            draft = await self._structured_invoke(DisambiguationDraft, messages)
+            draft = await self._structured_invoke(
+                DisambiguationDraft, messages, step="disambiguate"
+            )
         except LLMInvocationError:
             log.warning("dish_lookup.disambiguation_failed", eligible=len(eligible))
             return lookups
@@ -856,27 +865,9 @@ class DishLookupAgent(BaseAgent):
             ),
         ]
         log.debug("dish_lookup.synthesis_request", messages=loggable_messages(messages))
-        draft = await self._structured_invoke(DishExplanationDraft, messages)
+        draft = await self._structured_invoke(DishExplanationDraft, messages, step="synthesize")
         log.debug("dish_lookup.synthesis_reply", draft=draft.model_dump())
         return draft
-
-    async def _structured_invoke[SchemaT: BaseModel](
-        self, schema: type[SchemaT], messages: list[BaseMessage]
-    ) -> SchemaT:
-        """One structured-output call with every failure mapped to the domain error.
-
-        Including the silent one: with function-calling providers, a model that
-        answers in prose instead of emitting the structured tool call yields
-        ``None`` rather than raising.
-        """
-        structured = self._chat.model.with_structured_output(schema)
-        try:
-            result = await structured.ainvoke(messages)
-        except Exception as exc:
-            raise LLMInvocationError(_INVOCATION_ERROR) from exc
-        if result is None:
-            raise LLMInvocationError(_INVOCATION_ERROR)
-        return cast(SchemaT, result)
 
     async def _ground_adaptations(
         self,
@@ -947,6 +938,7 @@ class DishLookupAgent(BaseAgent):
         ``avoid_ingredients`` are client-asserted and only steer the prompt —
         they never touch a verdict, so re-verifying them buys nothing.
         """
+        self._begin_usage()
         messages: list[BaseMessage] = [
             SystemMessage(self._alternatives_prompt),
             HumanMessage(
@@ -962,7 +954,7 @@ class DishLookupAgent(BaseAgent):
             ),
         ]
         log.debug("dish_lookup.alternatives_request", messages=loggable_messages(messages))
-        draft = await self._structured_invoke(DishAlternativesDraft, messages)
+        draft = await self._structured_invoke(DishAlternativesDraft, messages, step="alternatives")
         log.debug("dish_lookup.alternatives_reply", draft=draft.model_dump())
         suggestions = _normalized_alternatives(draft.alternatives, dish)
         # Counts and the goal enum only: this always-on line carries no user content.
@@ -974,5 +966,9 @@ class DishLookupAgent(BaseAgent):
             model=self._chat.model_name,
         )
         return DishAlternativesResponse(
-            dish=dish, goal=goal, alternatives=suggestions, model=self._chat.model_name
+            dish=dish,
+            goal=goal,
+            alternatives=suggestions,
+            model=self._chat.model_name,
+            usage=self._collect_usage(),
         )

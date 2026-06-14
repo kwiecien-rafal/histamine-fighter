@@ -28,6 +28,10 @@ services:
       - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:20b}
+      # Lifts HuggingFace's anonymous rate limit on the embedding-model download
+      # at startup. Optional; read from the root .env. huggingface_hub reads this
+      # env var directly, so no app config is involved.
+      - HF_TOKEN=${HF_TOKEN:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
