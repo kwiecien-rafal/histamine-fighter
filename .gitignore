@@ -224,5 +224,8 @@ dist/
 *.local
 *.tsbuildinfo
 
+# Frontend application code; the Python `lib/` rule above would otherwise swallow it
+!frontend/src/lib/
+
 # Local env file (committed template lives in .env.example)
 .env
