@@ -49,7 +49,7 @@ export function AlternativesPanel({
             disabled={busy}
             aria-pressed={option.value === chosenGoal}
             onClick={() => onChooseGoal(option.value)}
-            className={`rounded border px-3 py-1.5 text-sm disabled:opacity-50 ${
+            className={`rounded border px-3 py-1.5 text-sm disabled:opacity-50 enabled:cursor-pointer ${
               option.value === chosenGoal
                 ? "border-emerald-800 bg-emerald-800 text-white"
                 : "border-stone-300 text-stone-700 hover:border-emerald-700"
@@ -88,7 +88,7 @@ export function AlternativesPanel({
                 <button
                   type="button"
                   onClick={() => onPick(suggestion.name)}
-                  className="w-full text-left rounded border border-stone-200 bg-stone-50 px-3 py-2 hover:border-emerald-700"
+                  className="w-full text-left rounded border border-stone-200 bg-stone-50 px-3 py-2 hover:border-emerald-700 cursor-pointer"
                 >
                   <span className="block font-medium text-emerald-800">
                     {suggestion.name}

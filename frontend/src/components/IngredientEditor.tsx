@@ -76,7 +76,7 @@ export function IngredientEditor({
                 type="button"
                 onClick={() => onRemove(item.id)}
                 aria-label={`Remove ${item.name}`}
-                className="px-1 text-stone-400 hover:text-red-700"
+                className="px-1 text-stone-400 hover:text-red-700 enabled:cursor-pointer"
               >
                 ✕
               </button>
@@ -98,7 +98,7 @@ export function IngredientEditor({
           <button
             type="submit"
             disabled={atCap || !newName.trim()}
-            className="rounded border border-stone-300 px-3 py-1.5 text-sm text-stone-700 disabled:opacity-50"
+            className="rounded border border-stone-300 px-3 py-1.5 text-sm text-stone-700 disabled:opacity-50 enabled:cursor-pointer"
           >
             Add
           </button>
@@ -111,14 +111,14 @@ export function IngredientEditor({
             type="button"
             onClick={onConfirm}
             disabled={!hasAny || busy}
-            className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50"
+            className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50 enabled:cursor-pointer"
           >
             {busy ? "Checking…" : "Check safety"}
           </button>
           <button
             type="button"
             onClick={onStartOver}
-            className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4"
+            className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 enabled:cursor-pointer"
           >
             Start over
           </button>

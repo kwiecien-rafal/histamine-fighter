@@ -85,7 +85,7 @@ export function AssessmentResult({ result, onStartOver }: AssessmentResultProps)
         <button
           type="button"
           onClick={onStartOver}
-          className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4"
+          className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
         >
           Start over
         </button>

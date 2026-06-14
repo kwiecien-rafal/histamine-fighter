@@ -46,7 +46,7 @@ export function App() {
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4"
+            className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
           >
             Settings
           </button>
@@ -70,7 +70,7 @@ export function App() {
               <button
                 type="submit"
                 disabled={proposing || !dish.trim()}
-                className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50"
+                className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50 enabled:cursor-pointer"
               >
                 {proposing ? "Finding…" : "Find ingredients"}
               </button>

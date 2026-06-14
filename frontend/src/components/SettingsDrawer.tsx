@@ -57,7 +57,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
           <button
             type="button"
             onClick={onClose}
-            className="text-stone-500 hover:text-stone-900"
+            className="text-stone-500 hover:text-stone-900 cursor-pointer"
           >
             ✕
           </button>
@@ -170,7 +170,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         <button
                           type="button"
                           onClick={() => setShowKey((v) => !v)}
-                          className="text-xs text-stone-500 hover:text-stone-900 px-2"
+                          className="text-xs text-stone-500 hover:text-stone-900 px-2 cursor-pointer"
                         >
                           {showKey ? "Hide" : "Show"}
                         </button>
