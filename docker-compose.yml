@@ -21,6 +21,9 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
+      # Persist the downloaded embedding model so it is fetched once, not on
+      # every container recreate (see FASTEMBED_CACHE_PATH below).
+      - fastembed_cache:/app/.cache/fastembed
     environment:
       - DEBUG=true
       - DATABASE_URL=postgresql+asyncpg://histamine:histamine@db:5432/histamine
@@ -32,6 +35,9 @@ services:
       # at startup. Optional; read from the root .env. huggingface_hub reads this
       # env var directly, so no app config is involved.
       - HF_TOKEN=${HF_TOKEN:-}
+      # Pin fastembed's cache to the persisted volume above; without this it
+      # defaults to /tmp and re-downloads the model on every container recreate.
+      - FASTEMBED_CACHE_PATH=/app/.cache/fastembed
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -54,3 +60,4 @@ services:
 
 volumes:
   db_data:
+  fastembed_cache:
