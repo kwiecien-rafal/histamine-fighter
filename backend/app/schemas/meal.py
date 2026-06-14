@@ -1,18 +1,34 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
-from app.enums import HistamineMechanism, SafetyLevel
+from app.enums import (
+    AdaptationAction,
+    AlternativeGoal,
+    CulinaryRole,
+    DishIntegrity,
+    HistamineMechanism,
+    SafetyLevel,
+)
 
 # Hard cap on a confirmed ingredient list; the propose step trims to it too.
 MAX_CONFIRMED_INGREDIENTS = 25
 # Per-item cap, well under the ingredient service's query limit so a schema-valid
 # name is never rejected downstream.
 MAX_INGREDIENT_CHARS = 80
+MAX_DISH_CHARS = 200
+MAX_REASON_CHARS = 240
+MAX_ADVISORY_CHARS = 200
+# An alternative's pitch; its name shares MAX_DISH_CHARS so a suggestion always
+# fits back into DishLookupRequest when the user picks it. The alternatives
+# prompt's inputs are free text, so these output-side caps — not the prompt — are
+# the load-bearing bound on suggestion length and count; the agent clips to them.
+MAX_PITCH_CHARS = 200
+MAX_ALTERNATIVES = 3
 
 
 class DishLookupRequest(BaseModel):
-    dish: str = Field(min_length=1, max_length=200)
+    dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
 
 
 class ProposedIngredientDraft(BaseModel):
@@ -79,7 +95,7 @@ class ConfirmedIngredient(BaseModel):
 
 
 class DishAssessmentRequest(BaseModel):
-    dish: str = Field(min_length=1, max_length=200)
+    dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
     ingredients: list[ConfirmedIngredient] = Field(
         min_length=1, max_length=MAX_CONFIRMED_INGREDIENTS
     )
@@ -107,37 +123,201 @@ class IngredientAssessment(BaseModel):
     )
 
 
-class Replacement(BaseModel):
-    """One ingredient to swap out, and what to use instead."""
+class AdaptationDraft(BaseModel):
+    """One adaptation as the model drafts it — the synthesis call's structured-output item.
 
-    ingredient: str = Field(description="The high-histamine ingredient to replace.")
-    swap: str = Field(description="The histamine-safe ingredient to use instead.")
-    reason: str = Field(description="Why the swap helps.")
+    Deliberately unconstrained, like :class:`ProposedIngredientDraft`: the agent
+    normalizes drafts into :class:`Adaptation` and drops what cannot be salvaged.
+    The field descriptions are model-facing.
+    """
+
+    ingredients: list[str] = Field(
+        default_factory=list,
+        description="The covered ingredient names, copied exactly from the avoid "
+        "list — several when they serve one culinary purpose, e.g. tomato and "
+        "tomato paste. Never empty.",
+    )
+    role: str = Field(
+        default="",
+        description="The covered ingredients' role in this dish: 'core' (the dish "
+        "is not itself without them), 'supporting', or 'seasoning'.",
+    )
+    action: str = Field(
+        default="",
+        description="'swap' only when the dish stays recognizably itself, 'omit' "
+        "when it survives without the ingredient, else 'no_safe_swap'.",
+    )
+    swap: str | None = Field(
+        default=None,
+        description="Exactly one replacement ingredient, only when action is "
+        "'swap' — never a list of options.",
+    )
+    reason: str = Field(
+        default="",
+        description="One line: why this keeps the dish working.",
+    )
 
 
-class DishExplanation(BaseModel):
-    """The prose the model writes for a dish lookup.
+class AdvisoryDraft(BaseModel):
+    """One depends-level note as the model drafts it; normalized into :class:`Advisory`."""
+
+    ingredient: str = Field(default="", description="The flagged ingredient the note is about.")
+    note: str = Field(
+        default="",
+        description="One short practical line grounded in the listed mechanisms.",
+    )
+
+
+class IngredientReadingDraft(BaseModel):
+    """One ingredient's surviving index rows, as the disambiguation call drafts it.
+
+    Unconstrained like the other drafts: the agent matches ``keep`` back against
+    the rows it offered and ignores anything it did not, so an invented or
+    misspelt name degrades to "kept nothing" rather than failing the parse.
+    """
+
+    ingredient: str = Field(default="", description="The ingredient name, copied from the list.")
+    keep: list[str] = Field(
+        default_factory=list,
+        description="The index row names that genuinely denote this ingredient in "
+        "the dish, copied exactly. Keep at least one.",
+    )
+
+
+class DisambiguationDraft(BaseModel):
+    """Structured output of the disambiguation call: one reading per ambiguous ingredient."""
+
+    readings: list[IngredientReadingDraft] = Field(default_factory=list)
+
+
+class DishExplanationDraft(BaseModel):
+    """The synthesis call's structured output.
 
     The model does not decide the verdict: that is computed in code from the
-    curated index. The model only identifies the dish and writes the explanation
-    and swaps that justify the verdict it is given. It sets ``dish`` to the dish
-    it found in the message, not a copy of the raw input, so extra text like
-    "what is 2+2?" gets ignored.
+    curated index. The model only identifies the dish and writes the prose,
+    adaptations and advisories that justify the verdict it is given. It sets
+    ``dish`` to the dish it found in the message, not a copy of the raw input,
+    so extra text like "what is 2+2?" gets ignored.
     """
 
     dish: str = Field(description="The dish found in the user's message.")
     explanation: str = Field(description="Short reason for the verdict.")
-    replacements: list[Replacement] = Field(
+    adaptations: list[AdaptationDraft] = Field(
         default_factory=list,
-        description="Safer swaps for the flagged ingredients. Empty when the verdict is 'safe'.",
+        description="How to adapt the dish, one entry per culinary purpose, only "
+        "for the avoid-level ingredients. Empty when the verdict is 'safe'.",
+    )
+    advisories: list[AdvisoryDraft] = Field(
+        default_factory=list,
+        description="One short note per depends-level ingredient. Never a swap.",
     )
 
 
-class DishAssessmentResponse(DishExplanation):
-    """The assessed dish: code-derived verdict, per-ingredient readings, prose."""
+class Adaptation(BaseModel):
+    """One grounded adaptation entry: what to do about one culinary purpose."""
 
+    ingredients: list[Annotated[str, StringConstraints(max_length=MAX_INGREDIENT_CHARS)]] = Field(
+        min_length=1, description="The confirmed flagged ingredients this entry covers."
+    )
+    role: CulinaryRole = Field(description="The covered ingredients' role in this dish.")
+    action: AdaptationAction = Field(description="What to do: swap, omit, or no safe swap.")
+    swap: str | None = Field(
+        default=None,
+        max_length=MAX_INGREDIENT_CHARS,
+        description="The replacement ingredient; present exactly when action is 'swap'.",
+    )
+    reason: str = Field(max_length=MAX_REASON_CHARS, description="Why this keeps the dish working.")
+
+    @model_validator(mode="after")
+    def _swap_matches_action(self) -> "Adaptation":
+        if (self.action is AdaptationAction.SWAP) != (self.swap is not None):
+            raise ValueError("swap must be present exactly when action is 'swap'")
+        return self
+
+
+class Advisory(BaseModel):
+    """One depends-level ingredient's 'worth watching' note."""
+
+    ingredient: str = Field(max_length=MAX_INGREDIENT_CHARS)
+    note: str = Field(max_length=MAX_ADVISORY_CHARS)
+
+
+class DishAssessmentResponse(BaseModel):
+    """The assessed dish: code-derived verdict and integrity, grounded prose."""
+
+    dish: str = Field(description="The dish found in the user's message.")
     verdict: SafetyLevel = Field(description="Overall histamine safety of the dish.")
+    explanation: str = Field(description="Short reason for the verdict.")
+    adaptations: list[Adaptation] = Field(
+        description="How to adapt the dish, avoid-level ingredients only, grouped "
+        "by culinary purpose. Empty when the verdict is 'safe'."
+    )
+    advisories: list[Advisory] = Field(
+        description="Worth-watching notes for the depends-level ingredients."
+    )
+    integrity: DishIntegrity = Field(
+        description="Whether the dish keeps its identity after the adaptations: "
+        "'preserved', 'altered' when a core ingredient was swapped or omitted, or "
+        "'lost' when a core ingredient has no safe swap."
+    )
     ingredients: list[IngredientAssessment] = Field(
         description="One index reading per confirmed ingredient."
     )
     model: str = Field(description="Which model produced the explanation.")
+
+
+class DishAlternativesRequest(BaseModel):
+    """Ask for different dishes once the looked-up one cannot keep its identity.
+
+    Repeated names are deduped case-insensitively, first spelling wins, so a
+    client cannot fill the prompt with copies of one ingredient.
+    """
+
+    dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
+    goal: AlternativeGoal
+    avoid_ingredients: list[
+        Annotated[
+            str,
+            StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_INGREDIENT_CHARS),
+        ]
+    ] = Field(min_length=1, max_length=MAX_CONFIRMED_INGREDIENTS)
+
+    @field_validator("avoid_ingredients", mode="after")
+    @classmethod
+    def _dedupe_names(cls, value: list[str]) -> list[str]:
+        seen: set[str] = set()
+        kept: list[str] = []
+        for name in value:
+            if name.casefold() not in seen:
+                seen.add(name.casefold())
+                kept.append(name)
+        return kept
+
+
+class AlternativeDraft(BaseModel):
+    """One suggestion as the model drafts it; normalized into :class:`DishAlternative`."""
+
+    name: str = Field(default="", description="A real, commonly recognized dish name.")
+    pitch: str = Field(default="", description="One line of culinary appeal. No safety claims.")
+
+
+class DishAlternativesDraft(BaseModel):
+    """Structured output of the alternatives call: the drafted suggestions and nothing else."""
+
+    alternatives: list[AlternativeDraft] = Field(default_factory=list)
+
+
+class DishAlternative(BaseModel):
+    """One suggested dish; its name fits :class:`DishLookupRequest` for re-lookup."""
+
+    name: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
+    pitch: str = Field(max_length=MAX_PITCH_CHARS)
+
+
+class DishAlternativesResponse(BaseModel):
+    """Alternative dish ideas; each is only vetted once the user looks it up."""
+
+    dish: str = Field(description="The dish the alternatives stand in for.")
+    goal: AlternativeGoal = Field(description="The goal the suggestions were made for.")
+    alternatives: list[DishAlternative] = Field(max_length=MAX_ALTERNATIVES)
+    model: str = Field(description="Which model suggested the alternatives.")

@@ -4,14 +4,68 @@ import {
   assessDish,
   MAX_INGREDIENTS,
   proposeIngredients,
+  suggestAlternatives,
+  type AlternativeGoal,
   type ConfirmedIngredient,
+  type DishAlternative,
   type DishAssessmentResponse,
 } from "../api/client";
+import { shouldOfferAlternatives } from "../lib/assessment";
 
 export interface EditableIngredient {
   id: string;
   name: string;
   category: string | null;
+}
+
+// One goal's fetched suggestions plus the model that produced them. The model
+// rides along so the transparency badge (CLAUDE.md §6) shows on a cache hit too,
+// and stays correct if the user switches provider between goals.
+type GoalAlternatives = { suggestions: DishAlternative[]; model: string };
+
+// One result's alternatives, keyed by goal: a goal fetched once is shown from
+// here on a second visit, no repeat call.
+export type AlternativesCache = Partial<Record<AlternativeGoal, GoalAlternatives>>;
+
+// The pivot is a refinement of the result phase: the assessment stays on
+// screen while alternatives load (or fail) beneath it. The cache rides along on
+// every variant so switching goals back and forth stays free after the first try.
+export type AlternativesState = { cache: AlternativesCache } & (
+  | { status: "idle" }
+  | { status: "loading"; goal: AlternativeGoal }
+  | { status: "loaded"; goal: AlternativeGoal; suggestions: DishAlternative[]; model: string }
+  | { status: "error"; goal: AlternativeGoal; message: string }
+);
+
+type AlternativesOutcome = GoalAlternatives | { message: string };
+
+function resolveAlternatives(
+  prev: FlowState,
+  result: DishAssessmentResponse,
+  goal: AlternativeGoal,
+  outcome: AlternativesOutcome,
+): FlowState {
+  // Two independent guards on a response that landed late: the result-identity
+  // check drops it once the user started over; the loading+goal check keeps a
+  // stale goal's response from clobbering a newer one. A success is cached
+  // regardless, so the superseded goal is instant if the user comes back to it.
+  if (prev.phase !== "result" || prev.result !== result) return prev;
+  const cache =
+    "suggestions" in outcome
+      ? { ...prev.alternatives.cache, [goal]: outcome }
+      : prev.alternatives.cache;
+  const isCurrent =
+    prev.alternatives.status === "loading" && prev.alternatives.goal === goal;
+  if (!isCurrent) {
+    return { ...prev, alternatives: { ...prev.alternatives, cache } };
+  }
+  return {
+    ...prev,
+    alternatives:
+      "suggestions" in outcome
+        ? { cache, status: "loaded", goal, ...outcome }
+        : { cache, status: "error", goal, message: outcome.message },
+  };
 }
 
 export type FlowState =
@@ -25,9 +79,21 @@ export type FlowState =
       error: string | null;
     }
   | { phase: "assessing"; dish: string; ingredients: EditableIngredient[] }
-  | { phase: "result"; dish: string; result: DishAssessmentResponse };
+  | {
+      phase: "result";
+      dish: string;
+      result: DishAssessmentResponse;
+      alternatives: AlternativesState;
+    };
+
+// A fetch that never reached the server rejects with a TypeError ("Failed to
+// fetch"), so map that to friendly copy. Backend errors arrive as an Error
+// whose message is the already-readable `detail` string, so they pass through.
+const NETWORK_ERROR_MESSAGE =
+  "Couldn't reach the server — check your connection and try again.";
 
 function errorMessage(err: unknown): string {
+  if (err instanceof TypeError) return NETWORK_ERROR_MESSAGE;
   return err instanceof Error ? err.message : "Unknown error";
 }
 
@@ -138,7 +204,12 @@ export function useDishLookupFlow() {
     setState({ phase: "assessing", dish, ingredients });
     try {
       const result = await assessDish(dish, confirmed);
-      setState({ phase: "result", dish, result });
+      setState({
+        phase: "result",
+        dish,
+        result,
+        alternatives: { status: "idle", cache: {} },
+      });
     } catch (err) {
       // back to editing with the list intact, so the user can retry
       setState({
@@ -148,6 +219,54 @@ export function useDishLookupFlow() {
         model,
         error: errorMessage(err),
       });
+    }
+  }
+
+  async function requestAlternatives(goal: AlternativeGoal): Promise<void> {
+    if (state.phase !== "result" || !shouldOfferAlternatives(state.result)) return;
+    const { dish, result } = state;
+    // Exclude exactly the avoid-level ingredients the adaptations cover. Every
+    // case that passes the gate has at least one adaptation entry (a core change
+    // or a no-safe-swap), so this list is never empty. Reading them off a
+    // separate filter would be a second, drift-prone notion of "avoid-level".
+    const avoidIngredients = result.adaptations.flatMap((entry) => entry.ingredients);
+
+    const cached = state.alternatives.cache[goal];
+    if (cached) {
+      // Already fetched for this result: show it straight away, no second call.
+      setState((prev) =>
+        prev.phase === "result" && prev.result === result
+          ? {
+              ...prev,
+              alternatives: {
+                cache: prev.alternatives.cache,
+                status: "loaded",
+                goal,
+                ...cached,
+              },
+            }
+          : prev,
+      );
+      return;
+    }
+
+    setState((prev) =>
+      prev.phase === "result" && prev.result === result
+        ? { ...prev, alternatives: { ...prev.alternatives, status: "loading", goal } }
+        : prev,
+    );
+    try {
+      const response = await suggestAlternatives(dish, goal, avoidIngredients);
+      setState((prev) =>
+        resolveAlternatives(prev, result, goal, {
+          suggestions: response.alternatives,
+          model: response.model,
+        }),
+      );
+    } catch (err) {
+      setState((prev) =>
+        resolveAlternatives(prev, result, goal, { message: errorMessage(err) }),
+      );
     }
   }
 
@@ -162,6 +281,7 @@ export function useDishLookupFlow() {
     removeIngredient,
     addIngredient,
     confirm,
+    requestAlternatives,
     startOver,
   };
 }

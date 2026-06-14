@@ -10,8 +10,12 @@
 {{verdict}}
 </verdict>
 
-<flagged_ingredients>
-{{flagged}}
-</flagged_ingredients>
+<avoid_ingredients>
+{{avoid_flagged}}
+</avoid_ingredients>
 
-Write `dish`, `explanation`, and `replacements` that justify this verdict. The verdict is final.
+<watch_ingredients>
+{{watch_flagged}}
+</watch_ingredients>
+
+Write `dish`, `explanation`, `adaptations`, and `advisories` that justify this verdict. The verdict is final.

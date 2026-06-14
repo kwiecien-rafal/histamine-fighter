@@ -1,7 +1,6 @@
 """Tests for the curated-index ingredient lookup behind dish assessment."""
 
 from collections.abc import Sequence
-from typing import Any
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -9,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.enums import Compatibility, HistamineMechanism
 from app.models import HistamineIngredient
-from app.services.ingredient_lookup import lookup_ingredient_safety
+from app.services.ingredient_lookup import LookupResult, lookup_ingredient_safety
 from app.services.ingredient_service import IngredientMatch, IngredientService
 
 
@@ -19,7 +18,7 @@ def _ingredient(name: str, **kwargs: object) -> HistamineIngredient:
 
 async def _lookup(
     session: AsyncSession, ingredient: str, category: str | None = None
-) -> dict[str, Any]:
+) -> LookupResult:
     return await lookup_ingredient_safety(IngredientService(session), ingredient, category)
 
 
@@ -32,12 +31,12 @@ async def test_lookup_reports_compatibility_for_a_known_ingredient(
     await session.flush()
 
     result = await _lookup(session, "tomatos")  # fuzzy
-    assert result["found"] is True
-    assert result["ambiguous"] is False
-    top = result["candidates"][0]
-    assert top["name"] == "Tomato"
-    assert top["compatibility"] == "incompatible"
-    assert top["category"] == "vegetable"
+    assert result.found is True
+    assert result.ambiguous is False
+    top = result.candidates[0]
+    assert top.name == "Tomato"
+    assert top.compatibility == "incompatible"
+    assert top.category == "vegetable"
 
 
 async def test_lookup_flags_unknown_ingredient_without_claiming_safe(
@@ -47,9 +46,9 @@ async def test_lookup_flags_unknown_ingredient_without_claiming_safe(
     await session.flush()
 
     result = await _lookup(session, "qwertyzzz")
-    assert result["found"] is False
-    assert result["candidates"] == []
-    assert result["ambiguous"] is False
+    assert result.found is False
+    assert result.candidates == []
+    assert result.ambiguous is False
 
 
 async def test_lookup_reports_unknown_compatibility_not_null(
@@ -59,7 +58,7 @@ async def test_lookup_reports_unknown_compatibility_not_null(
     await session.flush()
 
     result = await _lookup(session, "bamboo shoots")
-    assert result["candidates"][0]["compatibility"] == "unknown"
+    assert result.candidates[0].compatibility == "unknown"
 
 
 async def test_lookup_flags_ambiguous_ingredient(session: AsyncSession) -> None:
@@ -68,8 +67,8 @@ async def test_lookup_flags_ambiguous_ingredient(session: AsyncSession) -> None:
     await session.flush()
 
     result = await _lookup(session, "egg")
-    assert result["found"] is True
-    assert result["ambiguous"] is True
+    assert result.found is True
+    assert result.ambiguous is True
 
 
 async def test_lookup_returns_mechanisms_to_ground_the_explanation(
@@ -89,7 +88,7 @@ async def test_lookup_returns_mechanisms_to_ground_the_explanation(
     await session.flush()
 
     result = await _lookup(session, "parmesan")
-    assert result["candidates"][0]["mechanisms"] == ["high_histamine", "dao_blocker"]
+    assert result.candidates[0].mechanisms == ("high_histamine", "dao_blocker")
 
 
 # --- the category fallback --------------------------------------------------------
@@ -114,9 +113,9 @@ async def test_lookup_falls_back_to_the_category_on_an_ingredient_miss(
     await session.flush()
 
     result = await _lookup(session, "parmesan", category="aged hard cheese")
-    assert result["found"] is True
-    assert result["matched_on"] == "category"
-    assert [(c["name"], c["compatibility"]) for c in result["candidates"]] == [
+    assert result.found is True
+    assert result.matched_on == "category"
+    assert [(c.name, c.compatibility) for c in result.candidates] == [
         ("Hard Cheese", "poorly_tolerated")
     ]
 
@@ -131,8 +130,8 @@ async def test_lookup_ignores_the_category_when_the_ingredient_is_indexed(
     await session.flush()
 
     result = await _lookup(session, "mozzarella", category="aged hard cheese")
-    assert result["matched_on"] == "ingredient"
-    assert [c["name"] for c in result["candidates"]] == ["Mozzarella"]
+    assert result.matched_on == "ingredient"
+    assert [c.name for c in result.candidates] == ["Mozzarella"]
 
 
 async def test_lookup_reports_a_double_miss_as_not_found(session: AsyncSession) -> None:
@@ -140,15 +139,15 @@ async def test_lookup_reports_a_double_miss_as_not_found(session: AsyncSession) 
     await session.flush()
 
     result = await _lookup(session, "dragonfruit", category="exotic fruit")
-    assert result["found"] is False
-    assert result["matched_on"] is None
-    assert result["candidates"] == []
+    assert result.found is False
+    assert result.matched_on is None
+    assert result.candidates == []
 
 
 async def test_lookup_treats_a_blank_category_as_absent(session: AsyncSession) -> None:
     result = await _lookup(session, "dragonfruit", category="   ")
-    assert result["found"] is False
-    assert result["matched_on"] is None
+    assert result.found is False
+    assert result.matched_on is None
 
 
 async def test_lookup_contains_a_category_lookup_error_as_unknown(
@@ -163,24 +162,24 @@ async def test_lookup_contains_a_category_lookup_error_as_unknown(
     monkeypatch.setattr(service, "find_category_candidates", _raise)
 
     result = await lookup_ingredient_safety(service, "parmesan", "aged hard cheese")
-    assert result["found"] is False
-    assert result["error"]
-    assert result["candidates"] == []
+    assert result.found is False
+    assert result.error
+    assert result.candidates == []
 
 
 async def test_lookup_rejects_empty_input_with_a_signal(session: AsyncSession) -> None:
     result = await _lookup(session, "   ")
-    assert result["found"] is False
-    assert result["error"]
-    assert result["candidates"] == []
+    assert result.found is False
+    assert result.error
+    assert result.candidates == []
 
 
 async def test_lookup_rejects_overlong_input_with_a_signal(session: AsyncSession) -> None:
     # A caller could pass a whole dish or a hallucination; it gets a signal, not
     # silent junk, and the trigram scan is never run on an oversized string.
     result = await _lookup(session, "x" * 500)
-    assert result["error"]
-    assert result["candidates"] == []
+    assert result.error
+    assert result.candidates == []
 
 
 async def test_lookup_contains_a_database_error_as_unknown(
@@ -196,6 +195,6 @@ async def test_lookup_contains_a_database_error_as_unknown(
     monkeypatch.setattr(service, "find_candidates", _raise)
 
     result = await lookup_ingredient_safety(service, "parmesan")
-    assert result["found"] is False
-    assert result["error"]
-    assert result["candidates"] == []
+    assert result.found is False
+    assert result.error
+    assert result.candidates == []

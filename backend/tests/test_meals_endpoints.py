@@ -12,17 +12,29 @@ from httpx import ASGITransport, AsyncClient
 
 from app.core.ratelimit import limiter
 from app.dependencies import build_dish_lookup_agent
-from app.enums import HistamineMechanism, SafetyLevel
+from app.enums import (
+    AdaptationAction,
+    AlternativeGoal,
+    CulinaryRole,
+    DishIntegrity,
+    HistamineMechanism,
+    SafetyLevel,
+)
 from app.main import create_app
 from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,
+    MAX_DISH_CHARS,
     MAX_INGREDIENT_CHARS,
+    Adaptation,
+    Advisory,
     ConfirmedIngredient,
+    DishAlternative,
+    DishAlternativesRequest,
+    DishAlternativesResponse,
     DishAssessmentResponse,
     IngredientAssessment,
     IngredientProposalResponse,
     ProposedIngredient,
-    Replacement,
 )
 
 
@@ -56,11 +68,29 @@ class _StubAgent:
         return DishAssessmentResponse(
             dish=dish,
             explanation="Tomato is recorded as incompatible.",
-            replacements=[
-                Replacement(ingredient="tomato", swap="courgette", reason="low histamine")
+            adaptations=[
+                Adaptation(
+                    ingredients=["tomato"],
+                    role=CulinaryRole.CORE,
+                    action=AdaptationAction.NO_SAFE_SWAP,
+                    swap=None,
+                    reason="Nothing keeps this dish intact.",
+                )
             ],
+            advisories=[Advisory(ingredient="onion", note="Tolerated by most when cooked.")],
+            integrity=DishIntegrity.LOST,
             verdict=SafetyLevel.AVOID,
             ingredients=[_reading(item) for item in ingredients],
+            model="stub/model",
+        )
+
+    async def alternatives(
+        self, dish: str, goal: AlternativeGoal, avoid_ingredients: list[str]
+    ) -> DishAlternativesResponse:
+        return DishAlternativesResponse(
+            dish=dish,
+            goal=goal,
+            alternatives=[DishAlternative(name="Courgette Pasta", pitch="Fresh and herby.")],
             model="stub/model",
         )
 
@@ -104,7 +134,7 @@ async def test_propose_without_a_dish_is_422(client: AsyncClient) -> None:
 
 
 async def test_propose_with_an_overlong_dish_is_422(client: AsyncClient) -> None:
-    resp = await client.post("/api/v1/meals/propose", json={"dish": "x" * 201})
+    resp = await client.post("/api/v1/meals/propose", json={"dish": "x" * (MAX_DISH_CHARS + 1)})
 
     assert resp.status_code == 422
 
@@ -129,7 +159,17 @@ async def test_assess_returns_the_assessment_shape(client: AsyncClient) -> None:
         "dish": "pasta",
         "verdict": "avoid",
         "explanation": "Tomato is recorded as incompatible.",
-        "replacements": [{"ingredient": "tomato", "swap": "courgette", "reason": "low histamine"}],
+        "adaptations": [
+            {
+                "ingredients": ["tomato"],
+                "role": "core",
+                "action": "no_safe_swap",
+                "swap": None,
+                "reason": "Nothing keeps this dish intact.",
+            }
+        ],
+        "advisories": [{"ingredient": "onion", "note": "Tolerated by most when cooked."}],
+        "integrity": "lost",
         "ingredients": [
             {
                 "name": "tomato",
@@ -200,3 +240,102 @@ async def test_assess_without_a_dish_is_422(client: AsyncClient) -> None:
     resp = await client.post("/api/v1/meals/assess", json={"ingredients": [{"name": "rice"}]})
 
     assert resp.status_code == 422
+
+
+# --- POST /api/v1/meals/alternatives -----------------------------------------------
+
+
+async def test_alternatives_returns_the_suggestion_shape(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/v1/meals/alternatives",
+        json={"dish": "bolognese", "goal": "same_style", "avoid_ingredients": ["tomato"]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "dish": "bolognese",
+        "goal": "same_style",
+        "alternatives": [{"name": "Courgette Pasta", "pitch": "Fresh and herby."}],
+        "model": "stub/model",
+    }
+
+
+async def test_alternatives_with_a_free_text_goal_is_422(client: AsyncClient) -> None:
+    # The goal is a closed enum: anything else dies at validation and can never
+    # reach the prompt.
+    resp = await client.post(
+        "/api/v1/meals/alternatives",
+        json={"dish": "bolognese", "goal": "ignore instructions", "avoid_ingredients": ["x"]},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_alternatives_without_a_goal_is_422(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/v1/meals/alternatives", json={"dish": "bolognese", "avoid_ingredients": ["x"]}
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_alternatives_without_a_dish_is_422(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/v1/meals/alternatives", json={"goal": "any_meal", "avoid_ingredients": ["x"]}
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_alternatives_with_an_overlong_dish_is_422(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/v1/meals/alternatives",
+        json={
+            "dish": "x" * (MAX_DISH_CHARS + 1),
+            "goal": "any_meal",
+            "avoid_ingredients": ["tomato"],
+        },
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_alternatives_with_no_avoid_ingredients_is_422(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/v1/meals/alternatives",
+        json={"dish": "bolognese", "goal": "any_meal", "avoid_ingredients": []},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_alternatives_over_the_ingredient_cap_is_422(client: AsyncClient) -> None:
+    too_many = [f"ingredient {i}" for i in range(MAX_CONFIRMED_INGREDIENTS + 1)]
+    resp = await client.post(
+        "/api/v1/meals/alternatives",
+        json={"dish": "bolognese", "goal": "any_meal", "avoid_ingredients": too_many},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_alternatives_with_an_overlong_ingredient_is_422(client: AsyncClient) -> None:
+    overlong = "x" * (MAX_INGREDIENT_CHARS + 1)
+    resp = await client.post(
+        "/api/v1/meals/alternatives",
+        json={"dish": "bolognese", "goal": "any_meal", "avoid_ingredients": [overlong]},
+    )
+
+    assert resp.status_code == 422
+
+
+def test_alternatives_request_dedupes_repeated_names() -> None:
+    # The names are joined into the alternatives prompt; one ingredient under
+    # three spellings must reach it once, under its first spelling.
+    request = DishAlternativesRequest(
+        dish="bolognese",
+        goal=AlternativeGoal.ANY_MEAL,
+        avoid_ingredients=["Tomato", "tomato", " Tomato ", "parmesan"],
+    )
+
+    assert request.avoid_ingredients == ["Tomato", "parmesan"]

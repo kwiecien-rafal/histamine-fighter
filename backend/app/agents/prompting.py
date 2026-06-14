@@ -7,6 +7,7 @@ any mismatch, so a broken template can never reach the model silently.
 """
 
 import re
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
@@ -88,18 +89,24 @@ def render_prompt(template: str, name: str = "inline template", /, **values: str
     return _TAG.sub(lambda match: values[match.group(2)], template)
 
 
-def strip_closing_tag(value: str, tag: str) -> str:
-    """Remove any literal ``</tag>`` from user-supplied input.
+def strip_region_tags(value: str, tags: Iterable[str]) -> str:
+    """Remove any literal region delimiter tags from user-supplied input.
 
-    The user templates wrap variable input in delimiter tags; without this, the
-    input could close its own tag and place attacker text outside the data
-    region the system prompt says to distrust (delimiter spoofing).
+    Each user template wraps its variable inputs in named ``<tag>`` … ``</tag>``
+    regions. Stripping only a value's own closing tag is not enough: an input
+    could forge a *different* region's delimiter to make attacker text look like
+    a trusted, code-owned section (e.g. a dish name emitting ``<verdict>``). So
+    both the opening and closing form of *every* region tag in the prompt are
+    removed, leaving the input unable to close its own region or fake another.
 
     Args:
         value: The user-supplied text about to fill a delimited placeholder.
-        tag: The delimiter tag name, e.g. ``"dish"`` for ``<dish>`` blocks.
+        tags: The prompt's region tag names, e.g. ``("dish_text", "verdict")``.
 
     Returns:
-        ``value`` with every spoofed closing tag removed, case-insensitively.
+        ``value`` with every spoofed region tag removed, case-insensitively.
     """
-    return re.sub(rf"</\s*{re.escape(tag)}\s*>", "", value, flags=re.IGNORECASE)
+    alternation = "|".join(re.escape(tag) for tag in tags)
+    if not alternation:
+        return value
+    return re.sub(rf"<\s*/?\s*(?:{alternation})\s*>", "", value, flags=re.IGNORECASE)

@@ -4,6 +4,8 @@ from app.agents.dish_lookup import DishLookupAgent
 from app.core.ratelimit import limiter, llm_rate_limit
 from app.dependencies import build_dish_lookup_agent
 from app.schemas.meal import (
+    DishAlternativesRequest,
+    DishAlternativesResponse,
     DishAssessmentRequest,
     DishAssessmentResponse,
     DishLookupRequest,
@@ -31,3 +33,17 @@ async def assess_dish(
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
 ) -> DishAssessmentResponse:
     return await agent.assess(dish=payload.dish, ingredients=payload.ingredients)
+
+
+@router.post("/alternatives", response_model=DishAlternativesResponse)
+@limiter.limit(llm_rate_limit)
+async def suggest_alternatives(
+    request: Request,
+    payload: DishAlternativesRequest,
+    agent: DishLookupAgent = Depends(build_dish_lookup_agent),
+) -> DishAlternativesResponse:
+    # avoid_ingredients are client-asserted: they only steer the suggestion
+    # prompt, and every picked suggestion is fully re-vetted via propose/assess.
+    return await agent.alternatives(
+        dish=payload.dish, goal=payload.goal, avoid_ingredients=payload.avoid_ingredients
+    )

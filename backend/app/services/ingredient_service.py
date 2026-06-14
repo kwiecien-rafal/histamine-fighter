@@ -6,12 +6,16 @@ tagged with how it matched. The public endpoint shows these directly; the
 dish-lookup agent (later) reasons over them with full dish context and applies
 the cautious final verdict.
 
-Retrieval favors recall and stays deterministic. Disambiguation and caution
-live in the consumer, not here: a context-free matcher must not silently pick
-one row when a name is genuinely ambiguous (egg yolk vs egg white).
+Retrieval is tiered — exact name, then aliases, then fuzzy — and the strongest
+curated tier that hits wins outright, so a trigram neighbour can never dilute a
+name the curator spelled out. Within a tier it favors recall and stays
+deterministic. Disambiguation and caution live in the consumer, not here: a
+context-free matcher must not silently pick one row when a name is genuinely
+ambiguous (egg yolk vs egg white).
 """
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import structlog
@@ -50,10 +54,6 @@ class IngredientService:
     stays with the caller (the FastAPI dependency).
     """
 
-    # Minimum trigram similarity for a fuzzy match. From the seeded data, real
-    # variants score ~0.5+ while unrelated words stay below ~0.25.
-    fuzzy_floor = 0.3
-
     # Within the fuzzy matches, keep those scoring at least this fraction of the
     # best fuzzy score and drop the long tail of weak, irrelevant hits.
     relevance_ratio = 0.75
@@ -90,7 +90,15 @@ class IngredientService:
             # is_category are the exception; find_category_candidates serves those.
             result = [exact]
         else:
-            matches = await self._match_aliases(query) + await self._match_fuzzy(query)
+            # Same tiering one level down: an alias hit is the curator saying
+            # "this name is this row", so trigram neighbours are noise next to it
+            # ("ground beef" must not let a fuzzy "Beef" dilute the Minced Meat
+            # alias). Fuzzy is the fallback tier only. The exact-hit contract
+            # above extends here: a name shared by several variants must be an
+            # alias on every variant, or one alias would suppress the others.
+            matches = await self._match_aliases(query)
+            if not matches:
+                matches = await self._match_fuzzy(query)
             result = self._rank_unique(matches)[: self.candidate_limit]
 
         log.debug(
@@ -100,6 +108,46 @@ class IngredientService:
             names=[match.ingredient.name for match in result],
         )
         return result
+
+    async def find_candidates_many(self, names: Sequence[str]) -> dict[str, list[IngredientMatch]]:
+        """Resolve a whole confirmed list at once, keyed by input name.
+
+        Same per-name tiering as :meth:`find_candidates` (an exact name wins
+        outright, an alias then suppresses fuzzy), but the common primary path
+        collapses to one exact query and one alias query for the entire set
+        rather than two round-trips per name. Only the residual misses fall back
+        to the per-name fuzzy scan, which stays serial because the rows that
+        reach it are rare. An empty or overlong name maps to an empty list.
+        """
+        results: dict[str, list[IngredientMatch]] = {}
+        query_by_name: dict[str, str] = {}
+        for name in names:
+            query = normalize_ingredient_name(name)
+            if not query or len(query) > self.max_query_length:
+                results[name] = []
+            else:
+                query_by_name[name] = query
+
+        queries = set(query_by_name.values())
+        if not queries:
+            return results
+
+        exact = await self._match_exact_many(queries)
+        misses = queries - exact.keys()
+        aliases = await self._match_aliases_many(misses) if misses else {}
+
+        resolved: dict[str, list[IngredientMatch]] = {}
+        for query in queries:
+            if query in exact:
+                resolved[query] = [exact[query]]
+                continue
+            alias_matches = aliases.get(query)
+            matches = alias_matches if alias_matches else await self._match_fuzzy(query)
+            resolved[query] = self._rank_unique(matches)[: self.candidate_limit]
+
+        for name, query in query_by_name.items():
+            results[name] = resolved[query]
+        return results
 
     async def find_category_candidates(self, category: str) -> list[IngredientMatch]:
         """Resolve a category descriptor against umbrella rows, by exact match only.
@@ -175,11 +223,46 @@ class IngredientService:
         rows = (await self._session.scalars(stmt)).all()
         return [IngredientMatch(row, MatchType.ALIAS, 1.0) for row in rows]
 
+    async def _match_exact_many(self, queries: set[str]) -> dict[str, IngredientMatch]:
+        # normalized_name is unique, so each query maps to at most one row.
+        stmt = select(HistamineIngredient).where(HistamineIngredient.normalized_name.in_(queries))
+        rows = (await self._session.scalars(stmt)).all()
+        return {row.normalized_name: IngredientMatch(row, MatchType.EXACT, 1.0) for row in rows}
+
+    async def _match_aliases_many(self, queries: set[str]) -> dict[str, list[IngredientMatch]]:
+        # One overlap (PG &&) query for the whole miss set; a row can carry an
+        # alias for several queries at once, so it is assigned to each it matches.
+        stmt = select(HistamineIngredient).where(
+            HistamineIngredient.normalized_aliases.overlap(list(queries))
+        )
+        rows = (await self._session.scalars(stmt)).all()
+        by_query: dict[str, list[IngredientMatch]] = {}
+        for row in rows:
+            match = IngredientMatch(row, MatchType.ALIAS, 1.0)
+            for alias in row.normalized_aliases:
+                if alias in queries:
+                    by_query.setdefault(alias, []).append(match)
+        return by_query
+
+    @staticmethod
+    def _fuzzy_floor(query: str) -> float:
+        """Minimum trigram similarity to accept, stricter for short queries.
+
+        A short name shares its handful of trigrams with unrelated words, so a
+        flat floor lets four-letter queries collide ("salt" scores 0.33 against
+        "salami"). The 0.4 short-query floor was chosen to clear the observed
+        collisions and is guarded by the retrieval eval
+        (tests/test_retrieval_eval.py): above the salt/salami collision (0.33),
+        below the genuine egg/egg-white match (0.44). Longer names keep the
+        looser 0.3 so real typos still resolve ("chedar" finds Cheddar).
+        """
+        return 0.4 if len(query) <= 6 else 0.3
+
     async def _match_fuzzy(self, query: str) -> list[IngredientMatch]:
         score = func.similarity(HistamineIngredient.normalized_name, query)
         stmt = (
             select(HistamineIngredient, score.label("score"))
-            .where(score >= self.fuzzy_floor)
+            .where(score >= self._fuzzy_floor(query))
             # id breaks score ties collation-independently, so which rows survive
             # the limit is deterministic; the output order is set in Python below.
             .order_by(score.desc(), HistamineIngredient.id)

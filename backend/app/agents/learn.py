@@ -16,7 +16,7 @@ import structlog
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from app.agents.base import BaseAgent, loggable_messages
-from app.agents.prompting import load_prompt, render_prompt, strip_closing_tag
+from app.agents.prompting import load_prompt, render_prompt, strip_region_tags
 from app.llm.errors import LLMInvocationError
 from app.llm.langchain_factory import ChatModel
 from app.schemas.learn import Citation, LearnAnswer, LearnResponse
@@ -28,6 +28,9 @@ _INVOCATION_ERROR = (
     "The language model failed to answer the knowledge question. If you selected "
     "a custom model, make sure it supports structured output."
 )
+# The user message's two region tags: the question is stripped against both so it
+# cannot forge a <context> passage to pose as retrieved, trusted knowledge.
+_LEARN_TAGS = ("context", "question")
 
 
 class LearnAgent(BaseAgent):
@@ -106,7 +109,7 @@ class LearnAgent(BaseAgent):
             self._user_template,
             "learn/user",
             passages=self._format_context(chunks),
-            question=strip_closing_tag(question, "question"),
+            question=strip_region_tags(question, _LEARN_TAGS),
         )
         messages: list[BaseMessage] = [
             SystemMessage(self._system_prompt),

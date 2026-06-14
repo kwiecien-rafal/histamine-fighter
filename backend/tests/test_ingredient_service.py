@@ -39,6 +39,26 @@ async def test_alias_match(session: AsyncSession) -> None:
     assert candidates[0].match_type is MatchType.ALIAS
 
 
+async def test_alias_match_suppresses_fuzzy_neighbours(session: AsyncSession) -> None:
+    # The curator spelled out "ground beef" as an alias of Minced Meat; the fuzzy
+    # "Beef" neighbour must not ride along and dilute that reading to "depends".
+    # Like the exact tier, this puts a contract on the data: a name shared by
+    # several variants must be an alias on every variant.
+    session.add(
+        _ingredient(
+            "Minced Meat",
+            compatibility=Compatibility.INCOMPATIBLE,
+            aliases=["ground beef", "ground meat"],
+        )
+    )
+    session.add(_ingredient("Beef", compatibility=Compatibility.WELL_TOLERATED))
+    await session.flush()
+
+    candidates = await IngredientService(session).find_candidates("ground beef")
+    assert [c.ingredient.name for c in candidates] == ["Minced Meat"]
+    assert candidates[0].match_type is MatchType.ALIAS
+
+
 async def test_fuzzy_handles_typos(session: AsyncSession) -> None:
     session.add(_ingredient("Cheddar"))
     await session.flush()
@@ -46,6 +66,20 @@ async def test_fuzzy_handles_typos(session: AsyncSession) -> None:
     candidates = await IngredientService(session).find_candidates("chedar")
     assert candidates[0].ingredient.name == "Cheddar"
     assert candidates[0].match_type is MatchType.FUZZY
+
+
+async def test_short_query_does_not_fuzzy_collide_with_a_distant_row(
+    session: AsyncSession,
+) -> None:
+    # "salt" shares enough trigrams with "salami" to score ~0.33 on letter
+    # overlap alone, a clinical nonsense match. The floor is stricter for short
+    # queries, so this four-letter query finds nothing rather than a cured meat.
+    # The longer "chedar" -> Cheddar above shows the looser floor still admits
+    # genuine typos.
+    session.add(_ingredient("Salami", compatibility=Compatibility.POORLY_TOLERATED))
+    await session.flush()
+
+    assert await IngredientService(session).find_candidates("salt") == []
 
 
 async def test_ambiguous_query_surfaces_the_risky_reading(
@@ -117,6 +151,57 @@ async def test_exact_name_short_circuits_even_for_an_ambiguous_term(
 
     candidates = await IngredientService(session).find_candidates("egg")
     assert [c.ingredient.name for c in candidates] == ["Egg"]
+
+
+# --- find_candidates_many (batched, must equal N single calls) -------------------
+
+
+async def test_find_candidates_many_matches_single_calls(session: AsyncSession) -> None:
+    # The batched read resolves each name exactly as N separate find_candidates
+    # calls would, across every tier: exact, alias (suppressing the fuzzy Beef
+    # neighbour), a fuzzy typo, and a clean miss.
+    session.add(_ingredient("Tomato", compatibility=Compatibility.INCOMPATIBLE))
+    session.add(
+        _ingredient(
+            "Minced Meat", compatibility=Compatibility.INCOMPATIBLE, aliases=["ground beef"]
+        )
+    )
+    session.add(_ingredient("Beef", compatibility=Compatibility.WELL_TOLERATED))
+    session.add(_ingredient("Cheddar"))
+    await session.flush()
+    service = IngredientService(session)
+    names = ["tomato", "ground beef", "chedar", "qwertyzzz"]
+
+    batched = await service.find_candidates_many(names)
+
+    for name in names:
+        single = await service.find_candidates(name)
+        assert [(m.ingredient.name, m.match_type) for m in batched[name]] == [
+            (m.ingredient.name, m.match_type) for m in single
+        ]
+    assert [m.ingredient.name for m in batched["ground beef"]] == ["Minced Meat"]
+    assert batched["qwertyzzz"] == []
+
+
+async def test_find_candidates_many_rejects_blank_and_overlong_names(
+    session: AsyncSession,
+) -> None:
+    result = await IngredientService(session).find_candidates_many(["   ", "x" * 500])
+    assert result == {"   ": [], "x" * 500: []}
+
+
+async def test_find_candidates_many_assigns_a_shared_alias_to_each_query(
+    session: AsyncSession,
+) -> None:
+    # One row carrying two of the batch's queries as aliases must resolve both,
+    # not just the first the overlap query happens to return.
+    session.add(_ingredient("Minced Meat", aliases=["ground beef", "ground pork"]))
+    await session.flush()
+
+    batched = await IngredientService(session).find_candidates_many(["ground beef", "ground pork"])
+
+    assert [m.ingredient.name for m in batched["ground beef"]] == ["Minced Meat"]
+    assert [m.ingredient.name for m in batched["ground pork"]] == ["Minced Meat"]
 
 
 # --- find_category_candidates (umbrella rows, exact match only) ------------------

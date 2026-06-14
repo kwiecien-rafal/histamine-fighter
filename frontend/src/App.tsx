@@ -1,10 +1,12 @@
 import { useState } from "react";
 
 import { MAX_DISH_CHARS } from "./api/client";
+import { AlternativesPanel } from "./components/AlternativesPanel";
 import { AssessmentResult } from "./components/AssessmentResult";
 import { IngredientEditor } from "./components/IngredientEditor";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { useDishLookupFlow } from "./hooks/useDishLookupFlow";
+import { pivotTone } from "./lib/assessment";
 
 export function App() {
   const [dish, setDish] = useState("");
@@ -16,6 +18,7 @@ export function App() {
     removeIngredient,
     addIngredient,
     confirm,
+    requestAlternatives,
     startOver,
   } = useDishLookupFlow();
 
@@ -24,7 +27,15 @@ export function App() {
     void propose(dish);
   }
 
+  // Picking a suggestion re-enters the normal flow with that dish, so it gets
+  // the same propose -> confirm -> assess vetting as anything typed by hand.
+  function pickAlternative(name: string) {
+    setDish(name);
+    void propose(name);
+  }
+
   const proposing = state.phase === "proposing";
+  const resultTone = state.phase === "result" ? pivotTone(state.result) : null;
 
   return (
     <main className="min-h-screen bg-stone-50 text-stone-900 px-6 py-12">
@@ -86,7 +97,17 @@ export function App() {
         )}
 
         {state.phase === "result" && (
-          <AssessmentResult result={state.result} onStartOver={startOver} />
+          <>
+            <AssessmentResult result={state.result} onStartOver={startOver} />
+            {resultTone && (
+              <AlternativesPanel
+                alternatives={state.alternatives}
+                tone={resultTone}
+                onChooseGoal={(goal) => void requestAlternatives(goal)}
+                onPick={pickAlternative}
+              />
+            )}
+          </>
         )}
       </div>
 

@@ -33,18 +33,44 @@ export interface IngredientAssessment {
   mechanisms: string[];
 }
 
-export interface Replacement {
-  ingredient: string;
-  swap: string;
+export type CulinaryRole = "core" | "supporting" | "seasoning";
+export type AdaptationAction = "swap" | "omit" | "no_safe_swap";
+export type DishIntegrity = "preserved" | "altered" | "lost";
+export type AlternativeGoal = "any_meal" | "same_style" | "similar_flavours";
+
+export interface Adaptation {
+  ingredients: string[];
+  role: CulinaryRole;
+  action: AdaptationAction;
+  swap: string | null;
   reason: string;
+}
+
+export interface Advisory {
+  ingredient: string;
+  note: string;
 }
 
 export interface DishAssessmentResponse {
   dish: string;
   verdict: Verdict;
   explanation: string;
-  replacements: Replacement[];
+  adaptations: Adaptation[];
+  advisories: Advisory[];
+  integrity: DishIntegrity;
   ingredients: IngredientAssessment[];
+  model: string;
+}
+
+export interface DishAlternative {
+  name: string;
+  pitch: string;
+}
+
+export interface DishAlternativesResponse {
+  dish: string;
+  goal: AlternativeGoal;
+  alternatives: DishAlternative[];
   model: string;
 }
 
@@ -98,4 +124,16 @@ export function assessDish(
   ingredients: ConfirmedIngredient[],
 ): Promise<DishAssessmentResponse> {
   return postJSON("/api/v1/meals/assess", { dish, ingredients });
+}
+
+export function suggestAlternatives(
+  dish: string,
+  goal: AlternativeGoal,
+  avoidIngredients: string[],
+): Promise<DishAlternativesResponse> {
+  return postJSON("/api/v1/meals/alternatives", {
+    dish,
+    goal,
+    avoid_ingredients: avoidIngredients,
+  });
 }

@@ -48,6 +48,43 @@ class CompatibilityVerdict(StrEnum):
         return cls.UNKNOWN if value is None else cls(value)
 
 
+class CulinaryRole(StrEnum):
+    """How much of the dish's identity rests on an ingredient."""
+
+    CORE = "core"
+    SUPPORTING = "supporting"
+    SEASONING = "seasoning"
+
+
+class AdaptationAction(StrEnum):
+    """What to do about a flagged ingredient when adapting a dish."""
+
+    SWAP = "swap"
+    OMIT = "omit"
+    NO_SAFE_SWAP = "no_safe_swap"
+
+
+class DishIntegrity(StrEnum):
+    """Whether a dish keeps its identity after its adaptations are applied.
+
+    ``altered`` sits between the two extremes: a core ingredient had to change but
+    a workable version remains, so the pivot is offered with softer wording than
+    the dead end ``lost`` describes.
+    """
+
+    PRESERVED = "preserved"
+    ALTERED = "altered"
+    LOST = "lost"
+
+
+class AlternativeGoal(StrEnum):
+    """What the user is after when a dish cannot be adapted."""
+
+    ANY_MEAL = "any_meal"
+    SAME_STYLE = "same_style"
+    SIMILAR_FLAVOURS = "similar_flavours"
+
+
 class HistamineMechanism(StrEnum):
     """Why an ingredient may trigger symptoms (an ingredient can have several)."""
 

@@ -4274,11 +4274,11 @@
   },
   {
     "name": "Black Pepper",
-    "compatibility": "incompatible",
+    "compatibility": "moderately_compatible",
     "mechanisms": [],
     "category": "spice",
     "aliases": [],
-    "notes": "Reported as incompatible; small amounts are tolerated by some.",
+    "notes": "Tolerated in small amounts. Reactions vary from person to person.",
     "sources": [
       "SIGHI 2023-04-01"
     ]
@@ -5141,6 +5141,7 @@
     "mechanisms": [],
     "category": "spice",
     "aliases": [
+      "salt",
       "table salt",
       "plain salt",
       "sea salt"

@@ -36,8 +36,9 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "embeddings: loads the real embedding model (slow, downloads on first run)",
+    "seed_eval: loads the full curated seed into Postgres (slower retrieval eval)",
 ]
-addopts = "-m 'not embeddings'"
+addopts = "-m 'not embeddings and not seed_eval'"
 
 [tool.ruff]
 line-length = 100
