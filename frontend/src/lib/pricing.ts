@@ -22,10 +22,9 @@ const PRICES: Record<string, ModelPrice> = {
   "gemini/gemini-2.5-pro": { inputPerMTok: 1.25, outputPerMTok: 10 },
 };
 
-// pricing.ts's last git commit date (or today if it has uncommitted edits),
-// injected by vite.config.ts. The panel shows it so users know how current the
-// figures are, with no date constant to hand-maintain.
-export const PRICES_UPDATED = __PRICES_UPDATED__;
+// Bump this whenever you edit the prices above; the panel shows it so users know
+// how current the figures are.
+export const PRICES_UPDATED = "2026-06-14";
 
 // Providers whose models you run yourself, so there is no per-token bill.
 const SELF_HOSTED_PREFIXES = ["ollama/", "modal/"];

@@ -30,9 +30,28 @@ describe("useUsageStore", () => {
     );
 
     const { totals, byModel } = useUsageStore.getState();
-    const expected = { calls: 3, inputTokens: 30, outputTokens: 15, totalTokens: 45 };
+    const expected = {
+      calls: 3,
+      inputTokens: 30,
+      outputTokens: 15,
+      totalTokens: 45,
+      unreportedCalls: 0,
+    };
     expect(totals).toEqual(expected);
     expect(byModel["openai/gpt-4o-mini"]).toEqual(expected);
+  });
+
+  it("counts calls whose provider reported no usage", () => {
+    const { record } = useUsageStore.getState();
+    record("propose", "legacy/local", {
+      calls: 1,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      steps: [{ step: "propose", input_tokens: 0, output_tokens: 0, total_tokens: 0, reported: false }],
+    });
+
+    expect(useUsageStore.getState().totals.unreportedCalls).toBe(1);
   });
 
   it("keeps a separate tally per model", () => {

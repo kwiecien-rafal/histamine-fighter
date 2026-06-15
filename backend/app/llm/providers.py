@@ -34,7 +34,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # Default model when the request names none. OpenRouter is absent on purpose: it
 # exposes hundreds of models with no sensible default, so it requires one.
 DEFAULT_MODELS: dict[Provider, str] = {
-    Provider.OPENAI: "gpt-4o-mini",
+    Provider.OPENAI: "gpt-5.4-mini",
     Provider.ANTHROPIC: "claude-sonnet-4-6",
     Provider.GEMINI: "gemini-2.5-flash",
 }
@@ -55,7 +55,7 @@ class ResolvedLLMConfig(NamedTuple):
 
     @property
     def model_name(self) -> str:
-        """The transparency-badge name, e.g. ``openai/gpt-4o-mini``."""
+        """The transparency-badge name, e.g. ``openai/gpt-5.4-mini``."""
         return f"{self.provider.value}/{self.model}"
 
     def require_key(self) -> str:

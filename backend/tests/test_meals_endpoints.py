@@ -54,7 +54,7 @@ class _StubAgent:
                 ProposedIngredient(name="parmesan", category="aged hard cheese"),
             ],
             model="stub/model",
-            usage=LLMUsage.empty(),
+            usage=LLMUsage(),
         )
 
     async def assess(
@@ -88,7 +88,7 @@ class _StubAgent:
             verdict=SafetyLevel.AVOID,
             ingredients=[_reading(item) for item in ingredients],
             model="stub/model",
-            usage=LLMUsage.empty(),
+            usage=LLMUsage(),
         )
 
     async def alternatives(
@@ -99,7 +99,7 @@ class _StubAgent:
             goal=goal,
             alternatives=[DishAlternative(name="Courgette Pasta", pitch="Fresh and herby.")],
             model="stub/model",
-            usage=LLMUsage.empty(),
+            usage=LLMUsage(),
         )
 
 

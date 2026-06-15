@@ -94,10 +94,10 @@ class BaseAgent(ABC):
         structured = self._chat.model.with_structured_output(schema, include_raw=True)
         try:
             raw = cast(dict[str, Any], await structured.ainvoke(messages))
+            reply, parsed = raw["raw"], raw["parsed"]
         except Exception as exc:
             raise LLMInvocationError(self._invocation_error) from exc
-        self._calls.append(_step_usage(step, raw["raw"]))
-        parsed = raw["parsed"]
+        self._calls.append(_step_usage(step, reply))
         if parsed is None:
             log.warning("agent.malformed_structured_output", step=step, model=self.model_name)
             raise LLMInvocationError(self._invocation_error)
@@ -108,7 +108,13 @@ class BaseAgent(ABC):
         self._calls = []
 
     def _collect_usage(self) -> LLMUsage:
-        """Total the calls tallied since the last :meth:`_begin_usage`."""
+        """Total the calls tallied since the last :meth:`_begin_usage`.
+
+        Only a returned response carries usage: a public method that raises
+        partway (e.g. assess failing at synthesis after a disambiguate call) never
+        reaches here, so those tokens are not reported — consistent with the
+        frontend recording usage only on a successful response.
+        """
         return LLMUsage(
             calls=len(self._calls),
             input_tokens=sum(call.input_tokens for call in self._calls),

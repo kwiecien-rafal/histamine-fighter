@@ -38,7 +38,7 @@ describe("UsagePanel", () => {
     expect(openBar()).toHaveTextContent("2 calls");
   });
 
-  it("lists each call's model and cost, not the step labels, when expanded", async () => {
+  it("shows the model, cost and per-step breakdown when expanded", async () => {
     const user = userEvent.setup();
     useUsageStore.getState().record("assess", MODEL, assessUsage());
     render(<UsagePanel />);
@@ -47,11 +47,33 @@ describe("UsagePanel", () => {
 
     // The model shows in both the per-model breakdown and the recent-calls row.
     expect(screen.getAllByText(MODEL)).toHaveLength(2);
-    // The recent-calls row is labelled by endpoint; the old greyed step column is gone.
+    // The recent-calls row is labelled by endpoint and the assess fan-out is
+    // legible as its own step chips.
     expect(screen.getByText(/^assess$/i)).toBeInTheDocument();
-    expect(screen.queryByText(/synthesize/)).toBeNull();
+    expect(screen.getByText("disambiguate")).toBeInTheDocument();
+    expect(screen.getByText("synthesize")).toBeInTheDocument();
     // A per-call cost is rendered (haiku is priced).
     expect(screen.getAllByText(/^~\$/).length).toBeGreaterThan(0);
+  });
+
+  it("shows — instead of $0 when the provider reported no usage", async () => {
+    const user = userEvent.setup();
+    useUsageStore.getState().record("propose", "legacy/local", {
+      calls: 1,
+      input_tokens: 0,
+      output_tokens: 0,
+      total_tokens: 0,
+      steps: [
+        { step: "propose", input_tokens: 0, output_tokens: 0, total_tokens: 0, reported: false },
+      ],
+    });
+    render(<UsagePanel />);
+
+    // The call still counts, but its unknown tokens/cost never read as a free $0.
+    expect(openBar()).toHaveTextContent("1 call");
+    expect(openBar()).not.toHaveTextContent("$0");
+    await user.click(openBar());
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
   it("clears the ledger from the Reset button", async () => {

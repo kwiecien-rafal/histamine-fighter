@@ -59,10 +59,12 @@ def build_chat_model(cfg: LLMRequestConfig, *, temperature: float = 0.0) -> Chat
     call. The agent loop (Step 5) is responsible for turning a model that ignores
     or rejects tools into a clean error.
 
-    ``temperature`` defaults to ``0.0`` because the dish-lookup flow is a grounded
-    safety classifier: its verdict must be reproducible run to run, both to make
-    the "flip a DB row and the answer changes" grounding visible and to allow
-    caching. Creative agents (recipe, learn) can pass a higher value.
+    ``temperature`` defaults to ``0.0`` to keep the dish-lookup flow steady run to
+    run, which firms up caching and stable prose. GPT-5-class models (the OpenAI
+    default) reject a custom temperature, so LangChain drops it there and they run
+    at the provider default; the verdict is unaffected either way because it is
+    computed in code from the index, never sampled. Creative agents (recipe, learn)
+    can pass a higher value.
     """
     resolved = resolve_llm_config(cfg)
     log.debug("llm.chat_model", provider=resolved.provider.value, model=resolved.model)

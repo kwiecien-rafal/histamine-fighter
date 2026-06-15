@@ -37,8 +37,3 @@ class LLMUsage(BaseModel):
     output_tokens: int = Field(default=0, ge=0)
     total_tokens: int = Field(default=0, ge=0)
     steps: list[StepUsage] = Field(default_factory=list)
-
-    @classmethod
-    def empty(cls) -> "LLMUsage":
-        """Usage for a response produced without calling a model (e.g. a cache hit)."""
-        return cls()

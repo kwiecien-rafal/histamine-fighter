@@ -21,8 +21,8 @@ from app.llm.langchain_factory import build_chat_model
 def test_openai_uses_default_model() -> None:
     result = build_chat_model(LLMRequestConfig(provider="openai", api_key="k"))
     assert isinstance(result.model, ChatOpenAI)
-    assert result.model.model == "gpt-4o-mini"
-    assert result.model_name == "openai/gpt-4o-mini"
+    assert result.model.model == "gpt-5.4-mini"
+    assert result.model_name == "openai/gpt-5.4-mini"
 
 
 def test_header_model_overrides_default() -> None:
@@ -89,15 +89,26 @@ def test_unknown_provider_is_a_config_error() -> None:
         build_chat_model(LLMRequestConfig(provider="banana"))
 
 
+# A pinned model that accepts an explicit temperature, so these test the factory's
+# temperature plumbing rather than the default model's sampling support (GPT-5-class
+# models reject a custom temperature, which would null it out here).
+_TEMPERATURE_CAPABLE_MODEL = "gpt-4o-mini"
+
+
 def test_classifier_defaults_to_deterministic_sampling() -> None:
     # A safety classifier must not vary run to run on default sampling.
-    result = build_chat_model(LLMRequestConfig(provider="openai", api_key="k"))
+    result = build_chat_model(
+        LLMRequestConfig(provider="openai", api_key="k", model=_TEMPERATURE_CAPABLE_MODEL)
+    )
     assert isinstance(result.model, ChatOpenAI)
     assert result.model.temperature == 0.0
 
 
 def test_temperature_is_overridable_for_creative_agents() -> None:
-    result = build_chat_model(LLMRequestConfig(provider="openai", api_key="k"), temperature=0.7)
+    result = build_chat_model(
+        LLMRequestConfig(provider="openai", api_key="k", model=_TEMPERATURE_CAPABLE_MODEL),
+        temperature=0.7,
+    )
     assert isinstance(result.model, ChatOpenAI)
     assert result.model.temperature == 0.7
 

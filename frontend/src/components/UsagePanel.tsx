@@ -1,11 +1,14 @@
 import { useState } from "react";
 
+import type { LLMUsage } from "../api/client";
+import { useDismissableOverlay } from "../hooks/useDismissableOverlay";
 import { estimateCost, PRICES_UPDATED } from "../lib/pricing";
 import { useUsageStore, type TokenTotals } from "../store/usage";
 
 function formatTokens(count: number): string {
   if (count < 1000) return String(count);
-  return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
+  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
+  return `${(count / 1_000_000).toFixed(count < 10_000_000 ? 1 : 0)}M`;
 }
 
 function formatUsd(usd: number | null): string {
@@ -15,22 +18,70 @@ function formatUsd(usd: number | null): string {
   return `~$${usd.toFixed(usd >= 1 ? 2 : 4)}`;
 }
 
-function costInfo(model: string, inputTokens: number, outputTokens: number) {
-  const cost = estimateCost(model, inputTokens, outputTokens);
+// A provider may not meter a call. "none" means every call went unmetered, so the
+// token figures are unknown (rendered "—") rather than zero; "partial" means only
+// some did, so the figures are a lower bound (marked "~").
+type Reportedness = "full" | "partial" | "none";
+
+function reportedness(calls: number, unreportedCalls: number): Reportedness {
+  if (unreportedCalls === 0) return "full";
+  if (unreportedCalls >= calls) return "none";
+  return "partial";
+}
+
+function tokenCell(totalTokens: number, rep: Reportedness, unit = "tok"): string {
+  if (rep === "none") return "—";
+  return `${rep === "partial" ? "~" : ""}${formatTokens(totalTokens)} ${unit}`;
+}
+
+interface CellTexts {
+  tokens: string;
+  cost: string;
+  title?: string;
+}
+
+// The token and cost strings for one model or call, honouring how much of it the
+// provider actually metered. `selfHostedSuffix` widens "$0" to "$0 self-hosted"
+// for the roomier by-model rows.
+function cellTexts(model: string, totals: TokenTotals, selfHostedSuffix = false): CellTexts {
+  const rep = reportedness(totals.calls, totals.unreportedCalls);
+  const tokens = tokenCell(totals.totalTokens, rep);
+  if (rep === "none") {
+    return { tokens, cost: "—", title: "Provider reported no token usage" };
+  }
+  const cost = estimateCost(model, totals.inputTokens, totals.outputTokens);
+  const costText = cost.selfHosted ? (selfHostedSuffix ? "$0 self-hosted" : "$0") : formatUsd(cost.usd);
+  const title =
+    rep === "partial"
+      ? "Some calls were not metered; figures are a lower bound."
+      : cost.usd === null && !cost.selfHosted
+        ? "No price set for this model — add it in pricing.ts."
+        : undefined;
+  return { tokens, cost: costText, title };
+}
+
+// A recorded call carries its per-step usage; fold it into the same shape the
+// aggregate rows use so one set of formatters serves both.
+function asTotals(usage: LLMUsage): TokenTotals {
   return {
-    label: cost.selfHosted ? "$0" : formatUsd(cost.usd),
-    selfHosted: cost.selfHosted,
-    unpriced: cost.usd === null && !cost.selfHosted,
+    calls: usage.calls,
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    totalTokens: usage.total_tokens,
+    unreportedCalls: usage.steps.filter((step) => !step.reported).length,
   };
 }
 
-// Session total: sum the priced and self-hosted models, ignore the unpriced ones.
-// "—" only when no model has a known price, so a partly-priced session still
-// shows a figure and the per-model rows reveal any gaps.
+// Session total: sum the metered, priced and self-hosted models; skip the
+// unmetered and the unpriced. An empty session reads $0 (nothing spent yet), but
+// a session whose every cost is unknown reads "—" so it never implies a false $0.
 function sessionCost(byModel: Record<string, TokenTotals>): number | null {
+  const entries = Object.entries(byModel);
+  if (entries.length === 0) return 0;
   let sum = 0;
   let anyKnown = false;
-  for (const [model, totals] of Object.entries(byModel)) {
+  for (const [model, totals] of entries) {
+    if (reportedness(totals.calls, totals.unreportedCalls) === "none") continue;
     const { usd } = estimateCost(model, totals.inputTokens, totals.outputTokens);
     if (usd !== null) {
       sum += usd;
@@ -51,15 +102,17 @@ export function UsagePanel() {
   const recentCalls = useUsageStore((s) => s.recentCalls);
   const startedAt = useUsageStore((s) => s.startedAt);
   const reset = useUsageStore((s) => s.reset);
+  const panelRef = useDismissableOverlay<HTMLElement>(expanded, () => setExpanded(false));
 
   const cost = sessionCost(byModel);
+  const rep = reportedness(totals.calls, totals.unreportedCalls);
   const models = Object.entries(byModel).sort((a, b) => b[1].calls - a[1].calls);
   const since = new Date(startedAt).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
 
-  const summary = `${callsLabel(totals.calls)} · ${formatTokens(totals.totalTokens)} tok · ${formatUsd(cost)}`;
+  const summary = `${callsLabel(totals.calls)} · ${tokenCell(totals.totalTokens, rep)} · ${formatUsd(cost)}`;
 
   if (!expanded) {
     return (
@@ -90,7 +143,11 @@ export function UsagePanel() {
         className="flex-1 bg-stone-900/30"
         onClick={() => setExpanded(false)}
       />
-      <section className="max-h-[80vh] overflow-y-auto border-t border-stone-200 bg-white shadow-xl">
+      <section
+        ref={panelRef}
+        tabIndex={-1}
+        className="max-h-[80vh] overflow-y-auto border-t border-stone-200 bg-white shadow-xl focus:outline-none"
+      >
         <div className="mx-auto max-w-xl px-5 py-4">
           <header className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">
@@ -125,10 +182,12 @@ export function UsagePanel() {
             </div>
             <div className="text-right">
               <div className="font-mono text-sm text-stone-700">
-                {formatTokens(totals.totalTokens)} tokens
+                {tokenCell(totals.totalTokens, rep, "tokens")}
               </div>
               <div className="font-mono text-xs text-stone-500">
-                {formatTokens(totals.inputTokens)} in ▸ {formatTokens(totals.outputTokens)} out
+                {rep === "none"
+                  ? "—"
+                  : `${formatTokens(totals.inputTokens)} in ▸ ${formatTokens(totals.outputTokens)} out`}
               </div>
             </div>
           </div>
@@ -136,11 +195,7 @@ export function UsagePanel() {
           {models.length > 0 && (
             <ul className="mb-3 space-y-1.5">
               {models.map(([model, modelTotals]) => {
-                const { label, selfHosted, unpriced } = costInfo(
-                  model,
-                  modelTotals.inputTokens,
-                  modelTotals.outputTokens,
-                );
+                const texts = cellTexts(model, modelTotals, true);
                 return (
                   <li key={model} className="flex items-center justify-between gap-2 text-sm">
                     <span className="truncate rounded border border-stone-200 bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-500">
@@ -148,10 +203,9 @@ export function UsagePanel() {
                     </span>
                     <span
                       className="whitespace-nowrap font-mono text-xs text-stone-600"
-                      title={unpriced ? "No price set for this model — add it in pricing.ts" : undefined}
+                      title={texts.title}
                     >
-                      {modelTotals.calls}× · {formatTokens(modelTotals.totalTokens)} tok ·{" "}
-                      {selfHosted ? "$0 self-hosted" : label}
+                      {modelTotals.calls}× · {texts.tokens} · {texts.cost}
                     </span>
                   </li>
                 );
@@ -161,34 +215,49 @@ export function UsagePanel() {
 
           {recentCalls.length > 0 && (
             <div className="mb-3">
-              <h3 className="mb-1.5 text-xs uppercase tracking-wide text-stone-500">
-                Recent calls
-              </h3>
-              <ul className="space-y-1">
-                {recentCalls.map((call) => (
-                  <li
-                    key={call.id}
-                    className="flex items-center gap-3 text-xs text-stone-600"
-                  >
-                    <span className="w-20 shrink-0 capitalize">{call.endpoint}</span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-stone-400">
-                      {call.model}
-                    </span>
-                    <span className="w-16 shrink-0 text-right font-mono">
-                      {formatTokens(call.usage.total_tokens)} tok
-                    </span>
-                    <span className="w-16 shrink-0 text-right font-mono">
-                      {costInfo(call.model, call.usage.input_tokens, call.usage.output_tokens).label}
-                    </span>
-                  </li>
-                ))}
+              <h3 className="mb-1.5 text-xs uppercase tracking-wide text-stone-500">Recent calls</h3>
+              <ul className="space-y-1.5">
+                {recentCalls.map((call) => {
+                  const texts = cellTexts(call.model, asTotals(call.usage));
+                  return (
+                    <li key={call.id} className="flex flex-col gap-1 text-xs text-stone-600">
+                      <div className="flex items-center gap-3">
+                        <span className="w-20 shrink-0 capitalize">{call.endpoint}</span>
+                        <span className="min-w-0 flex-1 truncate font-mono text-stone-400">
+                          {call.model}
+                        </span>
+                        <span className="w-16 shrink-0 text-right font-mono" title={texts.title}>
+                          {texts.tokens}
+                        </span>
+                        <span className="w-16 shrink-0 text-right font-mono">{texts.cost}</span>
+                      </div>
+                      {call.usage.steps.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pl-20">
+                          {call.usage.steps.map((step, index) => (
+                            <span
+                              key={index}
+                              title={
+                                step.reported
+                                  ? `${formatTokens(step.total_tokens)} tok`
+                                  : "Provider reported no token usage"
+                              }
+                              className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] text-stone-400"
+                            >
+                              {step.step}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
 
           <p className="text-[11px] text-stone-400">
-            Approximate, from public list prices (updated {PRICES_UPDATED}). Self-hosted models
-            are shown as $0. Counts include calls that errored.
+            Approximate list prices (updated {PRICES_UPDATED}); prompt caching is not modelled.
+            Self-hosted models show as $0, unmetered calls as —. Counts include calls that errored.
           </p>
         </div>
       </section>

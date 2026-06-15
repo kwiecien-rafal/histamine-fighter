@@ -8,6 +8,9 @@ export interface TokenTotals {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  // Calls whose provider returned no token usage. When this equals `calls` the
+  // token figures are unknown, not zero, so the panel shows them as "—".
+  unreportedCalls: number;
 }
 
 export interface RecordedCall {
@@ -36,6 +39,7 @@ const ZERO_TOTALS: TokenTotals = {
   inputTokens: 0,
   outputTokens: 0,
   totalTokens: 0,
+  unreportedCalls: 0,
 };
 
 function add(totals: TokenTotals, usage: LLMUsage): TokenTotals {
@@ -44,6 +48,8 @@ function add(totals: TokenTotals, usage: LLMUsage): TokenTotals {
     inputTokens: totals.inputTokens + usage.input_tokens,
     outputTokens: totals.outputTokens + usage.output_tokens,
     totalTokens: totals.totalTokens + usage.total_tokens,
+    unreportedCalls:
+      totals.unreportedCalls + usage.steps.filter((step) => !step.reported).length,
   };
 }
 
@@ -77,6 +83,26 @@ export const useUsageStore = create<UsageState>()(
           recentCalls: [],
         }),
     }),
-    { name: "histamine-fighter:usage", version: 1 },
+    {
+      name: "histamine-fighter:usage",
+      version: 2,
+      // v1 had no unreportedCalls; backfill zero (past calls predate the field
+      // and are treated as reported) so rehydrated totals stay numeric.
+      migrate: (persisted, version) => {
+        const state = persisted as UsageState;
+        if (version >= 2) return state;
+        const withField = (totals: TokenTotals): TokenTotals => ({
+          ...totals,
+          unreportedCalls: 0,
+        });
+        return {
+          ...state,
+          totals: withField(state.totals),
+          byModel: Object.fromEntries(
+            Object.entries(state.byModel).map(([model, totals]) => [model, withField(totals)]),
+          ),
+        };
+      },
+    },
   ),
 );

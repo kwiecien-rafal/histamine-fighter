@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useDismissableOverlay } from "../hooks/useDismissableOverlay";
 import { useLLMProviderStore, type Provider } from "../store/llmProvider";
 
 const PUBLIC_DEPLOYMENT = import.meta.env.VITE_PUBLIC_DEPLOYMENT === "true";
@@ -18,7 +19,7 @@ interface ProviderRow {
 
 const PROVIDERS: ProviderRow[] = [
   { id: "ollama", label: "Local Ollama", note: "Self-hosted, free, no API key.", ready: true, needsKey: false },
-  { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true, defaultModel: "gpt-4o-mini" },
+  { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true, defaultModel: "gpt-5.4-mini" },
   { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release.", ready: false, needsKey: false },
   { id: "anthropic", label: "Anthropic", note: "Use your own Anthropic API key.", ready: true, needsKey: true, defaultModel: "claude-sonnet-4-6" },
   { id: "gemini", label: "Google Gemini", note: "Use your own Gemini API key.", ready: true, needsKey: true, defaultModel: "gemini-2.5-flash" },
@@ -40,6 +41,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const setModel = useLLMProviderStore((s) => s.setModel);
   const setOllamaBaseUrl = useLLMProviderStore((s) => s.setOllamaBaseUrl);
   const [showKey, setShowKey] = useState(false);
+  const drawerRef = useDismissableOverlay<HTMLElement>(open, onClose);
 
   if (!open) return null;
 
@@ -51,7 +53,11 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
         className="flex-1 bg-stone-900/30"
         onClick={onClose}
       />
-      <aside className="w-full max-w-md h-full bg-white border-l border-stone-200 shadow-xl overflow-y-auto">
+      <aside
+        ref={drawerRef}
+        tabIndex={-1}
+        className="w-full max-w-md h-full bg-white border-l border-stone-200 shadow-xl overflow-y-auto focus:outline-none"
+      >
         <header className="flex items-center justify-between px-5 py-4 border-b border-stone-200">
           <h2 className="text-lg font-semibold">LLM provider</h2>
           <button
