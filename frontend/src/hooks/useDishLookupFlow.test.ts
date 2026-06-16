@@ -70,7 +70,7 @@ function altResponse(goal: AlternativeGoal, names: string[]): DishAlternativesRe
   return {
     dish: "Bolognese",
     goal,
-    alternatives: names.map((name) => ({ name, pitch: "" })),
+    alternatives: names.map((name) => ({ name, pitch: "", source: "generated" as const })),
     model: "stub/model",
     usage,
   };
@@ -162,7 +162,9 @@ describe("useDishLookupFlow", () => {
     if (state.phase !== "result" || state.alternatives.status !== "loaded") {
       throw new Error(`unexpected state: ${state.phase}`);
     }
-    expect(state.alternatives.suggestions).toEqual([{ name: "Courgette Pasta", pitch: "" }]);
+    expect(state.alternatives.suggestions).toEqual([
+      { name: "Courgette Pasta", pitch: "", source: "generated" },
+    ]);
   });
 
   it("serves a re-picked goal from cache without refetching", async () => {
@@ -227,7 +229,7 @@ describe("useDishLookupFlow", () => {
     // The newer goal stays on screen; the stale one only filled the cache.
     expect(state.alternatives.goal).toBe("same_style");
     expect(state.alternatives.cache.any_meal).toEqual({
-      suggestions: [{ name: "Caponata", pitch: "" }],
+      suggestions: [{ name: "Caponata", pitch: "", source: "generated" }],
       model: "stub/model",
     });
 

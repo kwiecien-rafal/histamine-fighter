@@ -14,7 +14,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.normalization import normalize_ingredient_name
@@ -122,6 +122,40 @@ class MealService:
             above_floor=above_floor,
         )
         return matches
+
+    async def random_sample(
+        self,
+        *,
+        meal_type: MealType | None = None,
+        k: int | None = None,
+        exclude: Collection[str] = (),
+    ) -> list[CuratedMeal]:
+        """Return up to k random approved meals, optionally restricted to one slot.
+
+        For the "any meal" alternatives goal (and future variety): there is no query
+        to rank by, so it samples at random. ``exclude`` drops any meal whose
+        ingredient names or categories include a listed term, like ``search``, so a
+        dish built on what the user is avoiding is never offered back. A non-positive
+        k raises rather than silently falling back to the default.
+        """
+        if k is not None and k < 1:
+            raise ValueError(f"k must be >= 1, got {k}")
+        limit = self.default_k if k is None else k
+        excluded = {key for term in exclude if (key := normalize_ingredient_name(term))}
+
+        stmt = select(CuratedMeal).where(CuratedMeal.approval_status == ApprovalStatus.APPROVED)
+        if meal_type is not None:
+            stmt = stmt.where(CuratedMeal.meal_type == meal_type)
+        stmt = stmt.order_by(func.random())
+
+        meals: list[CuratedMeal] = []
+        for meal in (await self._session.execute(stmt)).scalars():
+            if self._is_excluded(meal, excluded):
+                continue
+            meals.append(meal)
+            if len(meals) == limit:
+                break
+        return meals
 
     @staticmethod
     def _is_excluded(meal: CuratedMeal, excluded: set[str]) -> bool:

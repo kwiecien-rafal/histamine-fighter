@@ -80,9 +80,14 @@ export interface DishAssessmentResponse {
   usage: LLMUsage;
 }
 
+export type AlternativeSource = "verified" | "generated";
+
 export interface DishAlternative {
   name: string;
   pitch: string;
+  // Neutral domain value: "verified" is a member of the approved pool, "generated"
+  // is a fresh idea the user re-vets on click. Branded copy lives in the display map.
+  source: AlternativeSource;
 }
 
 export interface DishAlternativesResponse {

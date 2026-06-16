@@ -54,6 +54,7 @@ from app.enums import (
 )
 from app.llm.errors import LLMInvocationError
 from app.llm.langchain_factory import ChatModel
+from app.models import CuratedMeal
 from app.schemas.meal import (
     MAX_ADVISORY_CHARS,
     MAX_ALTERNATIVES,
@@ -86,6 +87,7 @@ from app.services.ingredient_lookup import (
     lookup_ingredients,
 )
 from app.services.ingredient_service import IngredientMatch, IngredientService
+from app.services.meal_service import MealService
 
 log = structlog.get_logger(__name__)
 
@@ -504,18 +506,57 @@ def _normalized_advisories(
     ]
 
 
-def _normalized_alternatives(items: list[AlternativeDraft], dish: str) -> list[DishAlternative]:
-    """Degrade the model's suggestions: clip, drop blanks and duplicates, drop
-    the original dish echoed back, cap the count. An empty list is a valid
-    "nothing fits" answer."""
+def _verified_alternatives(meals: list[CuratedMeal]) -> list[DishAlternative]:
+    """Approved-pool meals as verified suggestions; the description is the pitch.
+
+    The claim is sound because membership means code-verified plus admin-approved.
+    A meal whose name clips to blank is skipped; dedupe and the cap happen in the
+    merge so verified picks keep precedence over generated ones.
+    """
     kept: list[DishAlternative] = []
-    seen = {dish.strip().casefold()}
+    for meal in meals:
+        name = _clipped(meal.name, MAX_DISH_CHARS)
+        if not name:
+            continue
+        kept.append(
+            DishAlternative(
+                name=name, pitch=_clipped(meal.description, MAX_PITCH_CHARS), source="verified"
+            )
+        )
+    return kept
+
+
+def _generated_alternatives(items: list[AlternativeDraft]) -> list[DishAlternative]:
+    """The model's fresh ideas, clipped; blanks dropped. Makes no safety claim, so
+    each is re-vetted when the user looks it up. Dedupe and the cap happen in the
+    merge."""
+    kept: list[DishAlternative] = []
     for item in items:
         name = _clipped(item.name, MAX_DISH_CHARS)
-        if not name or name.casefold() in seen:
+        if not name:
             continue
-        seen.add(name.casefold())
-        kept.append(DishAlternative(name=name, pitch=_clipped(item.pitch, MAX_PITCH_CHARS)))
+        kept.append(
+            DishAlternative(
+                name=name, pitch=_clipped(item.pitch, MAX_PITCH_CHARS), source="generated"
+            )
+        )
+    return kept
+
+
+def _merge_alternatives(
+    verified: list[DishAlternative], generated: list[DishAlternative], dish: str
+) -> list[DishAlternative]:
+    """Verified picks first, generation fills the rest: dedupe (verified wins a
+    name clash), drop the original dish echoed back, cap the count. An empty list
+    is a valid "nothing fits" answer."""
+    kept: list[DishAlternative] = []
+    seen = {dish.strip().casefold()}
+    for alternative in (*verified, *generated):
+        key = alternative.name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(alternative)
         if len(kept) == MAX_ALTERNATIVES:
             break
     return kept
@@ -547,9 +588,12 @@ class DishLookupAgent(BaseAgent):
 
     _invocation_error = _INVOCATION_ERROR
 
-    def __init__(self, chat: ChatModel, service: IngredientService) -> None:
+    def __init__(
+        self, chat: ChatModel, service: IngredientService, meal_service: MealService
+    ) -> None:
         super().__init__(chat)
         self._service = service
+        self._meal_service = meal_service
         self._propose_prompt = render_prompt(
             load_prompt("dish_lookup/propose_system"),
             "dish_lookup/propose_system",
@@ -971,16 +1015,78 @@ class DishLookupAgent(BaseAgent):
     ) -> DishAlternativesResponse:
         """Suggest different dishes once this one cannot keep its identity.
 
-        Suggestions carry no safety claim: each is vetted only by the user
-        looking it up again through propose → confirm → assess. The
-        ``avoid_ingredients`` are client-asserted and only steer the prompt —
-        they never touch a verdict, so re-verifying them buys nothing. They do
-        anchor it, though: their index categories yield well-tolerated swaps the
-        prompt is told to build on, so suggestions lean on safe ingredients by
-        construction rather than rescuing one fixed dish after the fact.
+        Two tiers. First retrieve from the verified pool: membership already
+        guarantees safety, so similarity there is pure relevance and the *goal*
+        selects the query axis. Those picks carry a real ``verified`` signal.
+        Then, only if the pool did not fill the count, generate fresh ideas to top
+        it up — these make no safety claim and are re-vetted when the user looks
+        them up (propose → confirm → assess). The ``avoid_ingredients`` are
+        client-asserted: they exclude pool dishes built on them and anchor the
+        generation prompt, but never touch a verdict.
+
+        Retrieval is zero model calls, so usage is tallied only when the
+        generation tier actually runs.
         """
         self._begin_usage()
         anchors = await self._safe_anchors(avoid_ingredients)
+        verified = _verified_alternatives(
+            await self._verified_picks(goal, dish, anchors, avoid_ingredients)
+        )
+        generated: list[DishAlternative] = []
+        if len(verified) < MAX_ALTERNATIVES:
+            generated = await self._generate_alternatives(dish, goal, anchors, avoid_ingredients)
+        suggestions = _merge_alternatives(verified, generated, dish)
+        # Counts and the goal enum only: this always-on line carries no user content.
+        log.info(
+            "dish_lookup.alternatives",
+            goal=goal.value,
+            verified=len(verified),
+            generated=len(generated),
+            kept=len(suggestions),
+            model=self._chat.model_name,
+        )
+        return DishAlternativesResponse(
+            dish=dish,
+            goal=goal,
+            alternatives=suggestions,
+            model=self._chat.model_name,
+            usage=self._collect_usage(),
+        )
+
+    async def _verified_picks(
+        self, goal: AlternativeGoal, dish: str, anchors: list[str], avoid_ingredients: list[str]
+    ) -> list[CuratedMeal]:
+        """Retrieve approved-pool meals for the goal; the goal picks the query axis.
+
+        ``same_style`` searches by the rejected dish name (the nearest pool dishes
+        are the same style, now safe by membership); ``similar_flavours`` searches
+        by the safe-anchor flavour terms; ``any_meal`` skips similarity and samples
+        at random. The ``avoid_ingredients`` are excluded throughout, so a pool dish
+        built on what the user is avoiding is never offered back.
+        """
+        match goal:
+            case AlternativeGoal.SAME_STYLE:
+                matches = await self._meal_service.search(
+                    dish, k=MAX_ALTERNATIVES, exclude=avoid_ingredients
+                )
+                return [match.meal for match in matches]
+            case AlternativeGoal.SIMILAR_FLAVOURS:
+                # No anchors means no flavour query, so search returns nothing and
+                # the generation tier fills in.
+                matches = await self._meal_service.search(
+                    " ".join(anchors), k=MAX_ALTERNATIVES, exclude=avoid_ingredients
+                )
+                return [match.meal for match in matches]
+            case AlternativeGoal.ANY_MEAL:
+                return await self._meal_service.random_sample(
+                    k=MAX_ALTERNATIVES, exclude=avoid_ingredients
+                )
+        assert_never(goal)
+
+    async def _generate_alternatives(
+        self, dish: str, goal: AlternativeGoal, anchors: list[str], avoid_ingredients: list[str]
+    ) -> list[DishAlternative]:
+        """Generate fresh dish ideas grounded in the safe anchors (one model call)."""
         messages: list[BaseMessage] = [
             SystemMessage(self._alternatives_prompt),
             HumanMessage(
@@ -1001,19 +1107,4 @@ class DishLookupAgent(BaseAgent):
         log.debug("dish_lookup.alternatives_request", messages=loggable_messages(messages))
         draft = await self._structured_invoke(DishAlternativesDraft, messages, step="alternatives")
         log.debug("dish_lookup.alternatives_reply", draft=draft.model_dump())
-        suggestions = _normalized_alternatives(draft.alternatives, dish)
-        # Counts and the goal enum only: this always-on line carries no user content.
-        log.info(
-            "dish_lookup.alternatives",
-            goal=goal.value,
-            suggested=len(draft.alternatives),
-            kept=len(suggestions),
-            model=self._chat.model_name,
-        )
-        return DishAlternativesResponse(
-            dish=dish,
-            goal=goal,
-            alternatives=suggestions,
-            model=self._chat.model_name,
-            usage=self._collect_usage(),
-        )
+        return _generated_alternatives(draft.alternatives)

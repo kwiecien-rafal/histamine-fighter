@@ -19,15 +19,18 @@ from app.agents.dish_lookup import DishLookupAgent
 from app.enums import (
     AdaptationAction,
     AlternativeGoal,
+    ApprovalStatus,
     Compatibility,
     CulinaryRole,
     DishIntegrity,
     HistamineMechanism,
+    MealType,
     SafetyLevel,
 )
 from app.llm.errors import LLMInvocationError
 from app.llm.langchain_factory import ChatModel
-from app.models import HistamineIngredient
+from app.models import CuratedMeal, HistamineIngredient
+from app.models.curated_meal import meal_embedding_text
 from app.schemas.meal import (
     MAX_ADVISORY_CHARS,
     MAX_ALTERNATIVES,
@@ -48,6 +51,8 @@ from app.schemas.meal import (
     ProposedIngredients,
 )
 from app.services.ingredient_service import IngredientMatch, IngredientService
+from app.services.meal_service import MealService
+from tests.fakes import FakeEmbedder
 
 
 def _ingredient(name: str, **kwargs: object) -> HistamineIngredient:
@@ -134,7 +139,9 @@ class _ScriptedChat:
 
 def _agent(chat: _ScriptedChat, service: IngredientService) -> DishLookupAgent:
     wrapper = ChatModel(model=chat, model_name="stub/model")  # type: ignore[arg-type]
-    return DishLookupAgent(chat=wrapper, service=service)
+    # The meal pool shares the test session; FakeEmbedder keeps retrieval offline.
+    meal_service = MealService(service._session, FakeEmbedder())
+    return DishLookupAgent(chat=wrapper, service=service, meal_service=meal_service)
 
 
 # --- propose: the decomposition the user will confirm -----------------------------
@@ -231,7 +238,11 @@ async def test_a_none_structured_reply_becomes_a_clean_domain_error(
     # and answer in prose; LangChain then yields None instead of raising. Both
     # phases must map that to the domain error, not 500 on attribute access.
     wrapper = ChatModel(model=_NoOutput(), model_name="stub/model")  # type: ignore[arg-type]
-    agent = DishLookupAgent(chat=wrapper, service=IngredientService(session))
+    agent = DishLookupAgent(
+        chat=wrapper,
+        service=IngredientService(session),
+        meal_service=MealService(session, FakeEmbedder()),
+    )
 
     with pytest.raises(LLMInvocationError):
         await agent.propose(dish="anything")
@@ -245,7 +256,11 @@ async def test_a_parse_miss_is_still_counted(session: AsyncSession) -> None:
     # A model that spends tokens then answers in prose (no tool call) still cost
     # money, so the call is tallied before the failure is raised.
     wrapper = ChatModel(model=_NoOutput(), model_name="stub/model")  # type: ignore[arg-type]
-    agent = DishLookupAgent(chat=wrapper, service=IngredientService(session))
+    agent = DishLookupAgent(
+        chat=wrapper,
+        service=IngredientService(session),
+        meal_service=MealService(session, FakeEmbedder()),
+    )
 
     with pytest.raises(LLMInvocationError):
         await agent.propose(dish="anything")
@@ -1415,6 +1430,157 @@ async def test_alternatives_failure_becomes_a_clean_domain_error(session: AsyncS
         await _agent(chat, IngredientService(session)).alternatives(
             "anything", AlternativeGoal.ANY_MEAL, ["tomato"]
         )
+
+
+# --- alternatives: the verified-pool tier -----------------------------------------
+
+
+def _meal_agent(
+    chat: _ScriptedChat, session: AsyncSession, *, min_similarity: float = 0.0
+) -> DishLookupAgent:
+    # Floor defaults to 0 so the bag-of-words FakeEmbedder still clears it; raise it
+    # to exercise the floor falling back to generation.
+    wrapper = ChatModel(model=chat, model_name="stub/model")  # type: ignore[arg-type]
+    meal_service = MealService(session, FakeEmbedder(), min_similarity=min_similarity)
+    return DishLookupAgent(
+        chat=wrapper, service=IngredientService(session), meal_service=meal_service
+    )
+
+
+async def _add_approved_meal(
+    session: AsyncSession,
+    *,
+    name: str,
+    description: str,
+    meal_type: MealType = MealType.DINNER,
+    ingredients: list[dict[str, str | None]] | None = None,
+    approval_status: ApprovalStatus = ApprovalStatus.APPROVED,
+) -> None:
+    vector = (await FakeEmbedder().embed_documents([meal_embedding_text(name, description, [])]))[0]
+    session.add(
+        CuratedMeal(
+            name=name,
+            meal_type=meal_type,
+            description=description,
+            ingredients=ingredients or [],
+            recipe=None,
+            tags=[],
+            model="fake/test",
+            reasoning_trace=[],
+            approval_status=approval_status,
+            embedding=vector,
+        )
+    )
+    await session.flush()
+
+
+async def test_alternatives_fill_from_the_pool_skip_generation(session: AsyncSession) -> None:
+    # A pool that fills the count serves only verified picks and never calls the
+    # model, so usage stays zero.
+    for name in ("Courgette ribbon salad", "Courgette herb bowl", "Courgette fritters"):
+        await _add_approved_meal(session, name=name, description="fresh courgette with herbs")
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Generated Dish"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    assert len(result.alternatives) == MAX_ALTERNATIVES
+    assert all(item.source == "verified" for item in result.alternatives)
+    assert "Generated Dish" not in [item.name for item in result.alternatives]
+    assert chat.seen == []  # generation never ran
+    assert result.usage.calls == 0
+
+
+async def test_alternatives_thin_pool_fills_the_rest_with_generation(
+    session: AsyncSession,
+) -> None:
+    # One verified pick leads; generation tops the list up, tallying one model call.
+    await _add_approved_meal(
+        session, name="Courgette ribbon salad", description="fresh courgette with herbs"
+    )
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One", "Gen Two", "Gen Three"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    assert [item.source for item in result.alternatives] == ["verified", "generated", "generated"]
+    assert result.alternatives[0].name == "Courgette ribbon salad"
+    assert result.usage.calls == 1
+
+
+async def test_alternatives_empty_pool_is_all_generated(session: AsyncSession) -> None:
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "anything", AlternativeGoal.ANY_MEAL, ["tomato"]
+    )
+
+    assert [item.source for item in result.alternatives] == ["generated"]
+
+
+async def test_alternatives_exclude_keeps_an_avoid_ingredient_meal_out(
+    session: AsyncSession,
+) -> None:
+    await _add_approved_meal(
+        session,
+        name="Tomato courgette bake",
+        description="courgette with herbs",
+        ingredients=[{"name": "tomato", "category": "nightshade"}],
+    )
+    await _add_approved_meal(
+        session,
+        name="Courgette herb bowl",
+        description="courgette with herbs",
+        ingredients=[{"name": "courgette", "category": "vegetable"}],
+    )
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One", "Gen Two"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    names = [item.name for item in result.alternatives]
+    assert "Tomato courgette bake" not in names
+    verified = [item for item in result.alternatives if item.source == "verified"]
+    assert [item.name for item in verified] == ["Courgette herb bowl"]
+
+
+async def test_alternatives_any_meal_samples_verified_from_the_pool(
+    session: AsyncSession,
+) -> None:
+    # any_meal skips similarity, so a pool meal sharing no words with the dish is
+    # still a verified pick.
+    for name in ("Buckwheat porridge", "Pear oat bowl", "Rice congee"):
+        await _add_approved_meal(session, name=name, description="warm and simple")
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Generated Dish"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "spicy chorizo tacos", AlternativeGoal.ANY_MEAL, ["chorizo"]
+    )
+
+    assert len(result.alternatives) == MAX_ALTERNATIVES
+    assert all(item.source == "verified" for item in result.alternatives)
+    assert chat.seen == []
+
+
+async def test_alternatives_weak_match_below_floor_falls_back_to_generation(
+    session: AsyncSession,
+) -> None:
+    # A pool meal sharing no words with the dish sits below the floor, so the
+    # verified tier stays empty and generation fills instead of surfacing a poor
+    # "from our kitchen" pick.
+    await _add_approved_meal(
+        session, name="Buckwheat porridge with pear", description="warm and sweet"
+    )
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+
+    result = await _meal_agent(chat, session, min_similarity=0.5).alternatives(
+        "spicy chorizo tacos", AlternativeGoal.SAME_STYLE, ["chorizo"]
+    )
+
+    assert [item.source for item in result.alternatives] == ["generated"]
 
 
 # --- the confirmed-ingredient boundary --------------------------------------------

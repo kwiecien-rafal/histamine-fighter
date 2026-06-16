@@ -20,6 +20,9 @@ function sseResponse(frames: string[]): Response {
 }
 
 afterEach(() => {
+  // unstubAllGlobals undoes vi.stubGlobal("fetch", ...); restoreAllMocks does not,
+  // so without it the stubbed fetch would leak into other suites.
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -69,6 +72,7 @@ describe("useReasoningStream", () => {
     await result.current.start("snack");
 
     await waitFor(() => expect(onExpired).toHaveBeenCalledTimes(1));
-    expect(result.current.status).toBe("streaming");
+    // The auth path bails to logout, so it never falls through to the error path.
+    expect(result.current.error).toBeNull();
   });
 });

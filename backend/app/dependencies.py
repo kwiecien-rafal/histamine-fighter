@@ -119,14 +119,16 @@ def _unauthorized() -> HTTPException:
 def build_dish_lookup_agent(
     request: Request,
     service: IngredientService = Depends(get_ingredient_service),
+    meal_service: MealService = Depends(get_meal_service),
 ) -> DishLookupAgent:
-    """Wire a request-scoped dish-lookup agent: chat model + DB-backed index.
+    """Wire a request-scoped dish-lookup agent: chat model, index, and meal pool.
 
     ``build_chat_model`` resolves the provider from the request headers and may
-    raise the LLM domain errors, which the API boundary maps to status codes.
+    raise the LLM domain errors, which the API boundary maps to status codes. The
+    meal pool feeds the verified tier of the alternatives pivot.
     """
     chat = build_chat_model(LLMRequestConfig.from_headers(request))
-    return DishLookupAgent(chat=chat, service=service)
+    return DishLookupAgent(chat=chat, service=service, meal_service=meal_service)
 
 
 def build_learn_agent(

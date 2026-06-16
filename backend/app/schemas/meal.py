@@ -312,10 +312,18 @@ class DishAlternativesDraft(BaseModel):
 
 
 class DishAlternative(BaseModel):
-    """One suggested dish; its name fits :class:`DishLookupRequest` for re-lookup."""
+    """One suggested dish; its name fits :class:`DishLookupRequest` for re-lookup.
+
+    ``source`` is a neutral domain value, not branded copy (CLAUDE section 19):
+    ``verified`` is a member of the approved pool (code-verified and admin-approved,
+    so the claim is sound), ``generated`` is a fresh idea the user re-vets on click.
+    It defaults to ``generated`` so a caller that does not set it makes no safety
+    claim.
+    """
 
     name: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
     pitch: str = Field(max_length=MAX_PITCH_CHARS)
+    source: Literal["verified", "generated"] = "generated"
 
 
 class DishAlternativesResponse(BaseModel):

@@ -1,5 +1,6 @@
 import type { AlternativeGoal } from "../api/client";
 import type { AlternativesState } from "../hooks/useDishLookupFlow";
+import { ALTERNATIVE_SOURCE } from "../lib/alternatives";
 import type { PivotTone } from "../lib/assessment";
 import { LLMProviderBadge } from "./LLMProviderBadge";
 
@@ -83,27 +84,34 @@ export function AlternativesPanel({
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
-            {alternatives.suggestions.map((suggestion) => (
-              <li key={suggestion.name}>
-                <button
-                  type="button"
-                  onClick={() => onPick(suggestion.name)}
-                  className="w-full text-left rounded border border-stone-200 bg-stone-50 px-3 py-2 hover:border-emerald-700 cursor-pointer"
-                >
-                  <span className="block font-medium text-emerald-800">
-                    {suggestion.name}
-                  </span>
-                  {suggestion.pitch && (
-                    <span className="block text-sm text-stone-600 mt-0.5">
-                      {suggestion.pitch}
+            {alternatives.suggestions.map((suggestion) => {
+              const badge = ALTERNATIVE_SOURCE[suggestion.source];
+              return (
+                <li key={suggestion.name}>
+                  <button
+                    type="button"
+                    onClick={() => onPick(suggestion.name)}
+                    className="w-full text-left rounded border border-stone-200 bg-stone-50 px-3 py-2 hover:border-emerald-700 cursor-pointer"
+                  >
+                    <span className="block font-medium text-emerald-800">
+                      {suggestion.name}
                     </span>
-                  )}
-                  <span className="block text-xs text-stone-400 mt-1">
-                    Tap to check this dish
-                  </span>
-                </button>
-              </li>
-            ))}
+                    {suggestion.pitch && (
+                      <span className="block text-sm text-stone-600 mt-0.5">
+                        {suggestion.pitch}
+                      </span>
+                    )}
+                    <span
+                      className={`block text-xs mt-1 ${
+                        badge.verified ? "font-medium text-emerald-700" : "text-stone-400"
+                      }`}
+                    >
+                      {badge.label}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ))}
     </section>

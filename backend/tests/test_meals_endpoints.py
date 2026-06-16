@@ -265,7 +265,9 @@ async def test_alternatives_returns_the_suggestion_shape(client: AsyncClient) ->
     assert resp.json() == {
         "dish": "bolognese",
         "goal": "same_style",
-        "alternatives": [{"name": "Courgette Pasta", "pitch": "Fresh and herby."}],
+        "alternatives": [
+            {"name": "Courgette Pasta", "pitch": "Fresh and herby.", "source": "generated"}
+        ],
         "model": "stub/model",
         "usage": _EMPTY_USAGE,
     }

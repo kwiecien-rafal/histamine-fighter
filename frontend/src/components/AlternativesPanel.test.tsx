@@ -69,12 +69,28 @@ describe("AlternativesPanel", () => {
     renderPanel({
       status: "loaded",
       goal: "any_meal",
-      suggestions: [{ name: "Courgette Pasta", pitch: "Fresh and herby." }],
+      suggestions: [{ name: "Courgette Pasta", pitch: "Fresh and herby.", source: "generated" }],
       model: "stub/model",
       cache: {},
     });
 
     expect(screen.getByText("stub/model")).toBeInTheDocument();
+  });
+
+  it("marks a verified pool pick as from our kitchen", () => {
+    renderPanel({
+      status: "loaded",
+      goal: "same_style",
+      suggestions: [
+        { name: "Courgette ribbon salad", pitch: "Fresh and herby.", source: "verified" },
+        { name: "Caponata", pitch: "Smoky and rich.", source: "generated" },
+      ],
+      model: "stub/model",
+      cache: {},
+    });
+
+    expect(screen.getByText("✓ From our kitchen")).toBeInTheDocument();
+    expect(screen.getByText("Tap to check this dish")).toBeInTheDocument();
   });
 
   it("fires onChooseGoal with the picked goal", async () => {
@@ -94,7 +110,7 @@ describe("AlternativesPanel", () => {
       {
         status: "loaded",
         goal: "any_meal",
-        suggestions: [{ name: "Courgette Pasta", pitch: "Fresh and herby." }],
+        suggestions: [{ name: "Courgette Pasta", pitch: "Fresh and herby.", source: "generated" }],
         model: "stub/model",
         cache: {},
       },
