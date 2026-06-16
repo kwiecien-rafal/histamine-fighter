@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { MAX_DISH_CHARS } from "../api/client";
 import { AlternativesPanel } from "../components/AlternativesPanel";
@@ -43,13 +44,21 @@ export function DishLookup() {
       <div className="max-w-xl mx-auto">
         <header className="flex items-start justify-between mb-2">
           <h1 className="text-3xl font-semibold">Histamine Fighter</h1>
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
-          >
-            Settings
-          </button>
+          <nav className="flex items-center gap-4">
+            <Link
+              to="/daily"
+              className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4"
+            >
+              Today's meals
+            </Link>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
+            >
+              Settings
+            </button>
+          </nav>
         </header>
         <p className="text-stone-600 mb-8">
           Ask whether a dish is safe for histamine intolerance.
