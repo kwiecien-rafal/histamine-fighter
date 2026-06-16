@@ -11,6 +11,7 @@ from app.llm.config import LLMRequestConfig
 from app.llm.langchain_factory import build_chat_model
 from app.models.admin_user import AdminUser
 from app.services.admin_service import AdminService
+from app.services.daily_service import DailyService
 from app.services.ingredient_service import IngredientService
 from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService
@@ -61,6 +62,12 @@ def get_meal_review_service(
     session: AsyncSession = Depends(get_session),
 ) -> MealReviewService:
     return MealReviewService(session)
+
+
+def get_daily_service(
+    session: AsyncSession = Depends(get_session),
+) -> DailyService:
+    return DailyService(session)
 
 
 async def get_current_admin(

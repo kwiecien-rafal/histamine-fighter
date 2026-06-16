@@ -1,5 +1,6 @@
 """Request and response schemas for the admin gate."""
 
+import datetime as dt
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
@@ -7,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.enums import ApprovalStatus, MealType
+from app.schemas.daily import DailyMealContent
 from app.schemas.meal import ProposedIngredient, TraceEvent
 
 # Generous bounds: just enough to reject absurd payloads. A password over bcrypt's
@@ -48,6 +50,28 @@ class AdminMealRead(BaseModel):
     tags: list[str]
     model: str = Field(description="Which model composed the meal.")
     reasoning_trace: list[TraceEvent]
+    approval_status: ApprovalStatus
+    approved_at: datetime | None
+    approved_by: str | None
+    created_at: datetime
+
+
+class AdminDailyRead(BaseModel):
+    """One daily suggestion as the review queue shows it.
+
+    Carries the full meal content and the recorded trace so the admin reviews
+    what the agent actually composed before it can reveal on the public board.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    date: dt.date = Field(validation_alias="suggestion_date")
+    meal_type: MealType
+    content: DailyMealContent
+    model: str = Field(description="Which model composed the meal.")
+    reasoning_trace: list[TraceEvent]
+    reveal_at: datetime
     approval_status: ApprovalStatus
     approved_at: datetime | None
     approved_by: str | None
