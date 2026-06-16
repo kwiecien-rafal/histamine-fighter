@@ -68,4 +68,12 @@ describe("ReasoningReplay", () => {
 
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
+
+  it("shows every event at once in live mode, with no Skip", () => {
+    render(<ReasoningReplay events={[event("first"), event("second")]} live />);
+
+    expect(screen.getByText("first")).toBeInTheDocument();
+    expect(screen.getByText("second")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
+  });
 });

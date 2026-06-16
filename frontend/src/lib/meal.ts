@@ -9,6 +9,9 @@ export const MEAL_TYPE_LABEL: Record<MealType, string> = {
   snack: "Snack",
 };
 
+// Meal types in their natural order, for selectors.
+export const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner", "snack"];
+
 export const TRACE_KIND_LABEL: Record<TraceEvent["kind"], string> = {
   draft: "Draft",
   check: "Check",

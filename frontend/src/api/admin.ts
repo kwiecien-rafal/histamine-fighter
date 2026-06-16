@@ -26,6 +26,19 @@ export interface AdminMeal {
   created_at: string;
 }
 
+// The composer's output as streamed by the live "generate now" demo. Mirrors
+// AdminMeal without the persistence fields, since a live composition is not saved.
+export interface ComposedMeal {
+  name: string;
+  meal_type: MealType;
+  description: string;
+  ingredients: ProposedIngredient[];
+  recipe: string[] | null;
+  tags: string[];
+  reasoning_trace: TraceEvent[];
+  model: string;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: string;

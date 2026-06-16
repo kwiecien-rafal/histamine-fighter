@@ -11,6 +11,7 @@ from app.llm.config import LLMRequestConfig
 from app.llm.langchain_factory import build_chat_model
 from app.models.admin_user import AdminUser
 from app.services.admin_service import AdminService
+from app.services.composer_streamer import ComposerStreamer
 from app.services.daily_service import DailyService
 from app.services.ingredient_service import IngredientService
 from app.services.knowledge_service import KnowledgeService
@@ -68,6 +69,22 @@ def get_daily_service(
     session: AsyncSession = Depends(get_session),
 ) -> DailyService:
     return DailyService(session)
+
+
+# Slightly creative so a live demo varies run to run; the index still gates safety.
+_COMPOSE_TEMPERATURE = 0.4
+
+
+def get_composer_streamer() -> ComposerStreamer:
+    """Wire the live composer for the admin trigger.
+
+    Board composition is an operator action, not a per-user request, so the
+    provider resolves from settings like the cron scripts, never from X-LLM
+    headers. A bad provider config raises here (mapped to 400/501 at the boundary)
+    before the stream opens; a tool-incapable model fails later as a stream error.
+    """
+    chat = build_chat_model(LLMRequestConfig(), temperature=_COMPOSE_TEMPERATURE)
+    return ComposerStreamer(chat, get_embedder())
 
 
 async def get_current_admin(

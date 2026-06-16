@@ -77,7 +77,8 @@ describe("Admin", () => {
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(await screen.findByText("Courgette ribbon salad")).toBeInTheDocument();
-    expect(screen.getByText("Lunch")).toBeInTheDocument();
+    // Scope to the meal-type chip: the live-compose selector also renders a "Lunch" option.
+    expect(screen.getByText("Lunch", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/vegetable/)).toBeInTheDocument();
     expect(loginMock).toHaveBeenCalledWith("admin@example.com", "supersecret");
   });

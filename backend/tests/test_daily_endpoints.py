@@ -5,16 +5,23 @@ session). The public read derives "today" from the real UTC clock, so rows are
 created for today with a reveal time deliberately in the past or future.
 """
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from httpx import AsyncClient
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ratelimit import limiter
 from app.core.security import create_access_token, hash_password
+from app.db.session import get_session
+from app.dependencies import get_composer_streamer
 from app.enums import ApprovalStatus, MealType
+from app.main import create_app
 from app.models import DailySuggestion
 from app.models.admin_user import AdminUser
+from app.schemas.meal import ComposedMeal, ProposedIngredient, TraceEvent
 
 _EMAIL = "admin@example.com"
 _PASSWORD = "supersecret"
@@ -200,3 +207,79 @@ async def test_approve_unknown_suggestion_is_404(
     )
 
     assert resp.status_code == 404
+
+
+# --- POST /admin/daily/generate (live SSE) ----------------------------------------
+
+
+class _FakeStreamer:
+    """Stands in for ComposerStreamer: a scripted trace then the composed meal."""
+
+    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
+        yield TraceEvent(
+            kind="reject", text="Dropped parmesan — avoid.", ingredient="parmesan"
+        ).model_dump_json()
+        yield ComposedMeal(
+            name="Courgette ribbon salad",
+            meal_type=meal_type,
+            description="raw courgette ribbons with olive oil and fresh herbs",
+            ingredients=[ProposedIngredient(name="courgette", category="vegetable")],
+            recipe=["Peel into ribbons."],
+            tags=["fresh"],
+            reasoning_trace=[],
+            model="fake/test",
+        ).model_dump_json()
+
+
+@pytest_asyncio.fixture
+async def sse_client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    """A client whose composer is the scripted fake, sharing the test session."""
+    app = create_app()
+
+    async def _use_test_session() -> AsyncIterator[AsyncSession]:
+        yield session
+
+    app.dependency_overrides[get_session] = _use_test_session
+    app.dependency_overrides[get_composer_streamer] = _FakeStreamer
+    limiter.enabled = False
+    transport = ASGITransport(app=app)
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+            yield http_client
+    finally:
+        limiter.enabled = True
+
+
+async def test_generate_without_a_token_is_401(client: AsyncClient) -> None:
+    resp = await client.post("/admin/daily/generate", json={"meal_type": "breakfast"})
+    assert resp.status_code == 401
+
+
+async def test_generate_streams_trace_then_meal(
+    sse_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _add_admin(session)
+
+    resp = await sse_client.post(
+        "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    body = resp.text
+    assert "event: trace" in body
+    assert "event: meal" in body
+    assert "Dropped parmesan" in body
+    assert "Courgette ribbon salad" in body
+
+
+async def test_generate_with_a_bad_meal_type_is_422(
+    sse_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _add_admin(session)
+
+    resp = await sse_client.post(
+        "/admin/daily/generate", json={"meal_type": "brunch"}, headers=_auth_header()
+    )
+
+    assert resp.status_code == 422

@@ -25,6 +25,12 @@ class AdminLoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=MAX_PASSWORD_CHARS)
 
 
+class DailyGenerateRequest(BaseModel):
+    """Which meal slot the admin wants the live composer to demonstrate."""
+
+    meal_type: MealType
+
+
 class TokenResponse(BaseModel):
     """A bearer token the client stores and replays on admin requests."""
 

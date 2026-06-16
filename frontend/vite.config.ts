@@ -13,6 +13,7 @@ export default defineConfig({
       "/api": process.env.VITE_API_PROXY ?? "http://localhost:8000",
       "/admin/auth": process.env.VITE_API_PROXY ?? "http://localhost:8000",
       "/admin/meals": process.env.VITE_API_PROXY ?? "http://localhost:8000",
+      "/admin/daily": process.env.VITE_API_PROXY ?? "http://localhost:8000",
     },
   },
   test: {
