@@ -21,3 +21,8 @@ limiter = Limiter(key_func=get_remote_address)
 def llm_rate_limit() -> str:
     """The shared per-IP limit for endpoints that invoke a language model."""
     return f"{settings.rate_limit_per_minute}/minute"
+
+
+def auth_rate_limit() -> str:
+    """A tight per-IP limit on credential checks, to blunt password brute force."""
+    return "5/minute"

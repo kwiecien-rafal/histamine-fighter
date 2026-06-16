@@ -1,16 +1,26 @@
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.dish_lookup import DishLookupAgent
 from app.agents.learn import LearnAgent
+from app.core.security import TokenError, decode_access_token
 from app.db.session import get_session
 from app.embeddings import get_embedder
 from app.llm.config import LLMRequestConfig
 from app.llm.langchain_factory import build_chat_model
+from app.models.admin_user import AdminUser
+from app.services.admin_service import AdminService
 from app.services.ingredient_service import IngredientService
 from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService
+from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
+
+# auto_error=False so a missing or malformed header reaches get_current_admin as
+# None and is answered with 401 (not HTTPBearer's default 403). The scheme still
+# registers Bearer auth in the OpenAPI docs.
+_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_ingredient_service(
@@ -39,6 +49,47 @@ def get_meal_service(
     # Same embedder singleton as the knowledge retrieval; injected by constructor
     # so a test can swap in a deterministic stand-in.
     return MealService(session, get_embedder())
+
+
+def get_admin_service(
+    session: AsyncSession = Depends(get_session),
+) -> AdminService:
+    return AdminService(session)
+
+
+def get_meal_review_service(
+    session: AsyncSession = Depends(get_session),
+) -> MealReviewService:
+    return MealReviewService(session)
+
+
+async def get_current_admin(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    admin_service: AdminService = Depends(get_admin_service),
+) -> AdminUser:
+    """Resolve the admin from the Bearer JWT, or raise 401.
+
+    The account is re-read from the database, so a token for an admin that has
+    since been removed stops working. Wired onto admin routes only.
+    """
+    if credentials is None:
+        raise _unauthorized()
+    try:
+        email = decode_access_token(credentials.credentials)
+    except TokenError as exc:
+        raise _unauthorized() from exc
+    admin = await admin_service.get_by_email(email)
+    if admin is None:
+        raise _unauthorized()
+    return admin
+
+
+def _unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def build_dish_lookup_agent(

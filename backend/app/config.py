@@ -1,4 +1,11 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Obvious placeholder so local dev and tests boot without a secret. A public
+# deployment is refused while this is still in place (see the validator below),
+# so it can never stand in for a real production secret. Kept >=32 chars to clear
+# the HMAC key-length floor for HS256.
+DEV_SECRET_KEY = "dev-secret-change-me-not-for-production"
 
 
 class Settings(BaseSettings):
@@ -8,6 +15,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     public_deployment: bool = False
+
+    # Admin auth: signs the JWT issued at /admin/auth/login. Sourced from the
+    # environment in production; the dev placeholder is rejected when public.
+    secret_key: str = DEV_SECRET_KEY
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
 
     # Per-IP ceiling for the LLM-backed endpoints (the ones that cost money).
     rate_limit_per_minute: int = 10
@@ -32,6 +45,22 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
+
+    @model_validator(mode="after")
+    def _require_real_secret_when_public(self) -> "Settings":
+        """Refuse to boot a public deployment that still uses the dev secret.
+
+        Fails fast at startup rather than silently signing admin tokens with a
+        key that ships in the repo. Local dev and tests keep the placeholder.
+        """
+        if self.public_deployment and (
+            self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32
+        ):
+            raise ValueError(
+                "SECRET_KEY must be set to a strong, non-default value (>=32 chars) "
+                "for a public deployment."
+            )
+        return self
 
 
 settings = Settings()
