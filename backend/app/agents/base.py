@@ -97,11 +97,20 @@ class BaseAgent(ABC):
             reply, parsed = raw["raw"], raw["parsed"]
         except Exception as exc:
             raise LLMInvocationError(self._invocation_error) from exc
-        self._calls.append(_step_usage(step, reply))
+        self._tally(reply, step=step)
         if parsed is None:
             log.warning("agent.malformed_structured_output", step=step, model=self.model_name)
             raise LLMInvocationError(self._invocation_error)
         return cast(SchemaT, parsed)
+
+    def _tally(self, reply: BaseMessage, *, step: str) -> None:
+        """Record one model reply's token usage on the in-progress response tally.
+
+        Both ``_structured_invoke`` and the composer's manual tool loop route
+        through here, so a single structured call and a multi-iteration loop report
+        usage the same way and the transparency panel stays accurate.
+        """
+        self._calls.append(_step_usage(step, reply))
 
     def _begin_usage(self) -> None:
         """Start a fresh usage tally for the response about to be built."""

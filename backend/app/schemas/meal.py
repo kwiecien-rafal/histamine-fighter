@@ -8,6 +8,7 @@ from app.enums import (
     CulinaryRole,
     DishIntegrity,
     HistamineMechanism,
+    MealType,
     SafetyLevel,
 )
 from app.schemas.usage import LLMUsage
@@ -325,3 +326,83 @@ class DishAlternativesResponse(BaseModel):
     alternatives: list[DishAlternative] = Field(max_length=MAX_ALTERNATIVES)
     model: str = Field(description="Which model suggested the alternatives.")
     usage: LLMUsage = Field(description="Token usage of the model call behind this response.")
+
+
+# --- Composer: the agentic meal-composition loop --------------------------------
+
+
+class TraceEvent(BaseModel):
+    """One authored step of the composer's reasoning, for the showcase replay.
+
+    Written for a human watching the agent think, not raw tool JSON: ``text`` is a
+    plain-language line and ``kind`` drives the animation's styling. The ``reject``
+    events ("parmesan is avoid, dropping it") are the demo payoff.
+    """
+
+    kind: Literal["draft", "check", "swap", "reject", "submit", "verify"]
+    text: str
+    ingredient: str | None = None
+    compatibility: str | None = None
+
+
+class ComposedMeal(BaseModel):
+    """A meal the composer built and code verified index-safe, before admin review.
+
+    There is no verdict field because there is no per-meal verdict to report: the
+    meal is safe by construction (every ingredient cleared the index) or it was
+    never returned. Membership in the approved pool, once an admin signs off, is
+    the verified signal downstream.
+    """
+
+    name: str
+    meal_type: MealType
+    description: str
+    ingredients: list[ProposedIngredient]
+    recipe: list[str] | None
+    tags: list[str]
+    reasoning_trace: list[TraceEvent]
+    model: str
+
+
+class LookupIngredientSafety(BaseModel):
+    """Look up one ingredient's histamine compatibility in the curated index."""
+
+    ingredient: str = Field(
+        description="A single ingredient name like 'parmesan', not a phrase or dish."
+    )
+    category: str | None = Field(
+        default=None,
+        description="Optional food-group and preparation descriptor for the fallback, "
+        "e.g. 'aged hard cheese'.",
+    )
+
+
+class FindSafeIngredients(BaseModel):
+    """List well-tolerated ingredients in a food category, as safe building blocks."""
+
+    category: str = Field(
+        description="A food-group and preparation descriptor, e.g. 'fresh vegetable'."
+    )
+
+
+class SearchCuratedMeals(BaseModel):
+    """Search already-approved meals for inspiration and to avoid near-duplicates."""
+
+    query: str = Field(
+        description="A dish idea or flavour description to find similar approved meals."
+    )
+    meal_type: MealType | None = Field(
+        default=None, description="Optionally restrict the search to one meal type."
+    )
+
+
+class SubmitMeal(BaseModel):
+    """Submit the finished meal once every ingredient is verified index-safe."""
+
+    name: str = Field(description="The dish name, short and appetising.")
+    description: str = Field(description="One or two sentences describing the meal.")
+    ingredients: list[ProposedIngredientDraft] = Field(
+        description="Every ingredient, each with a short food-group and preparation category."
+    )
+    recipe: list[str] = Field(default_factory=list, description="Ordered preparation steps.")
+    tags: list[str] = Field(default_factory=list, description="A few short descriptive tags.")
