@@ -1,5 +1,11 @@
+from pathlib import Path
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The .env lives at the repo root, but scripts run with the working directory set
+# to backend/ (uv run --directory backend ...), so a relative path would miss it.
+ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 # Obvious placeholder so local dev and tests boot without a secret. A public
 # deployment is refused while this is still in place (see the validator below),
@@ -9,7 +15,7 @@ DEV_SECRET_KEY = "dev-secret-change-me-not-for-production"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, extra="ignore")
 
     debug: bool = True
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
