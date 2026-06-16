@@ -10,6 +10,7 @@ from app.llm.langchain_factory import build_chat_model
 from app.services.ingredient_service import IngredientService
 from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService
+from app.services.meal_service import MealService
 
 
 def get_ingredient_service(
@@ -30,6 +31,14 @@ def get_learn_cache_service(
     session: AsyncSession = Depends(get_session),
 ) -> LearnCacheService:
     return LearnCacheService(session)
+
+
+def get_meal_service(
+    session: AsyncSession = Depends(get_session),
+) -> MealService:
+    # Same embedder singleton as the knowledge retrieval; injected by constructor
+    # so a test can swap in a deterministic stand-in.
+    return MealService(session, get_embedder())
 
 
 def build_dish_lookup_agent(

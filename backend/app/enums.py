@@ -101,3 +101,24 @@ class MatchType(StrEnum):
     EXACT = "exact"
     ALIAS = "alias"
     FUZZY = "fuzzy"
+
+
+class MealType(StrEnum):
+    """Which meal of the day a curated suggestion is for."""
+
+    BREAKFAST = "breakfast"
+    LUNCH = "lunch"
+    DINNER = "dinner"
+    SNACK = "snack"
+
+
+class ApprovalStatus(StrEnum):
+    """Whether a composed meal has cleared human review for the public pool.
+
+    A meal is pool-eligible only once an admin moves it to ``approved``; until
+    then membership cannot be read as the verified-safe signal it stands for.
+    """
+
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
