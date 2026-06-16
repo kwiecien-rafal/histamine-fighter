@@ -90,6 +90,9 @@ from app.services.ingredient_service import IngredientMatch, IngredientService
 log = structlog.get_logger(__name__)
 
 _SUBSTITUTE_LIMIT = 3
+# Most well-tolerated anchors to steer the alternatives prompt with — a focused
+# set that points a direction without burying the goal in a long ingredient list.
+_MAX_SAFE_ANCHORS = 9
 _INVOCATION_ERROR = (
     "The language model failed to complete the dish lookup. "
     "If you selected a custom model, make sure it supports structured output."
@@ -116,7 +119,7 @@ _SYNTHESIS_TAGS = (
     "avoid_ingredients",
     "watch_ingredients",
 )
-_ALTERNATIVES_TAGS = ("dish_text", "excluded_ingredients")
+_ALTERNATIVES_TAGS = ("dish_text", "excluded_ingredients", "safe_anchors")
 _DISAMBIGUATE_TAGS = ("dish_text", "ingredients")
 
 
@@ -928,6 +931,41 @@ class DishLookupAgent(BaseAgent):
         matches = await self._service.find_candidates(swap)
         return _matches_safety(matches) is SafetyLevel.SAFE
 
+    async def _safe_anchors(self, avoid_ingredients: list[str]) -> list[str]:
+        """Well-tolerated ingredients to steer the suggestions toward, by category.
+
+        Each excluded ingredient is resolved against the index to recover its food
+        category, then that category's well-tolerated rows ride along as anchors —
+        the same retrieval and substitute lookup the assess path already uses, all
+        curated reads with no model call. An excluded ingredient never anchors its
+        own replacement; the result is deduped (case-insensitive) and capped.
+        """
+        excluded = {name.casefold() for name in avoid_ingredients}
+        matches_by_name = await self._service.find_candidates_many(avoid_ingredients)
+        categories: list[str] = []
+        seen_categories: set[str] = set()
+        for name in avoid_ingredients:
+            for match in matches_by_name[name]:
+                category = match.ingredient.category
+                if category and category.casefold() not in seen_categories:
+                    seen_categories.add(category.casefold())
+                    categories.append(category)
+
+        anchors: list[str] = []
+        seen: set[str] = set()
+        for category in categories:
+            for substitute in await self._service.find_substitutes(
+                category, limit=_SUBSTITUTE_LIMIT
+            ):
+                key = substitute.name.casefold()
+                if key in excluded or key in seen:
+                    continue
+                seen.add(key)
+                anchors.append(substitute.name)
+                if len(anchors) == _MAX_SAFE_ANCHORS:
+                    return anchors
+        return anchors
+
     async def alternatives(
         self, dish: str, goal: AlternativeGoal, avoid_ingredients: list[str]
     ) -> DishAlternativesResponse:
@@ -936,19 +974,26 @@ class DishLookupAgent(BaseAgent):
         Suggestions carry no safety claim: each is vetted only by the user
         looking it up again through propose → confirm → assess. The
         ``avoid_ingredients`` are client-asserted and only steer the prompt —
-        they never touch a verdict, so re-verifying them buys nothing.
+        they never touch a verdict, so re-verifying them buys nothing. They do
+        anchor it, though: their index categories yield well-tolerated swaps the
+        prompt is told to build on, so suggestions lean on safe ingredients by
+        construction rather than rescuing one fixed dish after the fact.
         """
         self._begin_usage()
+        anchors = await self._safe_anchors(avoid_ingredients)
         messages: list[BaseMessage] = [
             SystemMessage(self._alternatives_prompt),
             HumanMessage(
                 render_prompt(
                     self._alternatives_user_template,
                     "dish_lookup/alternatives_user",
-                    # The dish and the ingredient names are direct user input;
-                    # the goal line is code-owned and needs no stripping.
+                    # The dish and the ingredient names are direct user input; the
+                    # goal line and the curated anchors are code-owned, so neither
+                    # is stripped — but both tags stay in the strip set so user
+                    # input can forge neither region.
                     dish=strip_region_tags(dish, _ALTERNATIVES_TAGS),
                     excluded=strip_region_tags(", ".join(avoid_ingredients), _ALTERNATIVES_TAGS),
+                    safe_anchors=", ".join(anchors) if anchors else "None.",
                     goal_line=_goal_line(goal),
                 )
             ),
