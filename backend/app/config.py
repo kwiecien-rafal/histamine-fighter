@@ -7,10 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # to backend/ (uv run --directory backend ...), so a relative path would miss it.
 ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
-# Obvious placeholder so local dev and tests boot without a secret. A public
-# deployment is refused while this is still in place (see the validator below),
-# so it can never stand in for a real production secret. Kept >=32 chars to clear
-# the HMAC key-length floor for HS256.
+# Obvious placeholder so local dev and tests boot without a secret. Production
+# (PUBLIC_DEPLOYMENT or DEBUG off) is refused while this is still in place (see
+# the validator below), so it can never stand in for a real production secret.
 DEV_SECRET_KEY = "dev-secret-change-me-not-for-production"
 
 
@@ -23,7 +22,7 @@ class Settings(BaseSettings):
     public_deployment: bool = False
 
     # Admin auth: signs the JWT issued at /admin/auth/login. Sourced from the
-    # environment in production; the dev placeholder is rejected when public.
+    # environment in production; the dev placeholder is rejected there.
     secret_key: str = DEV_SECRET_KEY
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -53,18 +52,22 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = None
 
     @model_validator(mode="after")
-    def _require_real_secret_when_public(self) -> "Settings":
-        """Refuse to boot a public deployment that still uses the dev secret.
+    def _validate_secret(self) -> "Settings":
+        """Require a strong admin secret in production, failing fast at startup.
 
-        Fails fast at startup rather than silently signing admin tokens with a
-        key that ships in the repo. Local dev and tests keep the placeholder.
+        Production is any production signal: PUBLIC_DEPLOYMENT, or DEBUG off
+        (CLAUDE section 20 mandates DEBUG=false in production). Tying the check to
+        both means it no longer hinges on a single flag an operator may forget.
         """
-        if self.public_deployment and (
-            self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32
-        ):
+        # A blank SECRET_KEY is treated as unset so a copied .env.example falls
+        # back to the placeholder instead of signing tokens with an empty key.
+        if not self.secret_key.strip():
+            self.secret_key = DEV_SECRET_KEY
+        is_production = self.public_deployment or not self.debug
+        if is_production and (self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32):
             raise ValueError(
-                "SECRET_KEY must be set to a strong, non-default value (>=32 chars) "
-                "for a public deployment."
+                "SECRET_KEY must be a strong, non-default value (>=32 chars) in "
+                "production (PUBLIC_DEPLOYMENT=true or DEBUG=false)."
             )
         return self
 
