@@ -92,7 +92,11 @@ class _StubAgent:
         )
 
     async def alternatives(
-        self, dish: str, goal: AlternativeGoal, avoid_ingredients: list[str]
+        self,
+        dish: str,
+        goal: AlternativeGoal,
+        avoid_ingredients: list[str],
+        prefer_ingredients: list[str] | None = None,
     ) -> DishAlternativesResponse:
         return DishAlternativesResponse(
             dish=dish,

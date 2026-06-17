@@ -233,6 +233,11 @@ export function useDishLookupFlow() {
     // or a no-safe-swap), so this list is never empty. Reading them off a
     // separate filter would be a second, drift-prone notion of "avoid-level".
     const avoidIngredients = result.adaptations.flatMap((entry) => entry.ingredients);
+    // The dish's own safe parts anchor the suggestions toward what already worked,
+    // rather than the backend reverse-engineering anchors from the avoid list.
+    const preferIngredients = result.ingredients
+      .filter((item) => item.safety === "safe")
+      .map((item) => item.name);
 
     const cached = state.alternatives.cache[goal];
     if (cached) {
@@ -259,7 +264,7 @@ export function useDishLookupFlow() {
         : prev,
     );
     try {
-      const response = await suggestAlternatives(dish, goal, avoidIngredients);
+      const response = await suggestAlternatives(dish, goal, avoidIngredients, preferIngredients);
       useUsageStore.getState().record("alternatives", response.model, response.usage);
       setState((prev) =>
         resolveAlternatives(prev, result, goal, {

@@ -34,7 +34,7 @@ read nothing, so it is not evidence of safety — any errored lookup keeps the
 verdict at "depends" or worse.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, replace
 from typing import assert_never
 
@@ -975,43 +975,78 @@ class DishLookupAgent(BaseAgent):
         matches = await self._service.find_candidates(swap)
         return _matches_safety(matches) is SafetyLevel.SAFE
 
-    async def _safe_anchors(self, avoid_ingredients: list[str]) -> list[str]:
-        """Well-tolerated ingredients to steer the suggestions toward, by category.
+    async def _safe_anchors(
+        self, avoid_ingredients: list[str], prefer_ingredients: list[str]
+    ) -> list[str]:
+        """Well-tolerated ingredients to steer the suggestions toward.
 
-        Each excluded ingredient is resolved against the index to recover its food
-        category, then that category's well-tolerated rows ride along as anchors —
-        the same retrieval and substitute lookup the assess path already uses, all
-        curated reads with no model call. An excluded ingredient never anchors its
-        own replacement; the result is deduped (case-insensitive) and capped.
+        The dish's own confirmed-safe ingredients lead: they are the truest "this
+        dish, minus the problem" signal. They are then topped up with well-tolerated
+        swaps from each excluded ingredient's index category, so a dish with few safe
+        parts still gets direction. All curated reads, no model call. An excluded
+        ingredient never anchors its own replacement; the result is deduped
+        (case-insensitive) and capped.
         """
         excluded = {name.casefold() for name in avoid_ingredients}
-        matches_by_name = await self._service.find_candidates_many(avoid_ingredients)
-        categories: list[str] = []
-        seen_categories: set[str] = set()
-        for name in avoid_ingredients:
-            for match in matches_by_name[name]:
-                category = match.ingredient.category
-                if category and category.casefold() not in seen_categories:
-                    seen_categories.add(category.casefold())
-                    categories.append(category)
-
-        anchors: list[str] = []
         seen: set[str] = set()
-        for category in categories:
-            for substitute in await self._service.find_substitutes(
-                category, limit=_SUBSTITUTE_LIMIT
-            ):
-                key = substitute.name.casefold()
+        anchors: list[str] = []
+
+        def take(names: Iterable[str]) -> bool:
+            """Add names up to the cap; return True once the cap is reached."""
+            for name in names:
+                key = name.casefold()
                 if key in excluded or key in seen:
                     continue
                 seen.add(key)
-                anchors.append(substitute.name)
+                anchors.append(name)
                 if len(anchors) == _MAX_SAFE_ANCHORS:
-                    return anchors
+                    return True
+            return False
+
+        # Category swaps are queried only when the dish's safe parts did not fill
+        # the cap, so a well-anchored dish does no extra DB work.
+        if not take(prefer_ingredients):
+            for category in await self._avoid_categories(avoid_ingredients):
+                substitutes = await self._service.find_substitutes(
+                    category, limit=_SUBSTITUTE_LIMIT
+                )
+                if take(sub.name for sub in substitutes):
+                    break
+
+        log.debug(
+            "dish_lookup.safe_anchors",
+            avoid=len(avoid_ingredients),
+            preferred=len(prefer_ingredients),
+            anchors=len(anchors),
+        )
         return anchors
 
+    async def _avoid_categories(self, avoid_ingredients: list[str]) -> list[str]:
+        """Each excluded ingredient's index category, best match only, deduped.
+
+        Only the top-ranked candidate's category is taken, mirroring how the assess
+        path resolves a single reading: a lower fuzzy candidate would drag in a
+        category the ingredient does not really belong to.
+        """
+        matches_by_name = await self._service.find_candidates_many(avoid_ingredients)
+        categories: list[str] = []
+        seen: set[str] = set()
+        for name in avoid_ingredients:
+            matches = matches_by_name[name]
+            if not matches:
+                continue
+            category = matches[0].ingredient.category
+            if category and category.casefold() not in seen:
+                seen.add(category.casefold())
+                categories.append(category)
+        return categories
+
     async def alternatives(
-        self, dish: str, goal: AlternativeGoal, avoid_ingredients: list[str]
+        self,
+        dish: str,
+        goal: AlternativeGoal,
+        avoid_ingredients: list[str],
+        prefer_ingredients: list[str] | None = None,
     ) -> DishAlternativesResponse:
         """Suggest different dishes once this one cannot keep its identity.
 
@@ -1020,15 +1055,17 @@ class DishLookupAgent(BaseAgent):
         selects the query axis. Those picks carry a real ``verified`` signal.
         Then, only if the pool did not fill the count, generate fresh ideas to top
         it up — these make no safety claim and are re-vetted when the user looks
-        them up (propose → confirm → assess). The ``avoid_ingredients`` are
-        client-asserted: they exclude pool dishes built on them and anchor the
-        generation prompt, but never touch a verdict.
+        them up (propose → confirm → assess). Both ingredient lists are
+        client-asserted and never touch a verdict: ``avoid_ingredients`` exclude
+        pool dishes built on them, while ``prefer_ingredients`` (the looked-up
+        dish's own safe parts) lead the anchors so suggestions build on what
+        already worked before falling back to category swaps.
 
         Retrieval is zero model calls, so usage is tallied only when the
         generation tier actually runs.
         """
         self._begin_usage()
-        anchors = await self._safe_anchors(avoid_ingredients)
+        anchors = await self._safe_anchors(avoid_ingredients, prefer_ingredients or [])
         verified = _verified_alternatives(
             await self._verified_picks(goal, dish, anchors, avoid_ingredients)
         )
@@ -1094,12 +1131,14 @@ class DishLookupAgent(BaseAgent):
                     self._alternatives_user_template,
                     "dish_lookup/alternatives_user",
                     # The dish and the ingredient names are direct user input; the
-                    # goal line and the curated anchors are code-owned, so neither
-                    # is stripped — but both tags stay in the strip set so user
-                    # input can forge neither region.
+                    # goal line is code-owned. The anchors are curated DB values but
+                    # are stripped too (defence in depth, harmless for real ingredient
+                    # names), and every region tag stays in the strip set so user input
+                    # can forge none of these sections. No anchors renders an empty
+                    # region; the prompt handles that.
                     dish=strip_region_tags(dish, _ALTERNATIVES_TAGS),
                     excluded=strip_region_tags(", ".join(avoid_ingredients), _ALTERNATIVES_TAGS),
-                    safe_anchors=", ".join(anchors) if anchors else "None.",
+                    safe_anchors=strip_region_tags(", ".join(anchors), _ALTERNATIVES_TAGS),
                     goal_line=_goal_line(goal),
                 )
             ),

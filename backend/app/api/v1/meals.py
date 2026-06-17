@@ -42,8 +42,11 @@ async def suggest_alternatives(
     payload: DishAlternativesRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
 ) -> DishAlternativesResponse:
-    # avoid_ingredients are client-asserted: they only steer the suggestion
+    # Both ingredient lists are client-asserted: they only steer the suggestion
     # prompt, and every picked suggestion is fully re-vetted via propose/assess.
     return await agent.alternatives(
-        dish=payload.dish, goal=payload.goal, avoid_ingredients=payload.avoid_ingredients
+        dish=payload.dish,
+        goal=payload.goal,
+        avoid_ingredients=payload.avoid_ingredients,
+        prefer_ingredients=payload.prefer_ingredients,
     )

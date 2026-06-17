@@ -1323,15 +1323,67 @@ async def test_alternatives_prompt_anchors_safe_swaps_by_category(session: Async
     anchors = chat.seen[0][1].content.split("<safe_anchors>")[1].split("</safe_anchors>")[0]
     assert "Ricotta" in anchors
     assert "Mozzarella" in anchors
-    # The excluded ingredient never anchors its own replacement.
+    # Parmesan is incompatible, so it is never a substitute candidate to begin with.
     assert "Parmesan" not in anchors
 
 
-async def test_alternatives_anchors_are_none_when_the_index_has_no_safe_options(
+async def test_alternatives_anchor_never_includes_an_excluded_ingredient(
     session: AsyncSession,
 ) -> None:
-    # An excluded ingredient the index cannot place in a category yields no
-    # anchors, so the region degrades to "None." and the call still succeeds.
+    # A well-tolerated ingredient that is itself being avoided would otherwise ride
+    # along as a substitute for its own category; the guard must drop it. This is the
+    # case the category test cannot exercise, since its excluded item is incompatible.
+    session.add(
+        _ingredient("Mozzarella", compatibility=Compatibility.WELL_TOLERATED, category="cheese")
+    )
+    session.add(
+        _ingredient("Ricotta", compatibility=Compatibility.WELL_TOLERATED, category="cheese")
+    )
+    await session.flush()
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Courgette Bake"))
+
+    await _agent(chat, IngredientService(session)).alternatives(
+        "cheese plate", AlternativeGoal.SIMILAR_FLAVOURS, ["mozzarella"]
+    )
+
+    anchors = chat.seen[0][1].content.split("<safe_anchors>")[1].split("</safe_anchors>")[0]
+    assert "Ricotta" in anchors
+    assert "Mozzarella" not in anchors
+
+
+async def test_alternatives_prefers_the_dishs_own_safe_ingredients(
+    session: AsyncSession,
+) -> None:
+    # The dish's confirmed-safe ingredients lead the anchors, ahead of the category
+    # swaps, so suggestions build on what already worked in the dish.
+    session.add(
+        _ingredient("Parmesan", compatibility=Compatibility.INCOMPATIBLE, category="cheese")
+    )
+    session.add(
+        _ingredient("Ricotta", compatibility=Compatibility.WELL_TOLERATED, category="cheese")
+    )
+    await session.flush()
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Courgette Bake"))
+
+    await _agent(chat, IngredientService(session)).alternatives(
+        "parmesan pasta",
+        AlternativeGoal.SIMILAR_FLAVOURS,
+        ["parmesan"],
+        ["courgette", "fresh basil"],
+    )
+
+    anchors = chat.seen[0][1].content.split("<safe_anchors>")[1].split("</safe_anchors>")[0]
+    assert "courgette" in anchors
+    assert "fresh basil" in anchors
+    # Category swaps still top up after the preferred ingredients.
+    assert "Ricotta" in anchors
+
+
+async def test_alternatives_anchors_are_empty_when_the_index_has_no_safe_options(
+    session: AsyncSession,
+) -> None:
+    # No preferred ingredients and an excluded one the index cannot place in a
+    # category yields no anchors, so the region renders empty and the call succeeds.
     chat = _ScriptedChat(alternatives=_alternatives_draft("Garden Salad"))
 
     await _agent(chat, IngredientService(session)).alternatives(
@@ -1339,7 +1391,7 @@ async def test_alternatives_anchors_are_none_when_the_index_has_no_safe_options(
     )
 
     anchors = chat.seen[0][1].content.split("<safe_anchors>")[1].split("</safe_anchors>")[0]
-    assert anchors.strip() == "None."
+    assert anchors.strip() == ""
 
 
 async def test_alternatives_normalization_degrades_sloppy_suggestions(

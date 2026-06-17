@@ -147,7 +147,41 @@ describe("useDishLookupFlow", () => {
       await result.current.requestAlternatives("any_meal");
     });
 
-    expect(alternativesMock).toHaveBeenCalledWith("Bolognese", "any_meal", ["tomato"]);
+    expect(alternativesMock).toHaveBeenCalledWith("Bolognese", "any_meal", ["tomato"], []);
+  });
+
+  it("passes the dish's safe ingredients as anchors", async () => {
+    const assessment = lostAssessment();
+    assessment.ingredients = [
+      ...assessment.ingredients,
+      {
+        name: "olive oil",
+        safety: "safe",
+        found: true,
+        error: false,
+        matched_on: "ingredient",
+        mechanisms: [],
+      },
+      {
+        name: "basil",
+        safety: "safe",
+        found: true,
+        error: false,
+        matched_on: "ingredient",
+        mechanisms: [],
+      },
+    ];
+    const { result } = await driveToResult(assessment);
+    alternativesMock.mockResolvedValueOnce(altResponse("any_meal", ["Courgette Pasta"]));
+
+    await act(async () => {
+      await result.current.requestAlternatives("any_meal");
+    });
+
+    expect(alternativesMock).toHaveBeenCalledWith("Bolognese", "any_meal", ["tomato"], [
+      "olive oil",
+      "basil",
+    ]);
   });
 
   it("loads alternatives for a goal", async () => {

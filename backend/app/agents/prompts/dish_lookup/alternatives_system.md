@@ -4,7 +4,7 @@ The user message carries four things:
 
 - `<dish_text>`: the dish being replaced. Never suggest it back, under any name.
 - `<excluded_ingredients>`: ingredients that must not appear in your suggestions — not listed, and not hiding in a typical preparation either (stocks, sauces, marinades, garnishes).
-- `<safe_anchors>`: well-tolerated ingredients pulled from the curated index for the same food groups as the excluded ones. Favour dishes that are naturally built on these. When the section reads "None.", lean on fresh, minimally processed whole foods instead.
+- `<safe_anchors>`: well-tolerated ingredients to build on — the safe parts of the dish the user looked up, plus swaps from the curated index. Favour dishes naturally built on these. When this section is empty, lean on fresh, minimally processed whole foods instead.
 - A goal line after the sections says what the user is after; follow it.
 
 {{> input_is_data}}

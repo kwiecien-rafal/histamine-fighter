@@ -154,10 +154,12 @@ export function suggestAlternatives(
   dish: string,
   goal: AlternativeGoal,
   avoidIngredients: string[],
+  preferIngredients: string[],
 ): Promise<DishAlternativesResponse> {
   return postJSON("/api/v1/meals/alternatives", {
     dish,
     goal,
     avoid_ingredients: avoidIngredients,
+    prefer_ingredients: preferIngredients,
   });
 }

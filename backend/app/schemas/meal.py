@@ -270,23 +270,31 @@ class DishAssessmentResponse(BaseModel):
     usage: LLMUsage = Field(description="Token usage of the model call(s) behind this response.")
 
 
+_BoundedIngredientName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_INGREDIENT_CHARS),
+]
+
+
 class DishAlternativesRequest(BaseModel):
     """Ask for different dishes once the looked-up one cannot keep its identity.
 
-    Repeated names are deduped case-insensitively, first spelling wins, so a
-    client cannot fill the prompt with copies of one ingredient.
+    Repeated names in either list are deduped case-insensitively, first spelling
+    wins, so a client cannot fill the prompt with copies of one ingredient.
     """
 
     dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
     goal: AlternativeGoal
-    avoid_ingredients: list[
-        Annotated[
-            str,
-            StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_INGREDIENT_CHARS),
-        ]
-    ] = Field(min_length=1, max_length=MAX_CONFIRMED_INGREDIENTS)
+    avoid_ingredients: list[_BoundedIngredientName] = Field(
+        min_length=1, max_length=MAX_CONFIRMED_INGREDIENTS
+    )
+    # The looked-up dish's own safe ingredients, used only to anchor suggestions
+    # toward what already worked. Optional, and never touches a verdict.
+    prefer_ingredients: list[_BoundedIngredientName] = Field(
+        default_factory=list, max_length=MAX_CONFIRMED_INGREDIENTS
+    )
 
-    @field_validator("avoid_ingredients", mode="after")
+    @field_validator("avoid_ingredients", "prefer_ingredients", mode="after")
     @classmethod
     def _dedupe_names(cls, value: list[str]) -> list[str]:
         seen: set[str] = set()
