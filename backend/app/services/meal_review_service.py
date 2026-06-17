@@ -13,6 +13,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.enums import ApprovalStatus
 from app.models import CuratedMeal
@@ -29,14 +30,22 @@ class MealReviewService:
         self._session = session
 
     async def list_by_status(
-        self, status: ApprovalStatus, *, limit: int | None = None
+        self, status: ApprovalStatus, *, limit: int | None = None, offset: int = 0
     ) -> list[CuratedMeal]:
-        """Return meals in one review state, newest first."""
+        """Return one page of meals in a review state, oldest first.
+
+        Oldest-first plus offset paging means a backlog is worked through FIFO and
+        nothing is stranded below the row cap. The id breaks ties between rows that
+        share a timestamp (a batch insert shares one). The embedding column is
+        heavy and unused by the review queue, so it is deferred, not loaded per row.
+        """
         stmt = (
             select(CuratedMeal)
             .where(CuratedMeal.approval_status == status)
-            .order_by(CuratedMeal.created_at.desc())
+            .order_by(CuratedMeal.created_at.asc(), CuratedMeal.id.asc())
+            .options(defer(CuratedMeal.embedding))
             .limit(limit or self.default_limit)
+            .offset(offset)
         )
         return list((await self._session.execute(stmt)).scalars().all())
 

@@ -21,14 +21,18 @@ router = APIRouter(prefix="/admin/meals", tags=["admin"])
 
 @router.get("", response_model=list[AdminMealRead])
 async def list_meals(
-    status: ApprovalStatus = Query(
-        default=ApprovalStatus.PENDING, description="Which review state to list."
+    # alias keeps the query key ?status=... while the local name avoids shadowing
+    # the imported fastapi.status used by the sibling handlers.
+    approval_status: ApprovalStatus = Query(
+        default=ApprovalStatus.PENDING, alias="status", description="Which review state to list."
     ),
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum meals to return."),
+    offset: int = Query(default=0, ge=0, description="How many meals to skip."),
     _admin: AdminUser = Depends(get_current_admin),
     service: MealReviewService = Depends(get_meal_review_service),
 ) -> list[CuratedMeal]:
-    """List meals in one review state, newest first (defaults to the pending queue)."""
-    return await service.list_by_status(status)
+    """List one page of meals in a review state, oldest first (defaults to pending)."""
+    return await service.list_by_status(approval_status, limit=limit, offset=offset)
 
 
 @router.patch("/{meal_id}/approve", response_model=AdminMealRead)

@@ -5,6 +5,8 @@ session), so they cover the real auth path end to end: a token is minted, the
 dependency re-reads the admin, and the review service flips status on real rows.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +37,7 @@ async def _add_meal(
     *,
     name: str = "Courgette ribbon salad",
     approval_status: ApprovalStatus = ApprovalStatus.PENDING,
+    created_at: datetime | None = None,
 ) -> CuratedMeal:
     meal = CuratedMeal(
         name=name,
@@ -48,6 +51,10 @@ async def _add_meal(
         approval_status=approval_status,
         embedding=_ZERO_VECTOR,
     )
+    # now() is transaction-scoped in Postgres, so same-transaction rows share a
+    # created_at; set it explicitly when a test needs a deterministic order.
+    if created_at is not None:
+        meal.created_at = created_at
     session.add(meal)
     await session.flush()
     return meal
@@ -184,6 +191,44 @@ async def test_list_meals_filters_by_status(client: AsyncClient, session: AsyncS
 
     assert resp.status_code == 200
     assert [meal["name"] for meal in resp.json()] == ["Approved bake"]
+
+
+async def test_list_meals_is_oldest_first(client: AsyncClient, session: AsyncSession) -> None:
+    await _add_admin(session)
+    # Insert newest first to prove the order is by created_at, not insertion.
+    await _add_meal(session, name="Newer", created_at=datetime(2026, 1, 2, tzinfo=UTC))
+    await _add_meal(session, name="Older", created_at=datetime(2026, 1, 1, tzinfo=UTC))
+
+    resp = await client.get("/admin/meals", headers=_auth_header())
+
+    assert resp.status_code == 200
+    assert [meal["name"] for meal in resp.json()] == ["Older", "Newer"]
+
+
+async def test_list_meals_paginates_with_limit_and_offset(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    await _add_admin(session)
+    await _add_meal(session, name="First", created_at=datetime(2026, 1, 1, tzinfo=UTC))
+    await _add_meal(session, name="Second", created_at=datetime(2026, 1, 2, tzinfo=UTC))
+    await _add_meal(session, name="Third", created_at=datetime(2026, 1, 3, tzinfo=UTC))
+
+    resp = await client.get(
+        "/admin/meals", params={"limit": 1, "offset": 1}, headers=_auth_header()
+    )
+
+    assert resp.status_code == 200
+    assert [meal["name"] for meal in resp.json()] == ["Second"]
+
+
+async def test_list_meals_rejects_an_out_of_range_limit(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    await _add_admin(session)
+
+    resp = await client.get("/admin/meals", params={"limit": 0}, headers=_auth_header())
+
+    assert resp.status_code == 422
 
 
 # --- PATCH /admin/meals/{id}/approve | reject -------------------------------------
