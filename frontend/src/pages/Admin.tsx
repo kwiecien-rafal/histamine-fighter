@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { AdminMeal, ComposedMeal, MealType } from "../api/admin";
+import { MAX_EMAIL_CHARS, MAX_PASSWORD_CHARS } from "../api/admin";
 import { ComposeCost } from "../components/ComposeCost";
 import { LLMProviderBadge } from "../components/LLMProviderBadge";
 import { MealReviewCard } from "../components/MealReviewCard";
@@ -82,6 +83,7 @@ function LoginForm({ onSubmit, busy, error }: LoginFormProps) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="username"
+          maxLength={MAX_EMAIL_CHARS}
           required
           className="rounded border border-stone-300 px-3 py-2 focus:outline-none focus:border-emerald-700"
         />
@@ -93,6 +95,7 @@ function LoginForm({ onSubmit, busy, error }: LoginFormProps) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
+          maxLength={MAX_PASSWORD_CHARS}
           required
           className="rounded border border-stone-300 px-3 py-2 focus:outline-none focus:border-emerald-700"
         />

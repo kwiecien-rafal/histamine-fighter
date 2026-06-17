@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import { Admin } from "./pages/Admin";
 import { DailyBoard } from "./pages/DailyBoard";
@@ -12,6 +12,7 @@ export function App() {
       <Route path="/" element={<DishLookup />} />
       <Route path="/daily" element={<DailyBoard />} />
       <Route path="/admin" element={<Admin />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

@@ -34,9 +34,9 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
         Ingredients
       </h4>
       <ul className="flex flex-wrap gap-1.5 mb-4">
-        {meal.ingredients.map((ingredient) => (
+        {meal.ingredients.map((ingredient, index) => (
           <li
-            key={ingredient.name}
+            key={`${ingredient.name}-${index}`}
             className="rounded border border-stone-200 bg-stone-50 px-2 py-0.5 text-sm"
           >
             {ingredient.name}
@@ -77,6 +77,7 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
           type="button"
           onClick={onApprove}
           disabled={busy}
+          aria-busy={busy}
           className="rounded bg-emerald-800 text-white px-4 py-2 text-sm disabled:opacity-50 enabled:cursor-pointer"
         >
           Approve
@@ -85,6 +86,7 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
           type="button"
           onClick={onReject}
           disabled={busy}
+          aria-busy={busy}
           className="rounded border border-red-300 text-red-700 px-4 py-2 text-sm hover:border-red-500 disabled:opacity-50 enabled:cursor-pointer"
         >
           Reject

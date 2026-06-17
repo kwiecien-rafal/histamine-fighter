@@ -3,6 +3,11 @@ import type { LLMUsage, ProposedIngredient } from "./client";
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
+// Mirror the backend caps (app/schemas/admin.py) so an over-long field stops at
+// the input instead of bouncing back as a 422.
+export const MAX_EMAIL_CHARS = 320;
+export const MAX_PASSWORD_CHARS = 128;
+
 // The stable reading token a trace step carries; the UI maps it to a label.
 export type TraceReading = "safe" | "depends" | "avoid" | "unverifiable" | "not_indexed";
 
