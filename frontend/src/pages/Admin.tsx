@@ -6,6 +6,7 @@ import { ComposeCost } from "../components/ComposeCost";
 import { LLMProviderBadge } from "../components/LLMProviderBadge";
 import { MealReviewCard } from "../components/MealReviewCard";
 import { ReasoningReplay } from "../components/ReasoningReplay";
+import { UnverifiedNote } from "../components/UnverifiedNote";
 import { useAdminSession } from "../hooks/useAdminSession";
 import { useMealReview } from "../hooks/useMealReview";
 import { useReasoningStream } from "../hooks/useReasoningStream";
@@ -193,7 +194,7 @@ function ComposedMealView({ meal }: { meal: ComposedMeal }) {
         <ComposeCost usage={meal.usage} model={meal.model} />
       </div>
       <p className="text-sm text-stone-600 mb-3">{meal.description}</p>
-      <ul className="flex flex-wrap gap-1.5">
+      <ul className="flex flex-wrap gap-1.5 mb-3">
         {meal.ingredients.map((ingredient) => (
           <li
             key={ingredient.name}
@@ -206,6 +207,7 @@ function ComposedMealView({ meal }: { meal: ComposedMeal }) {
           </li>
         ))}
       </ul>
+      <UnverifiedNote ingredients={meal.unverified_ingredients} />
     </article>
   );
 }

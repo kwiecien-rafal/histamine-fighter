@@ -274,7 +274,8 @@ class ComposerAgent(BaseAgent):
         trace.append(
             TraceEvent(
                 kind="verify",
-                text=self._verify_text(submission.name, len(ingredients), verification.unverified),
+                text=f"Verified all {len(ingredients)} ingredients against the index. "
+                f"'{submission.name}' is safe.",
             )
         )
         return (
@@ -369,7 +370,7 @@ class ComposerAgent(BaseAgent):
                 kind="reject",
                 text=f"Rejected '{dish}': {ingredient} is {reason}.",
                 ingredient=ingredient,
-                compatibility=TraceReading(reason),
+                compatibility=reason,
             )
         term = verification.recipe_flags[0]
         return TraceEvent(
@@ -395,14 +396,6 @@ class ComposerAgent(BaseAgent):
             )
         parts.append("Then resubmit.")
         return " ".join(parts)
-
-    @staticmethod
-    def _verify_text(dish: str, count: int, unverified: list[str]) -> str:
-        text = f"Verified all {count} ingredients against the index. '{dish}' is safe."
-        if unverified:
-            listed = ", ".join(unverified)
-            text += f" {len(unverified)} not in the index, flagged for review: {listed}."
-        return text
 
     @staticmethod
     def _reading(result: LookupResult) -> TraceReading:

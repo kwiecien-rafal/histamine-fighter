@@ -90,6 +90,18 @@ def test_missing_ingredient_passes_but_is_recorded() -> None:
     assert result.unverified == ["dragon fruit"]
 
 
+def test_found_but_unrated_is_recorded_not_waved_through() -> None:
+    # In the index but with no rating (NULL compatibility surfaces as "unknown"):
+    # unknown is not safe, so it joins the unverified list instead of passing silently.
+    result = verify_meal(
+        [_found("courgette", "well_tolerated"), _found("mystery herb", "unknown")], [], _NO_TERMS
+    )
+
+    assert result.is_safe
+    assert result.blockers == []
+    assert result.unverified == ["mystery herb"]
+
+
 def test_risky_term_in_recipe_is_flagged() -> None:
     risky = TermMatcher.from_terms(["red wine", "parmesan"])
 

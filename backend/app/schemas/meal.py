@@ -420,7 +420,7 @@ class MealStreamItem(BaseModel):
 
     @classmethod
     def of(cls, meal: ComposedMeal) -> "MealStreamItem":
-        return cls(meal=ComposedMealCard.model_validate(meal.model_dump()))
+        return cls(meal=ComposedMealCard(**meal.model_dump(exclude={"reasoning_trace"})))
 
 
 class LookupIngredientSafety(BaseModel):

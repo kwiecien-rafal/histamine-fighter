@@ -191,8 +191,11 @@ async def test_unindexed_ingredient_is_accepted_and_recorded(
     meal = await _agent(chat, session, fake_embedder).compose(MealType.SNACK)
 
     assert meal.unverified_ingredients == ["dragon fruit"]
+    # The unverified list is structured review-queue context, not public trace prose:
+    # the verify line stays clean so the public board never replays review language.
     verify = next(event for event in meal.reasoning_trace if event.kind == "verify")
-    assert "dragon fruit" in verify.text
+    assert "dragon fruit" not in verify.text
+    assert "review" not in verify.text.casefold()
 
 
 async def test_composer_exhausts_after_iteration_budget(

@@ -2,6 +2,7 @@ import type { AdminMeal } from "../api/admin";
 import { MEAL_TYPE_LABEL, TRACE_KIND_LABEL, isRejectEvent } from "../lib/meal";
 import { ComposeCost } from "./ComposeCost";
 import { LLMProviderBadge } from "./LLMProviderBadge";
+import { UnverifiedNote } from "./UnverifiedNote";
 
 interface MealReviewCardProps {
   meal: AdminMeal;
@@ -46,12 +47,7 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
         ))}
       </ul>
 
-      {meal.unverified_ingredients.length > 0 && (
-        <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <span className="font-semibold">Not in the index — check before approving:</span>{" "}
-          {meal.unverified_ingredients.join(", ")}
-        </div>
-      )}
+      <UnverifiedNote ingredients={meal.unverified_ingredients} />
 
       {meal.reasoning_trace.length > 0 && (
         <details className="mb-4">
