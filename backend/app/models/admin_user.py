@@ -7,6 +7,7 @@ plaintext, and the email is the JWT subject and the audit actor stamped on an
 approval.
 """
 
+from sqlalchemy import text
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db.base import Base
@@ -29,6 +30,9 @@ class AdminUser(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     email: Mapped[str] = mapped_column(unique=True, index=True)
     password_hash: Mapped[str]
+    # Bumped on every password reset. The access token carries the version it was
+    # issued under, so a reset invalidates any token minted before it.
+    token_version: Mapped[int] = mapped_column(default=1, server_default=text("1"))
 
     @validates("email")
     def _normalize_email(self, _key: str, email: str) -> str:

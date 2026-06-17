@@ -41,25 +41,38 @@ def test_verify_password_treats_an_over_long_password_as_a_non_match() -> None:
     assert verify_password("x" * (MAX_PASSWORD_BYTES + 1), digest) is False
 
 
-def test_token_round_trips_the_subject() -> None:
-    token = create_access_token("admin@example.com")
-    assert decode_access_token(token) == "admin@example.com"
+def test_token_round_trips_the_subject_and_version() -> None:
+    token = create_access_token("admin@example.com", token_version=3)
+    claims = decode_access_token(token)
+    assert claims.subject == "admin@example.com"
+    assert claims.token_version == 3
 
 
 def test_expired_token_is_rejected() -> None:
-    token = create_access_token("admin@example.com", expires_delta=timedelta(minutes=-1))
+    token = create_access_token(
+        "admin@example.com", token_version=1, expires_delta=timedelta(minutes=-1)
+    )
     with pytest.raises(TokenError):
         decode_access_token(token)
 
 
 def test_tampered_token_is_rejected() -> None:
-    token = create_access_token("admin@example.com")
+    token = create_access_token("admin@example.com", token_version=1)
     with pytest.raises(TokenError):
         decode_access_token(token + "tamper")
 
 
 def test_token_without_a_subject_is_rejected() -> None:
     # A correctly signed token that simply carries no subject must still be refused.
-    token = jwt.encode({"foo": "bar"}, settings.secret_key, algorithm=settings.jwt_algorithm)
+    token = jwt.encode({"ver": 1}, settings.secret_key, algorithm=settings.jwt_algorithm)
+    with pytest.raises(TokenError):
+        decode_access_token(token)
+
+
+def test_token_without_a_version_is_rejected() -> None:
+    # A pre-version token (signed before the claim existed) must not slip through.
+    token = jwt.encode(
+        {"sub": "admin@example.com"}, settings.secret_key, algorithm=settings.jwt_algorithm
+    )
     with pytest.raises(TokenError):
         decode_access_token(token)

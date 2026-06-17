@@ -30,6 +30,17 @@ async def test_create_or_update_resets_an_existing_password(session: AsyncSessio
     assert await service.authenticate(_EMAIL, _PASSWORD) is None
 
 
+async def test_password_reset_bumps_the_token_version(session: AsyncSession) -> None:
+    service = AdminService(session)
+    admin, _ = await service.create_or_update(_EMAIL, _PASSWORD)
+    await session.flush()
+    assert admin.token_version == 1
+
+    await service.create_or_update(_EMAIL, "a-new-password")
+
+    assert admin.token_version == 2
+
+
 async def test_email_is_normalized_on_create_and_lookup(session: AsyncSession) -> None:
     service = AdminService(session)
     await service.create_or_update("Admin@Example.COM", _PASSWORD)

@@ -60,8 +60,8 @@ async def _add_meal(
     return meal
 
 
-def _auth_header(email: str = _EMAIL) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(email)}"}
+def _auth_header(email: str = _EMAIL, *, token_version: int = 1) -> dict[str, str]:
+    return {"Authorization": f"Bearer {create_access_token(email, token_version=token_version)}"}
 
 
 # --- POST /admin/auth/login -------------------------------------------------------
@@ -157,6 +157,17 @@ async def test_list_meals_with_a_garbage_token_is_401(client: AsyncClient) -> No
 async def test_token_for_a_deleted_admin_is_401(client: AsyncClient) -> None:
     # A well-signed token whose subject has no account must not pass the gate.
     resp = await client.get("/admin/meals", headers=_auth_header("ghost@example.com"))
+    assert resp.status_code == 401
+
+
+async def test_token_with_a_stale_version_is_401(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    # A token minted under an earlier password (lower version) is revoked by a reset.
+    await _add_admin(session)
+
+    resp = await client.get("/admin/meals", headers=_auth_header(token_version=0))
+
     assert resp.status_code == 401
 
 

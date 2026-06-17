@@ -6,6 +6,7 @@ domain errors follow). Passwords are bcrypt-hashed; the access token is a signed
 HS256 JWT whose subject is the admin's email.
 """
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,7 +21,15 @@ MAX_PASSWORD_BYTES = 72
 
 
 class TokenError(Exception):
-    """A token was missing, malformed, expired, or carried no subject."""
+    """A token was missing, malformed, expired, or missing a required claim."""
+
+
+@dataclass(frozen=True, slots=True)
+class TokenClaims:
+    """The verified claims carried by an admin access token."""
+
+    subject: str
+    token_version: int
 
 
 def hash_password(password: str) -> str:
@@ -47,23 +56,27 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: str, *, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    subject: str, *, token_version: int, expires_delta: timedelta | None = None
+) -> str:
     """Issue a signed JWT for the subject (the admin's email).
 
-    ``expires_delta`` overrides the configured TTL; tests use it to mint an
-    already-expired token.
+    ``token_version`` is the admin's current version; ``get_current_admin`` refuses
+    a token whose version no longer matches, which is how a password reset revokes
+    outstanding tokens. ``expires_delta`` overrides the configured TTL; tests use it
+    to mint an already-expired token.
     """
     now = datetime.now(UTC)
     ttl = expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
-    payload: dict[str, Any] = {"sub": subject, "iat": now, "exp": now + ttl}
+    payload: dict[str, Any] = {"sub": subject, "ver": token_version, "iat": now, "exp": now + ttl}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> str:
-    """Return the verified subject of a token, or raise on any problem.
+def decode_access_token(token: str) -> TokenClaims:
+    """Return the verified claims of a token, or raise on any problem.
 
     Raises:
-        TokenError: the token is expired, tampered with, or has no subject.
+        TokenError: the token is expired, tampered with, or missing a claim.
     """
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
@@ -72,4 +85,9 @@ def decode_access_token(token: str) -> str:
     subject = payload.get("sub")
     if not isinstance(subject, str) or not subject:
         raise TokenError("Token carries no subject.")
-    return subject
+    version = payload.get("ver")
+    # bool is an int subclass, so exclude it explicitly; a token we issued always
+    # carries an int, and a pre-version token carries None.
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise TokenError("Token carries no version.")
+    return TokenClaims(subject=subject, token_version=version)

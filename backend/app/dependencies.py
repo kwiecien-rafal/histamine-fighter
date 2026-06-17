@@ -94,16 +94,18 @@ async def get_current_admin(
     """Resolve the admin from the Bearer JWT, or raise 401.
 
     The account is re-read from the database, so a token for an admin that has
-    since been removed stops working. Wired onto admin routes only.
+    since been removed stops working; comparing the token's version against the
+    stored one means a password reset also invalidates older tokens. Wired onto
+    admin routes only.
     """
     if credentials is None:
         raise _unauthorized()
     try:
-        email = decode_access_token(credentials.credentials)
+        claims = decode_access_token(credentials.credentials)
     except TokenError as exc:
         raise _unauthorized() from exc
-    admin = await admin_service.get_by_email(email)
-    if admin is None:
+    admin = await admin_service.get_by_email(claims.subject)
+    if admin is None or admin.token_version != claims.token_version:
         raise _unauthorized()
     return admin
 

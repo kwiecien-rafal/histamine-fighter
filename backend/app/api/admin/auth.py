@@ -37,4 +37,6 @@ async def login(
             detail="Incorrect email or password.",
         )
     log.info("admin.login.success", email=admin.email, client=client)
-    return TokenResponse(access_token=create_access_token(admin.email))
+    return TokenResponse(
+        access_token=create_access_token(admin.email, token_version=admin.token_version)
+    )

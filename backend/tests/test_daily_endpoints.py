@@ -71,7 +71,7 @@ async def _add_suggestion(
 
 
 def _auth_header() -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(_EMAIL)}"}
+    return {"Authorization": f"Bearer {create_access_token(_EMAIL, token_version=1)}"}
 
 
 # --- GET /api/v1/daily/meals ------------------------------------------------------

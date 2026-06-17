@@ -48,7 +48,9 @@ class AdminService:
     async def create_or_update(self, email: str, password: str) -> tuple[AdminUser, bool]:
         """Create an account, or reset its password if the email already exists.
 
-        Returns the account and whether it was newly created. The caller commits.
+        Returns the account and whether it was newly created. A reset bumps the
+        token version so any token issued under the old password stops working.
+        The caller commits.
         """
         admin = await self.get_by_email(email)
         if admin is None:
@@ -57,5 +59,6 @@ class AdminService:
             log.info("admin.created", email=admin.email)
             return admin, True
         admin.password_hash = hash_password(password)
+        admin.token_version += 1
         log.info("admin.password_reset", email=admin.email)
         return admin, False
