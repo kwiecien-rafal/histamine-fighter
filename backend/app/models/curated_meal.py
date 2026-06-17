@@ -79,6 +79,9 @@ class CuratedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         default=ApprovalStatus.PENDING,
         server_default=ApprovalStatus.PENDING.value,
+        # Every read filters on approved; index it so the filter does not seq-scan
+        # the pool as it grows.
+        index=True,
     )
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     approved_by: Mapped[str | None] = mapped_column(default=None)

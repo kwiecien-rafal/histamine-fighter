@@ -158,6 +158,81 @@ async def test_search_excludes_meals_with_listed_ingredient_or_category(
     assert [match.meal.name for match in results] == ["Herb pepper plate"]
 
 
+async def test_exclude_matches_a_longer_term_against_a_shorter_ingredient(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    # The avoided term is "tomato sauce" but the meal lists plain "tomato": the
+    # token subset still drops it. Exact-string matching (the old behaviour) missed
+    # this and served the meal back with a verified badge.
+    await _add_meal(
+        session,
+        fake_embedder,
+        name="Pasta pomodoro",
+        description="pasta with a simple tomato base and basil",
+        ingredients=[{"name": "Tomato", "category": "nightshade"}],
+    )
+    await _add_meal(
+        session,
+        fake_embedder,
+        name="Herb pasta",
+        description="pasta with olive oil and fresh basil",
+        ingredients=[{"name": "Basil", "category": "herb"}],
+    )
+    await session.flush()
+
+    service = MealService(session, fake_embedder, min_similarity=0.0)
+    results = await service.search("simple pasta with basil", exclude=["tomato sauce"])
+
+    assert [match.meal.name for match in results] == ["Herb pasta"]
+
+
+async def test_exclude_matches_a_shorter_term_against_a_longer_ingredient(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    # Avoiding "wine" drops a meal listing "red wine": the term's tokens are a
+    # subset of the ingredient's.
+    await _add_meal(
+        session,
+        fake_embedder,
+        name="Coq au vin",
+        description="braised chicken in a red wine reduction",
+        ingredients=[{"name": "Red Wine", "category": "alcohol"}],
+    )
+    await _add_meal(
+        session,
+        fake_embedder,
+        name="Roast chicken",
+        description="braised chicken with thyme and garlic",
+        ingredients=[{"name": "Chicken", "category": "poultry"}],
+    )
+    await session.flush()
+
+    service = MealService(session, fake_embedder, min_similarity=0.0)
+    results = await service.search("braised chicken with herbs", exclude=["wine"])
+
+    assert [match.meal.name for match in results] == ["Roast chicken"]
+
+
+async def test_exclude_does_not_match_a_substring_inside_a_single_token(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    # "egg" must not drop "eggplant": they are distinct single tokens, so the
+    # token-set rule avoids the substring false positive.
+    await _add_meal(
+        session,
+        fake_embedder,
+        name="Roasted eggplant",
+        description="roasted eggplant with olive oil and herbs",
+        ingredients=[{"name": "Eggplant", "category": "nightshade"}],
+    )
+    await session.flush()
+
+    service = MealService(session, fake_embedder, min_similarity=0.0)
+    results = await service.search("roasted eggplant with herbs", exclude=["egg"])
+
+    assert [match.meal.name for match in results] == ["Roasted eggplant"]
+
+
 async def test_similarity_floor_drops_weak_matches(
     session: AsyncSession, fake_embedder: FakeEmbedder
 ) -> None:

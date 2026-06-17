@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.core.normalization import normalize_ingredient_name
 from app.embeddings import Embedder
@@ -33,6 +34,35 @@ class MealMatch:
     similarity: float
 
 
+@dataclass(frozen=True, slots=True)
+class _ExcludeTerms:
+    """Exclude terms prepared once per query, then matched per meal ingredient.
+
+    A category matches exactly (it is a controlled vocabulary). An ingredient
+    *name* matches when its tokens and a term's tokens are subset-related either
+    way, so avoiding "tomato sauce" still drops a meal listing "tomato", and
+    avoiding "wine" drops "red wine" without "egg" dropping "eggplant" (distinct
+    single tokens). This is lexical, not semantic; resolving both sides through
+    the ingredient index is a deliberate future upgrade.
+    """
+
+    exact: frozenset[str]
+    token_sets: tuple[frozenset[str], ...]
+
+    @classmethod
+    def from_terms(cls, terms: Collection[str]) -> "_ExcludeTerms":
+        keys = [key for term in terms if (key := normalize_ingredient_name(term))]
+        return cls(frozenset(keys), tuple(frozenset(key.split()) for key in keys))
+
+    def matches(self, name: str, category: str) -> bool:
+        if category and category in self.exact:
+            return True
+        if not name:
+            return False
+        name_tokens = frozenset(name.split())
+        return any(name_tokens <= term or term <= name_tokens for term in self.token_sets)
+
+
 class MealService:
     """Reads the approved meal pool by vector similarity. Never commits."""
 
@@ -43,7 +73,8 @@ class MealService:
     # to generation instead. Tied to the embedding model, so re-tune via the meal
     # retrieval eval if the model changes, exactly as the knowledge floor is.
     default_min_similarity = 0.75
-    # Queries are dish names or short flavour-term lists. Anything longer is a
+    # Queries are dish names or short flavour-term lists, so this is generous and
+    # deliberately its own value, not the knowledge Q&A cap: anything longer is a
     # caller bug, not a real query, and must not run as an oversized embed.
     max_query_length = 512
 
@@ -71,11 +102,13 @@ class MealService:
         """Return the k most similar approved meals above the floor, best first.
 
         Only ``approved`` meals are eligible. ``meal_type`` narrows to one slot,
-        and ``exclude`` drops any meal whose ingredient names or categories include a
-        listed term, so a dish built on what the user is avoiding is never offered
-        back. An empty list means nothing relevant was found (or the query was
-        empty). An over-long query or a non-positive k raises ValueError instead,
-        so a caller's bug never masquerades as "no match".
+        and ``exclude`` drops any meal that uses a listed term (matched on an
+        ingredient's category exactly, or on its name by word-set containment, so
+        avoiding "tomato sauce" still drops a meal listing "tomato"), so a dish
+        built on what the user is avoiding is never offered back. An empty list
+        means nothing relevant was found (or the query was empty). An over-long
+        query or a non-positive k raises ValueError instead, so a caller's bug
+        never masquerades as "no match".
         """
         if k is not None and k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
@@ -85,7 +118,7 @@ class MealService:
         if not text:
             return []
         limit = self.default_k if k is None else k
-        excluded = {key for term in exclude if (key := normalize_ingredient_name(term))}
+        exclusions = _ExcludeTerms.from_terms(exclude)
 
         vector = await self._embedder.embed_query(text)
         distance = CuratedMeal.embedding.cosine_distance(vector)
@@ -93,6 +126,8 @@ class MealService:
             select(CuratedMeal, distance.label("distance"))
             .where(CuratedMeal.approval_status == ApprovalStatus.APPROVED)
             .order_by(distance)
+            # The vector is only needed for the SQL distance, never in Python.
+            .options(defer(CuratedMeal.embedding))
         )
         if meal_type is not None:
             stmt = stmt.where(CuratedMeal.meal_type == meal_type)
@@ -108,7 +143,7 @@ class MealService:
             if similarity < self._min_similarity:
                 break
             above_floor += 1
-            if self._is_excluded(meal, excluded):
+            if self._is_excluded(meal, exclusions):
                 continue
             matches.append(MealMatch(meal, similarity))
             if len(matches) == limit:
@@ -133,24 +168,28 @@ class MealService:
         """Return up to k random approved meals, optionally restricted to one slot.
 
         For the "any meal" alternatives goal (and future variety): there is no query
-        to rank by, so it samples at random. ``exclude`` drops any meal whose
-        ingredient names or categories include a listed term, like ``search``, so a
-        dish built on what the user is avoiding is never offered back. A non-positive
-        k raises rather than silently falling back to the default.
+        to rank by, so it samples at random. ``exclude`` drops any meal that uses a
+        listed term, matched as in ``search``, so a dish built on what the user is
+        avoiding is never offered back. A non-positive k raises rather than silently
+        falling back to the default.
         """
         if k is not None and k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
         limit = self.default_k if k is None else k
-        excluded = {key for term in exclude if (key := normalize_ingredient_name(term))}
+        exclusions = _ExcludeTerms.from_terms(exclude)
 
-        stmt = select(CuratedMeal).where(CuratedMeal.approval_status == ApprovalStatus.APPROVED)
+        stmt = (
+            select(CuratedMeal)
+            .where(CuratedMeal.approval_status == ApprovalStatus.APPROVED)
+            .options(defer(CuratedMeal.embedding))
+        )
         if meal_type is not None:
             stmt = stmt.where(CuratedMeal.meal_type == meal_type)
         stmt = stmt.order_by(func.random())
 
         meals: list[CuratedMeal] = []
         for meal in (await self._session.execute(stmt)).scalars():
-            if self._is_excluded(meal, excluded):
+            if self._is_excluded(meal, exclusions):
                 continue
             meals.append(meal)
             if len(meals) == limit:
@@ -158,13 +197,14 @@ class MealService:
         return meals
 
     @staticmethod
-    def _is_excluded(meal: CuratedMeal, excluded: set[str]) -> bool:
-        """True when any of the meal's ingredient names or categories is excluded."""
-        if not excluded:
+    def _is_excluded(meal: CuratedMeal, terms: _ExcludeTerms) -> bool:
+        """True when any of the meal's ingredients matches an excluded term."""
+        if not terms.exact:
             return False
-        for ingredient in meal.ingredients:
-            name = normalize_ingredient_name(ingredient.get("name", ""))
-            category = normalize_ingredient_name(ingredient.get("category") or "")
-            if name in excluded or category in excluded:
-                return True
-        return False
+        return any(
+            terms.matches(
+                normalize_ingredient_name(ingredient.get("name", "")),
+                normalize_ingredient_name(ingredient.get("category") or ""),
+            )
+            for ingredient in meal.ingredients
+        )
