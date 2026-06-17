@@ -25,6 +25,8 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://histamine:histamine@localhost:5432/histamine
     services:
       db:
         image: pgvector/pgvector:pg16
@@ -45,14 +47,15 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --frozen
+      # The fast suite builds its schema from the models (create_all), so the
+      # migrations are never exercised by pytest. Apply them on the clean
+      # database, then assert the models and migrations still agree.
+      - run: uv run alembic upgrade head
+      - run: uv run alembic check
       - run: uv run pytest
-        env:
-          DATABASE_URL: postgresql+asyncpg://histamine:histamine@localhost:5432/histamine
       # The fast suite excludes the seed-eval (pyproject addopts); this runs it
       # against the same provisioned DB so the retrieval guard runs every PR.
       - run: uv run pytest -m seed_eval
-        env:
-          DATABASE_URL: postgresql+asyncpg://histamine:histamine@localhost:5432/histamine
 
   frontend:
     runs-on: ubuntu-latest
