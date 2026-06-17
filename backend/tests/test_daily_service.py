@@ -118,6 +118,23 @@ async def test_cards_and_trace_follow_meal_order(session: AsyncSession) -> None:
     assert [event.text for event in board.trace] == ["b", "d"]
 
 
+async def test_revealed_board_drops_model_draft_events(session: AsyncSession) -> None:
+    # `draft` is the model's own prose; the public board shows only code-authored steps.
+    await _add(
+        session,
+        meal_type=MealType.BREAKFAST,
+        trace=[
+            {"kind": "draft", "text": "thinking out loud about breakfast"},
+            {"kind": "verify", "text": "cleared the index"},
+        ],
+    )
+
+    board = await DailyService(session).board_for(_DAY, now=_AFTER)
+
+    assert board.status == "revealed"
+    assert [event.kind for event in board.trace] == ["verify"]
+
+
 async def test_board_ignores_other_dates(session: AsyncSession) -> None:
     await _add(session, meal_type=MealType.BREAKFAST, on=date(2026, 6, 15))
 

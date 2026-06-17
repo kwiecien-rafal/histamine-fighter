@@ -15,7 +15,8 @@ export const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner", "snack"];
 export const TRACE_KIND_LABEL: Record<TraceEvent["kind"], string> = {
   draft: "Draft",
   check: "Check",
-  swap: "Swap",
+  search: "Search",
+  options: "Options",
   reject: "Reject",
   submit: "Submit",
   verify: "Verify",

@@ -7,6 +7,7 @@ the iteration budget, the authored trace, and the per-iteration usage tally
 without any network call.
 """
 
+import json
 from typing import Any
 
 import pytest
@@ -277,5 +278,12 @@ async def test_stream_yields_events_then_the_meal(
 
     chunks = [chunk async for chunk in _agent(chat, session, fake_embedder).stream(MealType.LUNCH)]
 
-    assert any('"kind"' in chunk for chunk in chunks)
-    assert '"meal_type"' in chunks[-1]
+    items = [json.loads(chunk) for chunk in chunks]
+    assert all(item["type"] == "trace" for item in items[:-1])
+    assert all("event" in item and "kind" in item["event"] for item in items[:-1])
+
+    terminal = items[-1]
+    assert terminal["type"] == "meal"
+    assert terminal["meal"]["name"] == "Courgette ribbons"
+    # The meal rides without its trace; the client assembled it from the trace items.
+    assert "reasoning_trace" not in terminal["meal"]

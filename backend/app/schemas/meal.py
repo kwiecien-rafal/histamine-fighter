@@ -10,6 +10,7 @@ from app.enums import (
     HistamineMechanism,
     MealType,
     SafetyLevel,
+    TraceReading,
 )
 from app.schemas.usage import LLMUsage
 
@@ -347,22 +348,31 @@ class DishAlternativesResponse(BaseModel):
 # --- Composer: the agentic meal-composition loop --------------------------------
 
 
+TraceKind = Literal["draft", "check", "search", "options", "reject", "submit", "verify"]
+
+# ``draft`` is the model's own prose; it stays in the stored trace and the admin
+# views but is filtered out of the public board, where only code-authored steps show.
+MODEL_AUTHORED_TRACE_KINDS: frozenset[TraceKind] = frozenset({"draft"})
+
+
 class TraceEvent(BaseModel):
     """One authored step of the composer's reasoning, for the showcase replay.
 
     Written for a human watching the agent think, not raw tool JSON: ``text`` is a
     plain-language line and ``kind`` drives the animation's styling. The ``reject``
-    events ("parmesan is avoid, dropping it") are the demo payoff.
+    events ("parmesan is avoid, dropping it") are the demo payoff. ``compatibility``
+    is the stable reading token the frontend maps to a label, set only on the steps
+    that read one ingredient.
     """
 
-    kind: Literal["draft", "check", "swap", "reject", "submit", "verify"]
+    kind: TraceKind
     text: str
     ingredient: str | None = None
-    compatibility: str | None = None
+    compatibility: TraceReading | None = None
 
 
-class ComposedMeal(BaseModel):
-    """A meal the composer built and code verified, before admin review.
+class ComposedMealCard(BaseModel):
+    """A composed meal without its trace: the public card and the streamed result.
 
     No per-meal verdict travels here: nothing the index flags survived (or the
     meal was never returned), so safety is carried by construction plus admin
@@ -378,8 +388,35 @@ class ComposedMeal(BaseModel):
     recipe: list[str] | None
     tags: list[str]
     unverified_ingredients: list[str] = Field(default_factory=list)
-    reasoning_trace: list[TraceEvent]
     model: str
+
+
+class ComposedMeal(ComposedMealCard):
+    """The full composed meal, carrying the reasoning trace persisted by the batch."""
+
+    reasoning_trace: list[TraceEvent]
+
+
+class TraceStreamItem(BaseModel):
+    """One reasoning step on the live composer stream, tagged for the consumer."""
+
+    type: Literal["trace"] = "trace"
+    event: TraceEvent
+
+
+class MealStreamItem(BaseModel):
+    """The terminal item on the live stream: the finished meal, without its trace.
+
+    The consumer assembled the trace from the ``trace`` items already, so the meal
+    rides without it rather than re-sending every step.
+    """
+
+    type: Literal["meal"] = "meal"
+    meal: ComposedMealCard
+
+    @classmethod
+    def of(cls, meal: ComposedMeal) -> "MealStreamItem":
+        return cls(meal=ComposedMealCard.model_validate(meal.model_dump()))
 
 
 class LookupIngredientSafety(BaseModel):

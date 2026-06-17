@@ -103,6 +103,21 @@ class MatchType(StrEnum):
     FUZZY = "fuzzy"
 
 
+class TraceReading(StrEnum):
+    """One ingredient's reading on a composer trace step.
+
+    The dish-level safety values, plus the two states the index cannot rate: a row
+    it could not read, and a name it has no entry for. A stable token the frontend
+    maps to a label, never raw branded copy.
+    """
+
+    SAFE = "safe"
+    DEPENDS = "depends"
+    AVOID = "avoid"
+    UNVERIFIABLE = "unverifiable"
+    NOT_INDEXED = "not_indexed"
+
+
 class MealType(StrEnum):
     """Which meal of the day a curated suggestion is for."""
 

@@ -3,11 +3,23 @@ import type { ProposedIngredient } from "./client";
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
+// The stable reading token a trace step carries; the UI maps it to a label.
+export type TraceReading = "safe" | "depends" | "avoid" | "unverifiable" | "not_indexed";
+
+export type TraceKind =
+  | "draft"
+  | "check"
+  | "search"
+  | "options"
+  | "reject"
+  | "submit"
+  | "verify";
+
 export interface TraceEvent {
-  kind: "draft" | "check" | "swap" | "reject" | "submit" | "verify";
+  kind: TraceKind;
   text: string;
   ingredient: string | null;
-  compatibility: string | null;
+  compatibility: TraceReading | null;
 }
 
 export interface AdminMeal {
@@ -29,8 +41,9 @@ export interface AdminMeal {
   created_at: string;
 }
 
-// The composer's output as streamed by the live "generate now" demo. Mirrors
-// AdminMeal without the persistence fields, since a live composition is not saved.
+// The composer's output as streamed by the live "generate now" demo. The trace is
+// not on it: the client assembled that from the trace events as they arrived, and a
+// live composition is not saved.
 export interface ComposedMeal {
   name: string;
   meal_type: MealType;
@@ -39,7 +52,6 @@ export interface ComposedMeal {
   recipe: string[] | null;
   tags: string[];
   unverified_ingredients: string[];
-  reasoning_trace: TraceEvent[];
   model: string;
 }
 

@@ -86,11 +86,13 @@ async def generate_live(
     async def event_source() -> AsyncIterator[dict[str, str]]:
         try:
             async for chunk in streamer.stream(payload.meal_type):
-                # The composer emits one JSON object per item; a trace step carries
-                # a "kind", the terminal composed meal does not.
-                parsed = json.loads(chunk)
-                name = "trace" if isinstance(parsed, dict) and "kind" in parsed else "meal"
-                yield {"event": name, "data": chunk}
+                # Each item is a discriminated envelope: {"type": "trace", "event": ...}
+                # or {"type": "meal", "meal": ...}. The SSE event name is its type and
+                # the inner object is the payload the client already expects.
+                envelope = json.loads(chunk)
+                event_type = envelope["type"]
+                inner = envelope["event"] if event_type == "trace" else envelope["meal"]
+                yield {"event": event_type, "data": json.dumps(inner)}
         except ComposerExhausted:
             yield {"event": "error", "data": json.dumps({"detail": _GENERATION_FAILED})}
         except LLMError as exc:

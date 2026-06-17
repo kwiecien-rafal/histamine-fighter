@@ -21,7 +21,13 @@ from app.enums import ApprovalStatus, MealType
 from app.main import create_app
 from app.models import DailySuggestion
 from app.models.admin_user import AdminUser
-from app.schemas.meal import ComposedMeal, ProposedIngredient, TraceEvent
+from app.schemas.meal import (
+    ComposedMeal,
+    MealStreamItem,
+    ProposedIngredient,
+    TraceEvent,
+    TraceStreamItem,
+)
 
 _EMAIL = "admin@example.com"
 _PASSWORD = "supersecret"
@@ -213,13 +219,17 @@ async def test_approve_unknown_suggestion_is_404(
 
 
 class _FakeStreamer:
-    """Stands in for ComposerStreamer: a scripted trace then the composed meal."""
+    """Stands in for ComposerStreamer: a scripted trace then the composed meal.
+
+    Yields the same discriminated envelopes the real ``ComposerAgent.stream``
+    emits, so the route's type-switch is exercised honestly.
+    """
 
     async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
-        yield TraceEvent(
-            kind="reject", text="Dropped parmesan — avoid.", ingredient="parmesan"
+        yield TraceStreamItem(
+            event=TraceEvent(kind="reject", text="Dropped parmesan — avoid.", ingredient="parmesan")
         ).model_dump_json()
-        yield ComposedMeal(
+        meal = ComposedMeal(
             name="Courgette ribbon salad",
             meal_type=meal_type,
             description="raw courgette ribbons with olive oil and fresh herbs",
@@ -228,7 +238,8 @@ class _FakeStreamer:
             tags=["fresh"],
             reasoning_trace=[],
             model="fake/test",
-        ).model_dump_json()
+        )
+        yield MealStreamItem.of(meal).model_dump_json()
 
 
 @pytest_asyncio.fixture

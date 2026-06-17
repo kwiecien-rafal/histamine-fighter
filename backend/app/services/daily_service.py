@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.enums import ApprovalStatus, MealType
 from app.models import DailySuggestion
 from app.schemas.daily import DailyMealCard, DailyMealContent, LockedBoard, RevealedBoard
-from app.schemas.meal import TraceEvent
+from app.schemas.meal import MODEL_AUTHORED_TRACE_KINDS, TraceEvent
 
 log = structlog.get_logger(__name__)
 
@@ -55,9 +55,7 @@ class DailyService:
             date=on,
             model=ordered[0].model,
             meals=[_to_card(row) for row in ordered],
-            trace=[
-                TraceEvent.model_validate(event) for row in ordered for event in row.reasoning_trace
-            ],
+            trace=_public_trace(ordered),
         )
 
     async def list_for_review(
@@ -111,3 +109,13 @@ def _to_card(row: DailySuggestion) -> DailyMealCard:
     return DailyMealCard(
         meal_type=row.meal_type, **content.model_dump(exclude={"unverified_ingredients"})
     )
+
+
+def _public_trace(rows: list[DailySuggestion]) -> list[TraceEvent]:
+    """The replayable trace across the day's meals, with model prose dropped.
+
+    Only code-authored steps reach the public board: a ``draft`` is the model's own
+    text, which never makes a safety claim to a visitor.
+    """
+    events = (TraceEvent.model_validate(raw) for row in rows for raw in row.reasoning_trace)
+    return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]

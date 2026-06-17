@@ -41,7 +41,7 @@ from app.agents.dish_lookup import _grounded_verdict
 from app.agents.meal_verification import MealVerification, verify_meal
 from app.agents.prompting import load_prompt, render_prompt
 from app.core.term_match import TermMatcher
-from app.enums import MealType
+from app.enums import MealType, TraceReading
 from app.llm.errors import LLMError, LLMInvocationError
 from app.llm.langchain_factory import ChatModel
 from app.schemas.meal import (
@@ -50,11 +50,13 @@ from app.schemas.meal import (
     ComposedMeal,
     FindSafeIngredients,
     LookupIngredientSafety,
+    MealStreamItem,
     ProposedIngredient,
     ProposedIngredientDraft,
     SearchCuratedMeals,
     SubmitMeal,
     TraceEvent,
+    TraceStreamItem,
 )
 from app.services.ingredient_lookup import (
     LookupCandidate,
@@ -139,15 +141,18 @@ class ComposerAgent(BaseAgent):
         raise ComposerExhausted(f"Composer produced no meal for {meal_type.value}.")
 
     async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
-        """Stream the reasoning trace as JSON lines, ending with the composed meal.
+        """Stream the run as discriminated JSON lines: trace steps, then the meal.
 
-        The first real streaming agent: each authored ``TraceEvent`` is yielded as
-        it happens and the terminal item is the ``ComposedMeal``, so the admin live
-        trigger (Phase 4) can replay the run as it runs. Dish-lookup streaming stays
-        unimplemented on purpose.
+        The first real streaming agent. Each step is a ``TraceStreamItem`` and the
+        terminal item is a ``MealStreamItem`` whose meal omits the trace (the client
+        assembled it from the steps), so a consumer switches on ``type`` instead of
+        sniffing the payload shape. Dish-lookup streaming stays unimplemented on purpose.
         """
         async for item in self._events(meal_type):
-            yield item.model_dump_json()
+            if isinstance(item, ComposedMeal):
+                yield MealStreamItem.of(item).model_dump_json()
+            else:
+                yield TraceStreamItem(event=item).model_dump_json()
 
     async def _events(self, meal_type: MealType) -> AsyncIterator[TraceEvent | ComposedMeal]:
         """Drive the tool-calling loop, yielding each authored step then the meal.
@@ -302,7 +307,7 @@ class ComposerAgent(BaseAgent):
             reading = self._reading(result)
             event = TraceEvent(
                 kind="check",
-                text=f"Checked {ingredient or 'an ingredient'}: {reading}.",
+                text=f"Checked {ingredient or 'an ingredient'}: {self._reading_phrase(reading)}.",
                 ingredient=ingredient or None,
                 compatibility=reading,
             )
@@ -318,11 +323,13 @@ class ComposerAgent(BaseAgent):
             if names:
                 return (
                     f"Well-tolerated options in '{category}': {joined}.",
-                    TraceEvent(kind="swap", text=f"Found safe options for {category}: {joined}."),
+                    TraceEvent(
+                        kind="options", text=f"Found safe options for {category}: {joined}."
+                    ),
                 )
             return (
                 f"No well-tolerated options indexed for '{category}'.",
-                TraceEvent(kind="swap", text=f"No safe options indexed for {category}."),
+                TraceEvent(kind="options", text=f"No safe options indexed for {category}."),
             )
 
         if name == SearchCuratedMeals.__name__:
@@ -338,7 +345,7 @@ class ComposerAgent(BaseAgent):
             return (
                 f"Approved meals similar to '{query}': {joined}.",
                 TraceEvent(
-                    kind="check", text=f"Checked the approved pool for '{query}': {joined}."
+                    kind="search", text=f"Searched the approved pool for '{query}': {joined}."
                 ),
             )
 
@@ -361,7 +368,7 @@ class ComposerAgent(BaseAgent):
                 kind="reject",
                 text=f"Rejected '{dish}': {ingredient} is {reason}.",
                 ingredient=ingredient,
-                compatibility=reason,
+                compatibility=TraceReading(reason),
             )
         term = verification.recipe_flags[0]
         return TraceEvent(
@@ -397,15 +404,20 @@ class ComposerAgent(BaseAgent):
         return text
 
     @staticmethod
-    def _reading(result: LookupResult) -> str:
-        """One ingredient's index reading as a short word for the model and the trace."""
+    def _reading(result: LookupResult) -> TraceReading:
+        """One ingredient's index reading, as the structured token the trace carries."""
         if result.error:
-            return "unverifiable"
+            return TraceReading.UNVERIFIABLE
         if not result.found:
-            return "not indexed"
-        return _grounded_verdict([result]).value
+            return TraceReading.NOT_INDEXED
+        return TraceReading(_grounded_verdict([result]).value)
 
-    def _lookup_content(self, ingredient: str, result: LookupResult, reading: str) -> str:
+    @staticmethod
+    def _reading_phrase(reading: TraceReading) -> str:
+        """The reading as a human phrase for trace prose (no underscores)."""
+        return "not indexed" if reading is TraceReading.NOT_INDEXED else reading.value
+
+    def _lookup_content(self, ingredient: str, result: LookupResult, reading: TraceReading) -> str:
         if result.error:
             return f"{ingredient}: could not be read from the index, so treat it as unknown."
         if not result.found:
@@ -415,7 +427,7 @@ class ComposerAgent(BaseAgent):
                 "for human review."
             )
         rows = "; ".join(self._row_summary(candidate) for candidate in result.candidates)
-        return f"{ingredient}: {reading} ({rows})."
+        return f"{ingredient}: {reading.value} ({rows})."
 
     @staticmethod
     def _row_summary(candidate: LookupCandidate) -> str:
