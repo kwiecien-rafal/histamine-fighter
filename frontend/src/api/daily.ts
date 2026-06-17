@@ -1,5 +1,5 @@
 import type { MealType, TraceEvent } from "./admin";
-import type { ProposedIngredient } from "./client";
+import type { LLMUsage, ProposedIngredient } from "./client";
 
 // The public daily board. A plain GET, no auth and no LLM headers: the meals were
 // composed offline and approved, so the page only reads pre-generated rows.
@@ -26,6 +26,8 @@ export interface RevealedBoard {
   model: string;
   meals: DailyMealCard[];
   trace: TraceEvent[];
+  // Total token usage of composing the day's meals.
+  usage: LLMUsage;
 }
 
 export type DailyBoard = LockedBoard | RevealedBoard;

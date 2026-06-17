@@ -19,6 +19,7 @@ from app.enums import ApprovalStatus, MealType
 from app.models import DailySuggestion
 from app.schemas.daily import DailyMealCard, DailyMealContent, LockedBoard, RevealedBoard
 from app.schemas.meal import MODEL_AUTHORED_TRACE_KINDS, TraceEvent
+from app.schemas.usage import LLMUsage
 
 log = structlog.get_logger(__name__)
 
@@ -56,6 +57,7 @@ class DailyService:
             model=ordered[0].model,
             meals=[_to_card(row) for row in ordered],
             trace=_public_trace(ordered),
+            usage=_total_usage(ordered),
         )
 
     async def list_for_review(
@@ -119,3 +121,18 @@ def _public_trace(rows: list[DailySuggestion]) -> list[TraceEvent]:
     """
     events = (TraceEvent.model_validate(raw) for row in rows for raw in row.reasoning_trace)
     return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]
+
+
+def _total_usage(rows: list[DailySuggestion]) -> LLMUsage:
+    """Token usage of composing the day's board, summed across its meals.
+
+    Rows composed before usage was recorded carry none and simply add nothing.
+    """
+    usages = [LLMUsage.model_validate(row.usage) for row in rows if row.usage]
+    return LLMUsage(
+        calls=sum(usage.calls for usage in usages),
+        input_tokens=sum(usage.input_tokens for usage in usages),
+        output_tokens=sum(usage.output_tokens for usage in usages),
+        total_tokens=sum(usage.total_tokens for usage in usages),
+        steps=[step for usage in usages for step in usage.steps],
+    )

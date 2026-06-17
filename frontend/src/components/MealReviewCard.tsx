@@ -1,5 +1,6 @@
 import type { AdminMeal } from "../api/admin";
 import { MEAL_TYPE_LABEL, TRACE_KIND_LABEL, isRejectEvent } from "../lib/meal";
+import { ComposeCost } from "./ComposeCost";
 import { LLMProviderBadge } from "./LLMProviderBadge";
 
 interface MealReviewCardProps {
@@ -21,6 +22,11 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
           <LLMProviderBadge model={meal.model} />
         </div>
       </div>
+      {meal.usage && (
+        <div className="mb-1">
+          <ComposeCost usage={meal.usage} model={meal.model} />
+        </div>
+      )}
       <p className="text-sm text-stone-600 mb-4">{meal.description}</p>
 
       <h4 className="text-xs font-semibold uppercase tracking-wide text-stone-500 mb-2">

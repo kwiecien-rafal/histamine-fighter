@@ -39,6 +39,7 @@ async def _add(
     approval_status: ApprovalStatus = ApprovalStatus.APPROVED,
     name: str | None = None,
     trace: list[dict[str, Any]] | None = None,
+    usage: dict[str, Any] | None = None,
     model: str = "fake/test",
 ) -> DailySuggestion:
     row = DailySuggestion(
@@ -46,6 +47,7 @@ async def _add(
         meal_type=meal_type,
         content=_content(name or f"{meal_type.value} salad"),
         model=model,
+        usage=usage,
         reasoning_trace=trace or [{"kind": "verify", "text": f"{meal_type.value} cleared."}],
         reveal_at=reveal_at,
         approval_status=approval_status,
@@ -133,6 +135,34 @@ async def test_revealed_board_drops_model_draft_events(session: AsyncSession) ->
 
     assert board.status == "revealed"
     assert [event.kind for event in board.trace] == ["verify"]
+
+
+async def test_revealed_board_totals_usage_across_meals(session: AsyncSession) -> None:
+    await _add(
+        session,
+        meal_type=MealType.BREAKFAST,
+        usage={"calls": 3, "input_tokens": 100, "output_tokens": 40, "total_tokens": 140},
+    )
+    await _add(
+        session,
+        meal_type=MealType.LUNCH,
+        usage={"calls": 2, "input_tokens": 50, "output_tokens": 10, "total_tokens": 60},
+    )
+
+    board = await DailyService(session).board_for(_DAY, now=_AFTER)
+
+    assert board.status == "revealed"
+    assert board.usage.calls == 5
+    assert board.usage.total_tokens == 200
+
+
+async def test_revealed_board_usage_is_zero_when_unrecorded(session: AsyncSession) -> None:
+    await _add(session, meal_type=MealType.BREAKFAST, usage=None)
+
+    board = await DailyService(session).board_for(_DAY, now=_AFTER)
+
+    assert board.status == "revealed"
+    assert board.usage.calls == 0
 
 
 async def test_board_ignores_other_dates(session: AsyncSession) -> None:

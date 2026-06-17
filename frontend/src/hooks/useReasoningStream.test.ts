@@ -31,7 +31,7 @@ describe("useReasoningStream", () => {
     const fetchMock = vi.fn().mockResolvedValue(
       sseResponse([
         'event: trace\ndata: {"kind":"check","text":"Checking parmesan","ingredient":null,"compatibility":null}\n\n',
-        'event: meal\ndata: {"name":"Courgette salad","meal_type":"lunch","description":"fresh","ingredients":[],"recipe":null,"tags":[],"unverified_ingredients":[],"model":"stub/model"}\n\n',
+        'event: meal\ndata: {"name":"Courgette salad","meal_type":"lunch","description":"fresh","ingredients":[],"recipe":null,"tags":[],"unverified_ingredients":[],"model":"stub/model","usage":{"calls":3,"input_tokens":100,"output_tokens":20,"total_tokens":120,"steps":[]}}\n\n',
       ]),
     );
     vi.stubGlobal("fetch", fetchMock);

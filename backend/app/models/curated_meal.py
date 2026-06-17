@@ -69,6 +69,9 @@ class CuratedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     # The producing model, surfaced on the transparency badge.
     model: Mapped[str]
+    # Token usage of the composition (an LLMUsage blob), for the cost the badge
+    # shows. Null for rows composed before this was recorded.
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     # The composer's authored act->observe->decide events, replayed as the board's
     # "watch the agent think" showcase.
     reasoning_trace: Mapped[list[dict[str, Any]]] = mapped_column(

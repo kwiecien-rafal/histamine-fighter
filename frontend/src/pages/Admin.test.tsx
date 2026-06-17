@@ -41,6 +41,7 @@ function meal(): AdminMeal {
     tags: ["fresh"],
     unverified_ingredients: [],
     model: "stub/model",
+    usage: { calls: 4, input_tokens: 800, output_tokens: 120, total_tokens: 920, steps: [] },
     reasoning_trace: [
       { kind: "reject", text: "Dropped parmesan — avoid.", ingredient: "parmesan", compatibility: "avoid" },
       { kind: "verify", text: "All ingredients cleared the index.", ingredient: null, compatibility: null },

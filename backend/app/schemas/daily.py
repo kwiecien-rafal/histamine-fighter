@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.enums import MealType
 from app.schemas.meal import ProposedIngredient, TraceEvent
+from app.schemas.usage import LLMUsage
 
 
 class DailyMealContent(BaseModel):
@@ -63,6 +64,10 @@ class RevealedBoard(BaseModel):
     meals: list[DailyMealCard]
     trace: list[TraceEvent] = Field(
         description="The composer's recorded reasoning across the day's meals, in order."
+    )
+    usage: LLMUsage = Field(
+        default_factory=LLMUsage,
+        description="Total token usage of composing the day's meals.",
     )
 
 

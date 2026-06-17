@@ -288,6 +288,7 @@ class ComposerAgent(BaseAgent):
                 unverified_ingredients=verification.unverified,
                 reasoning_trace=list(trace),
                 model=self.model_name,
+                usage=self._collect_usage(),
             ),
             None,
         )

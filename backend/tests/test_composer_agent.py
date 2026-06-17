@@ -222,12 +222,15 @@ async def test_usage_is_tallied_per_iteration(
     )
 
     agent = _agent(chat, session, fake_embedder)
-    await agent.compose(MealType.BREAKFAST)
+    meal = await agent.compose(MealType.BREAKFAST)
 
     usage = agent._collect_usage()
     assert usage.calls == 2
     assert usage.total_tokens == 30
     assert [step.step for step in usage.steps] == ["compose", "compose"]
+    # The same tally rides on the returned meal, so the batch can persist it.
+    assert meal.usage.calls == 2
+    assert meal.usage.total_tokens == 30
 
 
 async def test_lookup_tool_records_a_check_event(

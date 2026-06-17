@@ -1,76 +1,17 @@
 import { useState } from "react";
 
-import type { LLMUsage } from "../api/client";
 import { useDismissableOverlay } from "../hooks/useDismissableOverlay";
 import { estimateCost, PRICES_UPDATED } from "../lib/pricing";
+import {
+  cellTexts,
+  callsLabel,
+  formatTokens,
+  formatUsd,
+  reportedness,
+  tokenCell,
+  usageTotals as asTotals,
+} from "../lib/usage";
 import { useUsageStore, type TokenTotals } from "../store/usage";
-
-function formatTokens(count: number): string {
-  if (count < 1000) return String(count);
-  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
-  return `${(count / 1_000_000).toFixed(count < 10_000_000 ? 1 : 0)}M`;
-}
-
-function formatUsd(usd: number | null): string {
-  if (usd === null) return "—";
-  if (usd === 0) return "$0";
-  if (usd < 0.0001) return "<$0.0001";
-  return `~$${usd.toFixed(usd >= 1 ? 2 : 4)}`;
-}
-
-// A provider may not meter a call. "none" means every call went unmetered, so the
-// token figures are unknown (rendered "—") rather than zero; "partial" means only
-// some did, so the figures are a lower bound (marked "~").
-type Reportedness = "full" | "partial" | "none";
-
-function reportedness(calls: number, unreportedCalls: number): Reportedness {
-  if (unreportedCalls === 0) return "full";
-  if (unreportedCalls >= calls) return "none";
-  return "partial";
-}
-
-function tokenCell(totalTokens: number, rep: Reportedness, unit = "tok"): string {
-  if (rep === "none") return "—";
-  return `${rep === "partial" ? "~" : ""}${formatTokens(totalTokens)} ${unit}`;
-}
-
-interface CellTexts {
-  tokens: string;
-  cost: string;
-  title?: string;
-}
-
-// The token and cost strings for one model or call, honouring how much of it the
-// provider actually metered. `selfHostedSuffix` widens "$0" to "$0 self-hosted"
-// for the roomier by-model rows.
-function cellTexts(model: string, totals: TokenTotals, selfHostedSuffix = false): CellTexts {
-  const rep = reportedness(totals.calls, totals.unreportedCalls);
-  const tokens = tokenCell(totals.totalTokens, rep);
-  if (rep === "none") {
-    return { tokens, cost: "—", title: "Provider reported no token usage" };
-  }
-  const cost = estimateCost(model, totals.inputTokens, totals.outputTokens);
-  const costText = cost.selfHosted ? (selfHostedSuffix ? "$0 self-hosted" : "$0") : formatUsd(cost.usd);
-  const title =
-    rep === "partial"
-      ? "Some calls were not metered; figures are a lower bound."
-      : cost.usd === null && !cost.selfHosted
-        ? "No price set for this model — add it in pricing.ts."
-        : undefined;
-  return { tokens, cost: costText, title };
-}
-
-// A recorded call carries its per-step usage; fold it into the same shape the
-// aggregate rows use so one set of formatters serves both.
-function asTotals(usage: LLMUsage): TokenTotals {
-  return {
-    calls: usage.calls,
-    inputTokens: usage.input_tokens,
-    outputTokens: usage.output_tokens,
-    totalTokens: usage.total_tokens,
-    unreportedCalls: usage.steps.filter((step) => !step.reported).length,
-  };
-}
 
 // Session total: sum the metered, priced and self-hosted models; skip the
 // unmetered and the unpriced. An empty session reads $0 (nothing spent yet), but
@@ -89,10 +30,6 @@ function sessionCost(byModel: Record<string, TokenTotals>): number | null {
     }
   }
   return anyKnown ? sum : null;
-}
-
-function callsLabel(calls: number): string {
-  return `${calls} ${calls === 1 ? "call" : "calls"}`;
 }
 
 export function UsagePanel() {

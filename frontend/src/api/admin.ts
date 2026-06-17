@@ -1,4 +1,4 @@
-import type { ProposedIngredient } from "./client";
+import type { LLMUsage, ProposedIngredient } from "./client";
 
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -34,6 +34,8 @@ export interface AdminMeal {
   // them before approving.
   unverified_ingredients: string[];
   model: string;
+  // Token usage of the composition; null for meals composed before it was recorded.
+  usage: LLMUsage | null;
   reasoning_trace: TraceEvent[];
   approval_status: ApprovalStatus;
   approved_at: string | null;
@@ -53,6 +55,7 @@ export interface ComposedMeal {
   tags: string[];
   unverified_ingredients: string[];
   model: string;
+  usage: LLMUsage;
 }
 
 export interface TokenResponse {

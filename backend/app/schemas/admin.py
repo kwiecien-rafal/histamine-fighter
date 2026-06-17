@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.enums import ApprovalStatus, MealType
 from app.schemas.daily import DailyMealContent
 from app.schemas.meal import ProposedIngredient, TraceEvent
+from app.schemas.usage import LLMUsage
 
 # Generous bounds: just enough to reject absurd payloads. A password over bcrypt's
 # 72-byte limit is allowed through and simply fails verification, never matching a
@@ -56,6 +57,7 @@ class AdminMealRead(BaseModel):
     tags: list[str]
     unverified_ingredients: list[str]
     model: str = Field(description="Which model composed the meal.")
+    usage: LLMUsage | None = Field(description="Token usage of the composition, if recorded.")
     reasoning_trace: list[TraceEvent]
     approval_status: ApprovalStatus
     approved_at: datetime | None
@@ -77,6 +79,7 @@ class AdminDailyRead(BaseModel):
     meal_type: MealType
     content: DailyMealContent
     model: str = Field(description="Which model composed the meal.")
+    usage: LLMUsage | None = Field(description="Token usage of the composition, if recorded.")
     reasoning_trace: list[TraceEvent]
     reveal_at: datetime
     approval_status: ApprovalStatus

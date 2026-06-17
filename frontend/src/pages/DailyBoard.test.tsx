@@ -34,10 +34,11 @@ function revealed(): RevealedBoard {
     model: "stub/model",
     meals: [mealCard()],
     trace: [
-      { kind: "draft", text: "step one", ingredient: null, compatibility: null },
+      { kind: "check", text: "step one", ingredient: null, compatibility: null },
       { kind: "check", text: "step two", ingredient: null, compatibility: null },
       { kind: "verify", text: "step three", ingredient: null, compatibility: null },
     ],
+    usage: { calls: 8, input_tokens: 1600, output_tokens: 240, total_tokens: 1840, steps: [] },
   };
 }
 

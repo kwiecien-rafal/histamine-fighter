@@ -91,6 +91,7 @@ async def _compose_one(
         meal_type=meal.meal_type,
         content=content.model_dump(),
         model=meal.model,
+        usage=meal.usage.model_dump(),
         reasoning_trace=[event.model_dump() for event in meal.reasoning_trace],
         reveal_at=reveal_at,
         approval_status=ApprovalStatus.PENDING,

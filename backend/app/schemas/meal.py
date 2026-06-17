@@ -389,6 +389,10 @@ class ComposedMealCard(BaseModel):
     tags: list[str]
     unverified_ingredients: list[str] = Field(default_factory=list)
     model: str
+    usage: LLMUsage = Field(
+        default_factory=LLMUsage,
+        description="Token usage of every model call the composition took.",
+    )
 
 
 class ComposedMeal(ComposedMealCard):

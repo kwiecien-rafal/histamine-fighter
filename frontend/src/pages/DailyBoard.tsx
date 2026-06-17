@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { RevealedBoard } from "../api/daily";
+import { ComposeCost } from "../components/ComposeCost";
 import { LLMProviderBadge } from "../components/LLMProviderBadge";
 import { MealCard } from "../components/MealCard";
 import { ReasoningReplay } from "../components/ReasoningReplay";
@@ -120,10 +121,13 @@ function RevealedView({ board }: { board: RevealedBoard }) {
 
   return (
     <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-stone-600">{board.meals.length} meals for today</p>
-        <span className="flex items-center gap-2 text-xs text-stone-500">
-          Composed by <LLMProviderBadge model={board.model} />
+        <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-xs text-stone-500">
+          <span className="flex items-center gap-2">
+            Composed by <LLMProviderBadge model={board.model} />
+          </span>
+          <ComposeCost usage={board.usage} model={board.model} />
         </span>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

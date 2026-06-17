@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { AdminMeal, ComposedMeal, MealType } from "../api/admin";
+import { ComposeCost } from "../components/ComposeCost";
 import { LLMProviderBadge } from "../components/LLMProviderBadge";
 import { MealReviewCard } from "../components/MealReviewCard";
 import { ReasoningReplay } from "../components/ReasoningReplay";
@@ -187,6 +188,9 @@ function ComposedMealView({ meal }: { meal: ComposedMeal }) {
           </span>
           <LLMProviderBadge model={meal.model} />
         </div>
+      </div>
+      <div className="mb-2">
+        <ComposeCost usage={meal.usage} model={meal.model} />
       </div>
       <p className="text-sm text-stone-600 mb-3">{meal.description}</p>
       <ul className="flex flex-wrap gap-1.5">

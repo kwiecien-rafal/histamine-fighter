@@ -47,6 +47,9 @@ class DailySuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     content: Mapped[dict[str, Any]] = mapped_column(JSONB)
     # The producing model, surfaced on the board's transparency badge.
     model: Mapped[str]
+    # Token usage of the composition (an LLMUsage blob); the board totals these for
+    # its cost badge. Null for rows composed before this was recorded.
+    usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB, default=None)
     reasoning_trace: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'")
     )
