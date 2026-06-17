@@ -61,6 +61,12 @@ class CuratedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'")
     )
+    # Ingredients the index had no entry for: accepted by the automated gate (a
+    # miss is unknown, not unsafe) but recorded so the approving admin sees exactly
+    # what code could not vouch for.
+    unverified_ingredients: Mapped[list[str]] = mapped_column(
+        ARRAY(String), default=list, server_default=text("'{}'")
+    )
     # The producing model, surfaced on the transparency badge.
     model: Mapped[str]
     # The composer's authored act->observe->decide events, replayed as the board's

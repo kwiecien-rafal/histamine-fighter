@@ -362,12 +362,13 @@ class TraceEvent(BaseModel):
 
 
 class ComposedMeal(BaseModel):
-    """A meal the composer built and code verified index-safe, before admin review.
+    """A meal the composer built and code verified, before admin review.
 
-    There is no verdict field because there is no per-meal verdict to report: the
-    meal is safe by construction (every ingredient cleared the index) or it was
-    never returned. Membership in the approved pool, once an admin signs off, is
-    the verified signal downstream.
+    No per-meal verdict travels here: nothing the index flags survived (or the
+    meal was never returned), so safety is carried by construction plus admin
+    approval, not a field. ``unverified_ingredients`` are the ones absent from the
+    index, accepted by the automated gate but surfaced so the reviewing admin
+    closes that gap with eyes open rather than the gate hiding it.
     """
 
     name: str
@@ -376,6 +377,7 @@ class ComposedMeal(BaseModel):
     ingredients: list[ProposedIngredient]
     recipe: list[str] | None
     tags: list[str]
+    unverified_ingredients: list[str] = Field(default_factory=list)
     reasoning_trace: list[TraceEvent]
     model: str
 

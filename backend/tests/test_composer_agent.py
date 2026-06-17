@@ -61,7 +61,9 @@ def _ai(*, content: str = "", tool_calls: list[dict[str, Any]] | None = None) ->
 
 
 def _submit(
-    name: str = "Courgette ribbons", ingredients: list[dict[str, Any]] | None = None
+    name: str = "Courgette ribbons",
+    ingredients: list[dict[str, Any]] | None = None,
+    recipe: list[str] | None = None,
 ) -> dict[str, Any]:
     return _call(
         "SubmitMeal",
@@ -69,7 +71,7 @@ def _submit(
             "name": name,
             "description": "a light, fresh dish",
             "ingredients": _SAFE_INGREDIENTS if ingredients is None else ingredients,
-            "recipe": ["Prep the ingredients.", "Plate and serve."],
+            "recipe": ["Prep the ingredients.", "Plate and serve."] if recipe is None else recipe,
             "tags": ["light", "raw"],
         },
     )
@@ -150,6 +152,46 @@ async def test_submit_with_avoid_ingredient_is_rejected_then_revised(
     reject = next(event for event in meal.reasoning_trace if event.kind == "reject")
     assert reject.ingredient == "parmesan"
     assert reject.compatibility == "avoid"
+
+
+async def test_recipe_smuggling_a_flagged_ingredient_is_rejected_then_revised(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    await _seed(session)
+    # Every listed ingredient is clean, but the recipe writes in parmesan, which
+    # the index flags. The ingredient gate alone would miss it; the recipe scan does not.
+    chat = _ScriptedToolChat(
+        [
+            _ai(tool_calls=[_submit(recipe=["Saute the courgette.", "Finish with parmesan."])]),
+            _ai(tool_calls=[_submit(recipe=["Saute the courgette.", "Plate and serve."])]),
+        ]
+    )
+
+    meal = await _agent(chat, session, fake_embedder).compose(MealType.DINNER)
+
+    assert meal.recipe == ["Saute the courgette.", "Plate and serve."]
+    reject = next(event for event in meal.reasoning_trace if event.kind == "reject")
+    assert reject.ingredient == "parmesan"
+    assert "parmesan" not in " ".join(meal.recipe or []).casefold()
+
+
+async def test_unindexed_ingredient_is_accepted_and_recorded(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    await _seed(session)
+    # courgette is indexed safe; dragon fruit is not in the index at all, so it
+    # passes the automated gate but is surfaced for the admin to review.
+    ingredients = [
+        {"name": "courgette", "category": "vegetable"},
+        {"name": "dragon fruit", "category": "fruit"},
+    ]
+    chat = _ScriptedToolChat([_ai(tool_calls=[_submit(ingredients=ingredients)])])
+
+    meal = await _agent(chat, session, fake_embedder).compose(MealType.SNACK)
+
+    assert meal.unverified_ingredients == ["dragon fruit"]
+    verify = next(event for event in meal.reasoning_trace if event.kind == "verify")
+    assert "dragon fruit" in verify.text
 
 
 async def test_composer_exhausts_after_iteration_budget(

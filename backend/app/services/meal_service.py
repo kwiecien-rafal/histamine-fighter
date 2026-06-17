@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from app.core.normalization import normalize_ingredient_name
+from app.core.term_match import TermMatcher
 from app.embeddings import Embedder
 from app.enums import ApprovalStatus, MealType
 from app.models import CuratedMeal
@@ -39,28 +40,25 @@ class _ExcludeTerms:
     """Exclude terms prepared once per query, then matched per meal ingredient.
 
     A category matches exactly (it is a controlled vocabulary). An ingredient
-    *name* matches when its tokens and a term's tokens are subset-related either
-    way, so avoiding "tomato sauce" still drops a meal listing "tomato", and
-    avoiding "wine" drops "red wine" without "egg" dropping "eggplant" (distinct
-    single tokens). This is lexical, not semantic; resolving both sides through
-    the ingredient index is a deliberate future upgrade.
+    *name* matches by token-set containment via the shared :class:`TermMatcher`,
+    so avoiding "tomato sauce" still drops a meal listing "tomato", and avoiding
+    "wine" drops "red wine" without "egg" dropping "eggplant" (distinct single
+    tokens). Lexical, not semantic; resolving both sides through the ingredient
+    index is a deliberate future upgrade.
     """
 
     exact: frozenset[str]
-    token_sets: tuple[frozenset[str], ...]
+    names: TermMatcher
 
     @classmethod
     def from_terms(cls, terms: Collection[str]) -> "_ExcludeTerms":
         keys = [key for term in terms if (key := normalize_ingredient_name(term))]
-        return cls(frozenset(keys), tuple(frozenset(key.split()) for key in keys))
+        return cls(frozenset(keys), TermMatcher.from_terms(keys))
 
     def matches(self, name: str, category: str) -> bool:
         if category and category in self.exact:
             return True
-        if not name:
-            return False
-        name_tokens = frozenset(name.split())
-        return any(name_tokens <= term or term <= name_tokens for term in self.token_sets)
+        return bool(name) and self.names.matched(name)
 
 
 class MealService:

@@ -40,6 +40,13 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
         ))}
       </ul>
 
+      {meal.unverified_ingredients.length > 0 && (
+        <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <span className="font-semibold">Not in the index — check before approving:</span>{" "}
+          {meal.unverified_ingredients.join(", ")}
+        </div>
+      )}
+
       {meal.reasoning_trace.length > 0 && (
         <details className="mb-4">
           <summary className="text-xs font-semibold uppercase tracking-wide text-stone-500 cursor-pointer">

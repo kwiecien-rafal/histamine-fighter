@@ -84,6 +84,7 @@ async def _compose_one(
         ingredients=meal.ingredients,
         recipe=meal.recipe,
         tags=meal.tags,
+        unverified_ingredients=meal.unverified_ingredients,
     )
     return DailySuggestion(
         suggestion_date=target,

@@ -74,6 +74,7 @@ async def _compose_one(
         ingredients=[ingredient.model_dump() for ingredient in meal.ingredients],
         recipe=meal.recipe,
         tags=meal.tags,
+        unverified_ingredients=meal.unverified_ingredients,
         model=meal.model,
         reasoning_trace=[event.model_dump() for event in meal.reasoning_trace],
         approval_status=ApprovalStatus.PENDING,

@@ -18,6 +18,9 @@ export interface AdminMeal {
   ingredients: ProposedIngredient[];
   recipe: string[] | null;
   tags: string[];
+  // Ingredients the index could not vouch for, surfaced so the reviewer checks
+  // them before approving.
+  unverified_ingredients: string[];
   model: string;
   reasoning_trace: TraceEvent[];
   approval_status: ApprovalStatus;
@@ -35,6 +38,7 @@ export interface ComposedMeal {
   ingredients: ProposedIngredient[];
   recipe: string[] | null;
   tags: string[];
+  unverified_ingredients: string[];
   reasoning_trace: TraceEvent[];
   model: string;
 }

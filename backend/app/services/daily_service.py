@@ -107,4 +107,7 @@ class DailyService:
 
 def _to_card(row: DailySuggestion) -> DailyMealCard:
     content = DailyMealContent.model_validate(row.content)
-    return DailyMealCard(meal_type=row.meal_type, **content.model_dump())
+    # unverified_ingredients is review-queue context, not a public card field.
+    return DailyMealCard(
+        meal_type=row.meal_type, **content.model_dump(exclude={"unverified_ingredients"})
+    )

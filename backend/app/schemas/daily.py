@@ -17,13 +17,18 @@ from app.schemas.meal import ProposedIngredient, TraceEvent
 
 
 class DailyMealContent(BaseModel):
-    """The composed meal as stored in a suggestion's JSONB ``content`` column."""
+    """The composed meal as stored in a suggestion's JSONB ``content`` column.
+
+    ``unverified_ingredients`` rides along for the admin review queue; it is
+    dropped from the public card, which only ever shows approved meals.
+    """
 
     name: str
     description: str
     ingredients: list[ProposedIngredient]
     recipe: list[str] | None
     tags: list[str]
+    unverified_ingredients: list[str] = Field(default_factory=list)
 
 
 class DailyMealCard(BaseModel):

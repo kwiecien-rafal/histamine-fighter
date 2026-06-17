@@ -39,6 +39,7 @@ function meal(): AdminMeal {
     ingredients: [{ name: "courgette", category: "vegetable" }],
     recipe: ["Peel into ribbons."],
     tags: ["fresh"],
+    unverified_ingredients: [],
     model: "stub/model",
     reasoning_trace: [
       { kind: "reject", text: "Dropped parmesan — avoid.", ingredient: "parmesan", compatibility: "avoid" },

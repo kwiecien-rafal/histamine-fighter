@@ -54,6 +54,7 @@ class AdminMealRead(BaseModel):
     ingredients: list[ProposedIngredient]
     recipe: list[str] | None
     tags: list[str]
+    unverified_ingredients: list[str]
     model: str = Field(description="Which model composed the meal.")
     reasoning_trace: list[TraceEvent]
     approval_status: ApprovalStatus

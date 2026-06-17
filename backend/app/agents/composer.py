@@ -10,11 +10,13 @@ hard-coded generate-check loop could not make.
 
 Safety stays out of the model's hands. ``SubmitMeal`` is not trusted: code re-runs
 the whole submitted list through the curated index and the same ``_grounded_verdict``
-the dish lookup owns, and requires it to be safe before the meal is returned. The
-residual gap (an ingredient the model silently omits from the list) is closed by
-the admin approval downstream, per the safety invariant. The composer is honest
-where a "verify the alternatives" loop would be theatre, because the meal is built
-forward from a verified-safe palette rather than rescued backward from a fixed dish.
+the dish lookup owns, and also scans the recipe prose for an index-flagged ingredient
+written into the steps but kept off the list. Nothing the index flags can survive.
+What code cannot decide it does not hide: an ingredient absent from the index is
+unknown, not safe, so it passes the automated gate but is recorded as unverified for
+the admin to clear (the safety invariant). The composer is honest where a "verify the
+alternatives" loop would be theatre, because the meal is built forward from index
+readings rather than rescued backward from a fixed dish.
 
 Every loop action is authored into a :class:`TraceEvent` so the run can be replayed
 as the daily board's "watch the agent think" showcase. The expensive work runs
@@ -36,8 +38,10 @@ from pydantic import ValidationError
 
 from app.agents.base import BaseAgent
 from app.agents.dish_lookup import _grounded_verdict
+from app.agents.meal_verification import MealVerification, verify_meal
 from app.agents.prompting import load_prompt, render_prompt
-from app.enums import MealType, SafetyLevel
+from app.core.term_match import TermMatcher
+from app.enums import MealType
 from app.llm.errors import LLMError, LLMInvocationError
 from app.llm.langchain_factory import ChatModel
 from app.schemas.meal import (
@@ -126,6 +130,7 @@ class ComposerAgent(BaseAgent):
                     meal_type=meal_type.value,
                     name=item.name,
                     ingredients=len(item.ingredients),
+                    unverified=len(item.unverified_ingredients),
                     trace=len(item.reasoning_trace),
                     model=self.model_name,
                 )
@@ -170,6 +175,9 @@ class ComposerAgent(BaseAgent):
             ),
         ]
         trace: list[TraceEvent] = []
+        # Loaded once: the index's worse-than-safe terms, scanned against any
+        # submitted recipe so a risky ingredient written into the steps is caught.
+        risky_terms = TermMatcher.from_terms(await self._ingredient_service.risky_terms())
 
         for iteration in range(self._max_iterations):
             try:
@@ -198,7 +206,9 @@ class ComposerAgent(BaseAgent):
             for call in reply.tool_calls:
                 if call["name"] == SubmitMeal.__name__:
                     before = len(trace)
-                    meal, feedback = await self._handle_submission(meal_type, call, trace)
+                    meal, feedback = await self._handle_submission(
+                        meal_type, call, trace, risky_terms
+                    )
                     for event in trace[before:]:
                         yield event
                     if meal is not None:
@@ -219,13 +229,15 @@ class ComposerAgent(BaseAgent):
         raise ComposerExhausted(f"Composer exhausted {self._max_iterations} iterations.")
 
     async def _handle_submission(
-        self, meal_type: MealType, call: ToolCall, trace: list[TraceEvent]
+        self, meal_type: MealType, call: ToolCall, trace: list[TraceEvent], risky_terms: TermMatcher
     ) -> tuple[ComposedMeal | None, str | None]:
         """Verify a submission in code; return the meal or feedback to revise.
 
-        The verdict is recomputed in code from the index, never trusted from the
-        model: an ``avoid`` reading on any ingredient (or one that cannot be read)
-        sends it back. Appends the submit and the verify/reject events to ``trace``.
+        The check is recomputed in code from the index, never trusted from the
+        model: a risky reading on any listed ingredient (or one that cannot be
+        read), or an index-flagged ingredient written into the recipe, sends it
+        back. Ingredients absent from the index pass but are recorded as
+        unverified. Appends the submit and the verify/reject events to ``trace``.
         """
         try:
             submission = SubmitMeal.model_validate(call["args"])
@@ -234,6 +246,7 @@ class ComposerAgent(BaseAgent):
             return None, "Your SubmitMeal arguments were malformed. Resend the full meal."
 
         ingredients = self._normalize_ingredients(submission.ingredients)
+        recipe = self._normalize_recipe(submission.recipe)
         trace.append(
             TraceEvent(
                 kind="submit",
@@ -248,24 +261,15 @@ class ComposerAgent(BaseAgent):
         lookups = await lookup_ingredients(
             self._ingredient_service, [(item.name, item.category) for item in ingredients]
         )
-        blockers = self._blockers(lookups)
-        if blockers:
-            name, reason = blockers[0]
-            trace.append(
-                TraceEvent(
-                    kind="reject",
-                    text=f"Rejected '{submission.name}': {name} is {reason}.",
-                    ingredient=name,
-                    compatibility=reason,
-                )
-            )
-            return None, self._reject_feedback(blockers)
+        verification = verify_meal(lookups, recipe or [], risky_terms)
+        if not verification.is_safe:
+            trace.append(self._reject_event(submission.name, verification))
+            return None, self._reject_feedback(verification)
 
         trace.append(
             TraceEvent(
                 kind="verify",
-                text=f"Verified all {len(ingredients)} ingredients against the index. "
-                f"'{submission.name}' is safe.",
+                text=self._verify_text(submission.name, len(ingredients), verification.unverified),
             )
         )
         return (
@@ -274,8 +278,9 @@ class ComposerAgent(BaseAgent):
                 meal_type=meal_type,
                 description=submission.description.strip(),
                 ingredients=ingredients,
-                recipe=self._normalize_recipe(submission.recipe),
+                recipe=recipe,
                 tags=self._normalize_tags(submission.tags),
+                unverified_ingredients=verification.unverified,
                 reasoning_trace=list(trace),
                 model=self.model_name,
             ),
@@ -343,30 +348,53 @@ class ComposerAgent(BaseAgent):
             TraceEvent(kind="check", text=f"Ignored an unrecognised tool call '{name}'."),
         )
 
-    def _blockers(self, lookups: list[LookupResult]) -> list[tuple[str, str]]:
-        """The ingredients that fail the index check, each with the reason, in order.
+    @staticmethod
+    def _reject_event(dish: str, verification: MealVerification) -> TraceEvent:
+        """The single trace line shown when a submission is sent back.
 
-        Uses ``_grounded_verdict`` per ingredient (the dish lookup owns it), so an
-        ``avoid`` reading blocks. A lookup that errored read nothing, so it cannot
-        be evidence of safety and blocks too.
+        Leads with the most concrete reason: a flagged ingredient names the row and
+        its reading, otherwise a risky recipe mention names the term.
         """
-        blockers: list[tuple[str, str]] = []
-        for lookup in lookups:
-            if lookup.error:
-                blockers.append((lookup.ingredient, "unverifiable"))
-                continue
-            level = _grounded_verdict([lookup])
-            if level is not SafetyLevel.SAFE:
-                blockers.append((lookup.ingredient, level.value))
-        return blockers
+        if verification.blockers:
+            ingredient, reason = verification.blockers[0]
+            return TraceEvent(
+                kind="reject",
+                text=f"Rejected '{dish}': {ingredient} is {reason}.",
+                ingredient=ingredient,
+                compatibility=reason,
+            )
+        term = verification.recipe_flags[0]
+        return TraceEvent(
+            kind="reject",
+            text=f"Rejected '{dish}': the recipe still uses {term}, which the index flags.",
+            ingredient=term,
+        )
 
     @staticmethod
-    def _reject_feedback(blockers: list[tuple[str, str]]) -> str:
-        listed = "; ".join(f"{name} ({reason})" for name, reason in blockers)
-        return (
-            f"These ingredients are not index-safe: {listed}. "
-            "Swap each for a well-tolerated alternative or drop it, then resubmit."
-        )
+    def _reject_feedback(verification: MealVerification) -> str:
+        parts: list[str] = []
+        if verification.blockers:
+            listed = "; ".join(f"{name} ({reason})" for name, reason in verification.blockers)
+            parts.append(
+                f"These ingredients are not index-safe: {listed}. "
+                "Swap each for a well-tolerated alternative or drop it."
+            )
+        if verification.recipe_flags:
+            listed = ", ".join(verification.recipe_flags)
+            parts.append(
+                f"Your recipe still uses index-flagged ingredients: {listed}. "
+                "Rewrite the steps to use only your verified ingredients."
+            )
+        parts.append("Then resubmit.")
+        return " ".join(parts)
+
+    @staticmethod
+    def _verify_text(dish: str, count: int, unverified: list[str]) -> str:
+        text = f"Verified all {count} ingredients against the index. '{dish}' is safe."
+        if unverified:
+            listed = ", ".join(unverified)
+            text += f" {len(unverified)} not in the index, flagged for review: {listed}."
+        return text
 
     @staticmethod
     def _reading(result: LookupResult) -> str:
@@ -381,7 +409,11 @@ class ComposerAgent(BaseAgent):
         if result.error:
             return f"{ingredient}: could not be read from the index, so treat it as unknown."
         if not result.found:
-            return f"{ingredient}: no entry in the histamine index, so no known concern."
+            return (
+                f"{ingredient}: not in the curated index, so treat it as unknown. Prefer an "
+                "ingredient you can verify as well tolerated; if you keep it, it is flagged "
+                "for human review."
+            )
         rows = "; ".join(self._row_summary(candidate) for candidate in result.candidates)
         return f"{ingredient}: {reading} ({rows})."
 

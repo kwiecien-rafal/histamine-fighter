@@ -209,6 +209,30 @@ class IngredientService:
         )
         return list((await self._session.scalars(stmt)).all())
 
+    # The rated levels the dish verdict treats as risky; an unrated row is not
+    # evidence of safety but it does not flag a recipe either, so it is excluded.
+    _RISKY_COMPATIBILITIES = (
+        Compatibility.MODERATELY_COMPATIBLE,
+        Compatibility.INCOMPATIBLE,
+        Compatibility.POORLY_TOLERATED,
+    )
+
+    async def risky_terms(self) -> list[str]:
+        """Normalized names and aliases of every index row rated worse than safe.
+
+        The composer scans a submitted recipe against these so a high-histamine
+        ingredient written into the steps (never added to the verified list) is
+        caught, not just one listed in the ingredients.
+        """
+        stmt = select(
+            HistamineIngredient.normalized_name, HistamineIngredient.normalized_aliases
+        ).where(HistamineIngredient.compatibility.in_(self._RISKY_COMPATIBILITIES))
+        terms: list[str] = []
+        for name, aliases in (await self._session.execute(stmt)).all():
+            terms.append(name)
+            terms.extend(aliases)
+        return terms
+
     async def _match_exact(self, query: str) -> IngredientMatch | None:
         stmt = select(HistamineIngredient).where(HistamineIngredient.normalized_name == query)
         row = (await self._session.scalars(stmt)).first()
