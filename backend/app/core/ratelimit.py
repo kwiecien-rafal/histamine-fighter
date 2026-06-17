@@ -25,4 +25,4 @@ def llm_rate_limit() -> str:
 
 def auth_rate_limit() -> str:
     """A tight per-IP limit on credential checks, to blunt password brute force."""
-    return "5/minute"
+    return f"{settings.auth_rate_limit_per_minute}/minute"

@@ -5,10 +5,13 @@ session), so they cover the real auth path end to end: a token is minted, the
 dependency re-reads the admin, and the review service flips status on real rows.
 """
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.testing import capture_logs
 
+from app.config import settings
+from app.core.ratelimit import limiter
 from app.core.security import create_access_token, hash_password
 from app.embeddings import EMBEDDING_DIM
 from app.enums import ApprovalStatus, MealType
@@ -114,6 +117,21 @@ async def test_failed_login_is_logged_with_the_attempted_email(client: AsyncClie
     assert failure["email"] == _EMAIL
     # The password must never reach the logs.
     assert "nope" not in str(logs)
+
+
+async def test_login_is_rate_limited(
+    client: AsyncClient, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _add_admin(session)
+    monkeypatch.setattr(settings, "auth_rate_limit_per_minute", 1)
+    limiter.reset()
+    limiter.enabled = True
+
+    first = await client.post("/admin/auth/login", json={"email": _EMAIL, "password": _PASSWORD})
+    second = await client.post("/admin/auth/login", json={"email": _EMAIL, "password": _PASSWORD})
+
+    assert first.status_code == 200
+    assert second.status_code == 429
 
 
 # --- auth gate --------------------------------------------------------------------

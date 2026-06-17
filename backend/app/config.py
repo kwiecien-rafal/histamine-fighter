@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Per-IP ceiling for the LLM-backed endpoints (the ones that cost money).
     rate_limit_per_minute: int = 10
 
+    # Tighter per-IP ceiling on admin credential checks, to blunt brute force.
+    auth_rate_limit_per_minute: int = 5
+
     # How long a cached Learn answer stays valid. Re-seeding the knowledge
     # corpus clears the cache regardless.
     learn_cache_ttl_days: int = 7
