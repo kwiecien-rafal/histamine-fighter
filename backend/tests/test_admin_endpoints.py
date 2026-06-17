@@ -7,6 +7,7 @@ dependency re-reads the admin, and the review service flips status on real rows.
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.testing import capture_logs
 
 from app.core.security import create_access_token, hash_password
 from app.embeddings import EMBEDDING_DIM
@@ -93,6 +94,26 @@ async def test_login_with_unknown_email_is_401(client: AsyncClient) -> None:
     )
 
     assert resp.status_code == 401
+
+
+async def test_successful_login_is_logged(client: AsyncClient, session: AsyncSession) -> None:
+    await _add_admin(session)
+
+    with capture_logs() as logs:
+        await client.post("/admin/auth/login", json={"email": _EMAIL, "password": _PASSWORD})
+
+    success = next(entry for entry in logs if entry["event"] == "admin.login.success")
+    assert success["email"] == _EMAIL
+
+
+async def test_failed_login_is_logged_with_the_attempted_email(client: AsyncClient) -> None:
+    with capture_logs() as logs:
+        await client.post("/admin/auth/login", json={"email": _EMAIL, "password": "nope"})
+
+    failure = next(entry for entry in logs if entry["event"] == "admin.login.failed")
+    assert failure["email"] == _EMAIL
+    # The password must never reach the logs.
+    assert "nope" not in str(logs)
 
 
 # --- auth gate --------------------------------------------------------------------
