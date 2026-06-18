@@ -137,6 +137,25 @@ describe("useReasoningStream", () => {
     expect(result.current.error).toBe("The stream ended before a meal was produced.");
   });
 
+  it("parses a final frame the server left unterminated by a blank line", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'event: trace\ndata: {"kind":"check","text":"Checking parmesan","ingredient":null,"compatibility":null}\n\n',
+          // No trailing "\n\n": the meal sits in the buffer the read loop never re-splits.
+          'event: meal\ndata: {"name":"Courgette salad","meal_type":"lunch","description":"fresh","ingredients":[],"recipe":null,"tags":[],"unverified_ingredients":[],"model":"stub/model","usage":{"calls":3,"input_tokens":100,"output_tokens":20,"total_tokens":120,"steps":[]}}',
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    await result.current.start("lunch");
+
+    await waitFor(() => expect(result.current.status).toBe("done"));
+    expect(result.current.meal?.name).toBe("Courgette salad");
+  });
+
   const preStreamCases: Array<[number, string]> = [
     [409, "A composition is already running. Wait for it to finish."],
     [429, "You've hit the rate limit. Give it a moment, then try again."],

@@ -92,25 +92,32 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
         let buffer = "";
         let streamError: string | null = null;
         let gotMeal = false;
+
+        const handleFrame = (frame: string) => {
+          const parsed = parseFrame(frame);
+          if (!parsed) return;
+          if (parsed.event === "trace") {
+            setEvents((current) => [...current, parsed.data as TraceEvent]);
+          } else if (parsed.event === "meal") {
+            setMeal(parsed.data as ComposedMeal);
+            gotMeal = true;
+          } else if (parsed.event === "error") {
+            streamError = (parsed.data as { detail?: string }).detail ?? "Generation failed.";
+          }
+        };
+
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const frames = buffer.split(/\r?\n\r?\n/);
           buffer = frames.pop() ?? "";
-          for (const frame of frames) {
-            const parsed = parseFrame(frame);
-            if (!parsed) continue;
-            if (parsed.event === "trace") {
-              setEvents((current) => [...current, parsed.data as TraceEvent]);
-            } else if (parsed.event === "meal") {
-              setMeal(parsed.data as ComposedMeal);
-              gotMeal = true;
-            } else if (parsed.event === "error") {
-              streamError = (parsed.data as { detail?: string }).detail ?? "Generation failed.";
-            }
-          }
+          for (const frame of frames) handleFrame(frame);
         }
+        // Flush the decoder and parse a final frame the server left unterminated by a
+        // blank line, so a trailing meal or error is never dropped when the stream closes.
+        buffer += decoder.decode();
+        if (buffer.trim()) handleFrame(buffer);
         if (streamError) {
           setError(streamError);
           setStatus("error");
