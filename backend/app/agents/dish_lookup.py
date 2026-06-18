@@ -121,7 +121,7 @@ _SYNTHESIS_TAGS = (
     "avoid_ingredients",
     "watch_ingredients",
 )
-_ALTERNATIVES_TAGS = ("dish_text", "excluded_ingredients", "safe_anchors")
+_ALTERNATIVES_TAGS = ("dish_text", "excluded_ingredients", "safe_anchors", "already_suggested")
 _DISAMBIGUATE_TAGS = ("dish_text", "ingredients")
 
 
@@ -1088,7 +1088,15 @@ class DishLookupAgent(BaseAgent):
         _take_alternatives(suggestions, seen, verified)
         generated: list[DishAlternative] = []
         if len(suggestions) < MAX_ALTERNATIVES:
-            generated = await self._generate_alternatives(dish, goal, anchors, avoid_ingredients)
+            already_chosen = [pick.name for pick in suggestions]
+            generated = await self._generate_alternatives(
+                dish,
+                goal,
+                anchors,
+                avoid_ingredients,
+                already_chosen,
+                MAX_ALTERNATIVES - len(suggestions),
+            )
             _take_alternatives(suggestions, seen, generated)
         # Counts and the goal enum only: this always-on line carries no user content.
         log.info(
@@ -1161,9 +1169,23 @@ class DishLookupAgent(BaseAgent):
         return kept
 
     async def _generate_alternatives(
-        self, dish: str, goal: AlternativeGoal, anchors: list[str], avoid_ingredients: list[str]
+        self,
+        dish: str,
+        goal: AlternativeGoal,
+        anchors: list[str],
+        avoid_ingredients: list[str],
+        already_chosen: list[str],
+        count: int,
     ) -> list[DishAlternative]:
-        """Generate fresh dish ideas grounded in the safe anchors (one model call)."""
+        """Generate fresh dish ideas grounded in the safe anchors (one model call).
+
+        ``already_chosen`` are the verified picks already filling the list, named so
+        the model does not regenerate one. For ``same_style`` the pool picks are the
+        nearest dishes to the query, exactly what the model would propose unprompted,
+        so without this it would collide with them and waste the slots. ``count`` is
+        how many slots remain, so the model writes only what is needed. Both are a
+        prompt steer, not the guarantee: the merge still dedupes and caps.
+        """
         messages: list[BaseMessage] = [
             SystemMessage(self._alternatives_prompt),
             HumanMessage(
@@ -1171,15 +1193,19 @@ class DishLookupAgent(BaseAgent):
                     self._alternatives_user_template,
                     "dish_lookup/alternatives_user",
                     # The dish and the ingredient names are direct user input; the
-                    # goal line is code-owned. The anchors are curated DB values but
-                    # are stripped too (defence in depth, harmless for real ingredient
-                    # names), and every region tag stays in the strip set so user input
-                    # can forge none of these sections. No anchors renders an empty
-                    # region; the prompt handles that.
+                    # goal and count lines are code-owned. The anchors and the
+                    # already-chosen names are curated DB values but are stripped too
+                    # (defence in depth, harmless for real names), and every region
+                    # tag stays in the strip set so user input can forge none of these
+                    # sections. An empty region renders empty; the prompt handles that.
                     dish=strip_region_tags(dish, _ALTERNATIVES_TAGS),
                     excluded=strip_region_tags(", ".join(avoid_ingredients), _ALTERNATIVES_TAGS),
                     safe_anchors=strip_region_tags(", ".join(anchors), _ALTERNATIVES_TAGS),
+                    already_suggested=strip_region_tags(
+                        ", ".join(already_chosen), _ALTERNATIVES_TAGS
+                    ),
                     goal_line=_goal_line(goal),
+                    count_line=f"Suggest up to {count} alternative{'s' if count != 1 else ''}.",
                 )
             ),
         ]

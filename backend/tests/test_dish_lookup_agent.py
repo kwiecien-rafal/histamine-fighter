@@ -1709,6 +1709,28 @@ async def test_alternatives_drop_a_verified_pick_that_echoes_the_dish(
     assert any(item.source == "generated" for item in result.alternatives)
 
 
+async def test_alternatives_generation_is_briefed_on_the_verified_picks(
+    session: AsyncSession,
+) -> None:
+    # The verified pick is named in the generation prompt, and the count asks only
+    # for the slots left, so the model is steered off regenerating a dish the user
+    # will already see. The merge dedupe is the backstop; this stops the collision
+    # at the source instead of wasting a slot on it.
+    await _add_approved_meal(
+        session, name="Courgette ribbon salad", description="fresh courgette with herbs"
+    )
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+
+    await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    user_turn = chat.seen[-1][1].content
+    already = user_turn.split("<already_suggested>")[1].split("</already_suggested>")[0]
+    assert "Courgette ribbon salad" in already
+    assert "up to 2 alternative" in user_turn  # one of three slots filled, two left
+
+
 # --- the confirmed-ingredient boundary --------------------------------------------
 
 
