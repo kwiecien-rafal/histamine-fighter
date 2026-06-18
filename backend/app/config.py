@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The .env lives at the repo root, but scripts run with the working directory set
@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # How long a cached Learn answer stays valid. Re-seeding the knowledge
     # corpus clears the cache regardless.
     learn_cache_ttl_days: int = 7
+
+    # Hour the daily board unlocks, applied by the generation script when it stamps
+    # each suggestion's reveal time. Deliberately UTC, not local: the board reveals
+    # at the same instant for every visitor worldwide.
+    daily_reveal_hour_utc: int = Field(default=10, ge=0, le=23)
 
     # Database connection. Default points at the Postgres in docker-compose.
     database_url: str = "postgresql+asyncpg://histamine:histamine@localhost:5432/histamine"

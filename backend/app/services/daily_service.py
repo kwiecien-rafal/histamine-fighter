@@ -75,6 +75,10 @@ class DailyService:
     async def approve(self, suggestion_id: UUID, *, actor: str) -> DailySuggestion | None:
         """Approve a suggestion for the public board, stamping the actor and time.
 
+        Allowed even after the reveal time: a late approval is additive, joining the
+        day's board the next time it is read, and the frontend's once-per-day replay
+        guard means it never re-triggers the premiere animation.
+
         Returns the updated row, or None when no suggestion has that id.
         """
         suggestion = await self._session.get(DailySuggestion, suggestion_id)
