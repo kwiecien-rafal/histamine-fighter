@@ -1050,25 +1050,31 @@ class DishLookupAgent(BaseAgent):
     ) -> DishAlternativesResponse:
         """Suggest different dishes once this one cannot keep its identity.
 
-        Two tiers. First retrieve from the verified pool: membership already
-        guarantees safety, so similarity there is pure relevance and the *goal*
-        selects the query axis. Those picks carry a real ``verified`` signal.
-        Then, only if the pool did not fill the count, generate fresh ideas to top
-        it up — these make no safety claim and are re-vetted when the user looks
-        them up (propose → confirm → assess). Both ingredient lists are
-        client-asserted and never touch a verdict: ``avoid_ingredients`` exclude
-        pool dishes built on them, while ``prefer_ingredients`` (the looked-up
-        dish's own safe parts) lead the anchors so suggestions build on what
-        already worked before falling back to category swaps.
+        Two tiers. First retrieve from the verified pool and re-grade each pick
+        against the live index. Membership means the meal was code-verified and
+        admin-approved, but the index is mutable, so the ``verified`` signal must
+        mean safe now, not safe when it was approved. A pick that still grounds to
+        safe keeps the signal, with similarity there being pure relevance and the
+        *goal* selecting the query axis. One that no longer does drops out, and the
+        generation tier fills its place. Then, only if the pool did not fill the
+        count, generate fresh ideas to top it up: these make no safety claim and
+        are re-vetted when the user looks them up (propose → confirm → assess).
+        Both ingredient lists are client-asserted and never touch a verdict:
+        ``avoid_ingredients`` exclude pool dishes built on them, while
+        ``prefer_ingredients`` (the looked-up dish's own safe parts) lead the
+        anchors so suggestions build on what already worked before falling back to
+        category swaps.
 
-        Retrieval is zero model calls, so usage is tallied only when the
-        generation tier actually runs.
+        Re-grading and retrieval are both zero model calls, so usage is still
+        tallied only when the generation tier runs. A picked suggestion is always
+        looked up again by name, so a verified pick can read differently when its
+        name decomposes into other ingredients than the pool stored. That fresh
+        lookup is the intended vetting, not a verdict this pivot owns.
         """
         self._begin_usage()
         anchors = await self._safe_anchors(avoid_ingredients, prefer_ingredients or [])
-        verified = _verified_alternatives(
-            await self._verified_picks(goal, dish, anchors, avoid_ingredients)
-        )
+        picks = await self._verified_picks(goal, dish, anchors, avoid_ingredients)
+        verified = _verified_alternatives(await self._still_safe(picks))
         generated: list[DishAlternative] = []
         if len(verified) < MAX_ALTERNATIVES:
             generated = await self._generate_alternatives(dish, goal, anchors, avoid_ingredients)
@@ -1119,6 +1125,29 @@ class DishLookupAgent(BaseAgent):
                     k=MAX_ALTERNATIVES, exclude=avoid_ingredients
                 )
         assert_never(goal)
+
+    async def _still_safe(self, meals: list[CuratedMeal]) -> list[CuratedMeal]:
+        """Keep only pool meals that still ground to safe against the live index.
+
+        A meal joined the pool code-verified and admin-approved, but the index it
+        was graded against can change, so the ``verified`` badge is re-earned here
+        rather than trusted: each meal's stored ingredients are re-graded by the
+        same code that grades a live lookup, and a meal that no longer grounds to
+        safe is dropped so the generation tier can fill its place. No model call,
+        the verdict comes from the index. A meal carrying no ingredients grounds to
+        safe by the same rule a clean lookup does, which the composer never emits
+        but the code handles without a special case.
+        """
+        kept: list[CuratedMeal] = []
+        for meal in meals:
+            items = [
+                (ingredient.get("name", ""), ingredient.get("category"))
+                for ingredient in meal.ingredients
+            ]
+            lookups = await lookup_ingredients(self._service, items)
+            if _grounded_verdict(lookups) is SafetyLevel.SAFE:
+                kept.append(meal)
+        return kept
 
     async def _generate_alternatives(
         self, dish: str, goal: AlternativeGoal, anchors: list[str], avoid_ingredients: list[str]

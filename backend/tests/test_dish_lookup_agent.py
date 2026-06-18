@@ -1635,6 +1635,38 @@ async def test_alternatives_weak_match_below_floor_falls_back_to_generation(
     assert [item.source for item in result.alternatives] == ["generated"]
 
 
+async def test_alternatives_drop_a_pool_meal_the_index_now_flags(session: AsyncSession) -> None:
+    # A meal approved with an ingredient the index has since reclassified to
+    # incompatible no longer grounds to safe, so it loses the verified signal and
+    # generation fills its place rather than serving a stale "from our kitchen" pick.
+    session.add(_ingredient("Aged cheese", compatibility=Compatibility.INCOMPATIBLE))
+    await session.flush()
+    await _add_approved_meal(
+        session,
+        name="Aged cheese platter",
+        description="cured and aged cheeses",
+        ingredients=[{"name": "Aged cheese", "category": "cheese"}],
+    )
+    await _add_approved_meal(
+        session,
+        name="Courgette herb bowl",
+        description="fresh courgette with herbs",
+        ingredients=[{"name": "courgette", "category": "vegetable"}],
+    )
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    names = [item.name for item in result.alternatives]
+    assert "Aged cheese platter" not in names
+    verified = [item for item in result.alternatives if item.source == "verified"]
+    assert [item.name for item in verified] == ["Courgette herb bowl"]
+    assert any(item.source == "generated" for item in result.alternatives)
+    assert result.usage.calls == 1
+
+
 # --- the confirmed-ingredient boundary --------------------------------------------
 
 
