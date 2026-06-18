@@ -16,6 +16,14 @@ export function DailyBoard() {
     void reload();
   }, [reload]);
 
+  useEffect(() => {
+    const previous = document.title;
+    document.title = "Today's meals · Histamine Fighter";
+    return () => {
+      document.title = previous;
+    };
+  }, []);
+
   return (
     <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
       <div className="max-w-2xl mx-auto">

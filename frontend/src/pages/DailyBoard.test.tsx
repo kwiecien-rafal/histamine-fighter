@@ -90,6 +90,14 @@ describe("DailyBoard", () => {
     expect(await screen.findByText(/hasn't been set yet/)).toBeInTheDocument();
   });
 
+  it("sets the page title", async () => {
+    getMock.mockResolvedValue(resolved({ status: "locked", date: DATE, reveal_at: null }));
+    renderBoard();
+
+    await screen.findByText(/hasn't been set yet/);
+    expect(document.title).toBe("Today's meals · Histamine Fighter");
+  });
+
   it("plays the replay first, then reveals the board on skip", async () => {
     getMock.mockResolvedValue(resolved(revealed()));
     const user = userEvent.setup();

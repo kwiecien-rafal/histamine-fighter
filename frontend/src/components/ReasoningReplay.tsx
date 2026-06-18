@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import type { TraceEvent } from "../api/admin";
-import { TRACE_KIND_LABEL, isRejectEvent } from "../lib/meal";
+import { MEAL_TYPE_LABEL, TRACE_KIND_LABEL, isRejectEvent } from "../lib/meal";
 
 interface ReasoningReplayProps {
   events: TraceEvent[];
@@ -62,17 +62,28 @@ export function ReasoningReplay({
         )}
       </div>
       <ol className="flex flex-col gap-2 border-l border-stone-200 pl-4" aria-live="polite">
-        {visible.map((event, index) => (
-          <li
-            key={index}
-            className={`text-sm ${isRejectEvent(event) ? "text-red-700" : "text-stone-700"}`}
-          >
-            <span className="font-mono text-[10px] uppercase tracking-wide text-stone-400">
-              {TRACE_KIND_LABEL[event.kind]}
-            </span>{" "}
-            {event.text}
-          </li>
-        ))}
+        {visible.map((event, index) => {
+          // The daily board replays several meals in one trace; label each as its
+          // steps begin. A single-meal stream carries no meal_type, so no headers.
+          const meal = event.meal_type;
+          return (
+            <Fragment key={index}>
+              {meal != null && meal !== visible[index - 1]?.meal_type && (
+                <li className="text-xs font-semibold uppercase tracking-wide text-stone-500 mt-3 first:mt-0">
+                  {MEAL_TYPE_LABEL[meal]}
+                </li>
+              )}
+              <li
+                className={`text-sm ${isRejectEvent(event) ? "text-red-700" : "text-stone-700"}`}
+              >
+                <span className="font-mono text-[10px] uppercase tracking-wide text-stone-400">
+                  {TRACE_KIND_LABEL[event.kind]}
+                </span>{" "}
+                {event.text}
+              </li>
+            </Fragment>
+          );
+        })}
       </ol>
     </section>
   );

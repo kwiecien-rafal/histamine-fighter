@@ -1,4 +1,7 @@
 import type { LLMUsage, ProposedIngredient } from "./client";
+import { errorDetail } from "./errors";
+
+export { errorMessage } from "./errors";
 
 export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
@@ -25,6 +28,9 @@ export interface TraceEvent {
   text: string;
   ingredient: string | null;
   compatibility: TraceReading | null;
+  // Set on the public daily board, where several meals' steps replay together, so
+  // the animation can group them by dish; absent on a single-meal stream.
+  meal_type?: MealType | null;
 }
 
 export interface AdminMeal {
@@ -71,22 +77,6 @@ export interface TokenResponse {
 // Raised when an admin request comes back 401, i.e. the token is missing or
 // expired. The UI treats this as "log in again", distinct from a real failure.
 export class AdminAuthError extends Error {}
-
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
-
-async function errorDetail(response: Response): Promise<string> {
-  // Backend domain errors arrive as {"detail": "<message>"}; fall back to the
-  // bare status for validation arrays or non-JSON bodies.
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body.detail === "string" && body.detail) return body.detail;
-  } catch {
-    // not a JSON body
-  }
-  return `Request failed: ${response.status}`;
-}
 
 async function authedRequest(
   path: string,

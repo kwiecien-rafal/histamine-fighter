@@ -1,5 +1,6 @@
 import type { MealType, TraceEvent } from "./admin";
 import type { LLMUsage, ProposedIngredient } from "./client";
+import { errorDetail } from "./errors";
 
 // The public daily board. A plain GET, no auth and no LLM headers: the meals were
 // composed offline and approved, so the page only reads pre-generated rows.
@@ -42,7 +43,7 @@ export interface DailyBoardResult {
 export async function getDailyBoard(): Promise<DailyBoardResult> {
   const response = await fetch("/api/v1/daily/meals");
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    throw new Error(await errorDetail(response));
   }
   const board = (await response.json()) as DailyBoard;
   return { board, serverOffsetMs: serverClockOffset(response.headers.get("Date")) };

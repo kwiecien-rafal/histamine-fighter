@@ -1,4 +1,5 @@
 import { useLLMProviderStore } from "../store/llmProvider";
+import { errorDetail } from "./errors";
 
 export type Verdict = "safe" | "depends" | "avoid";
 
@@ -110,19 +111,6 @@ function buildLLMHeaders(): Record<string, string> {
   }
   if (apiKey) headers["X-LLM-API-Key"] = apiKey;
   return headers;
-}
-
-async function errorDetail(response: Response): Promise<string> {
-  // Backend domain errors (bad provider, model failure, rate limit) arrive as
-  // {"detail": "<message>"}; anything else — validation detail arrays, proxy
-  // HTML — falls back to the bare status.
-  try {
-    const body = (await response.json()) as { detail?: unknown };
-    if (typeof body.detail === "string" && body.detail) return body.detail;
-  } catch {
-    // not a JSON body
-  }
-  return `Request failed: ${response.status}`;
 }
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {

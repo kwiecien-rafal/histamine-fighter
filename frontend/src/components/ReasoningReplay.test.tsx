@@ -76,4 +76,16 @@ describe("ReasoningReplay", () => {
     expect(screen.getByText("second")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
   });
+
+  it("labels each meal once as its steps begin", () => {
+    const events: TraceEvent[] = [
+      { ...event("b1"), meal_type: "breakfast" },
+      { ...event("b2"), meal_type: "breakfast" },
+      { ...event("d1"), meal_type: "dinner" },
+    ];
+    render(<ReasoningReplay events={events} live />);
+
+    expect(screen.getAllByText("Breakfast")).toHaveLength(1);
+    expect(screen.getByText("Dinner")).toBeInTheDocument();
+  });
 });
