@@ -51,7 +51,7 @@ from app.schemas.meal import (
     ProposedIngredients,
 )
 from app.services.ingredient_service import IngredientMatch, IngredientService
-from app.services.meal_service import MealService
+from app.services.meal_service import MealMatch, MealService
 from tests.fakes import FakeEmbedder
 
 
@@ -1499,6 +1499,20 @@ def _meal_agent(
     )
 
 
+class _RaisingMealService(MealService):
+    """A meal service whose retrieval raises, to drive the additive-tier fallback."""
+
+    def __init__(self, session: AsyncSession, error: Exception) -> None:
+        super().__init__(session, FakeEmbedder())
+        self._error = error
+
+    async def search(self, *args: object, **kwargs: object) -> list[MealMatch]:
+        raise self._error
+
+    async def random_sample(self, *args: object, **kwargs: object) -> list[CuratedMeal]:
+        raise self._error
+
+
 async def _add_approved_meal(
     session: AsyncSession,
     *,
@@ -1729,6 +1743,46 @@ async def test_alternatives_generation_is_briefed_on_the_verified_picks(
     already = user_turn.split("<already_suggested>")[1].split("</already_suggested>")[0]
     assert "Courgette ribbon salad" in already
     assert "up to 2 alternative" in user_turn  # one of three slots filled, two left
+
+
+async def test_alternatives_retrieval_failure_degrades_to_generation(
+    session: AsyncSession,
+) -> None:
+    # The verified tier is additive, so a DB blip or embedder fault while retrieving
+    # degrades to an all-generated answer rather than 500ing a response generation
+    # could still serve. One model call: the generation tier ran.
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One", "Gen Two"))
+    wrapper = ChatModel(model=chat, model_name="stub/model")  # type: ignore[arg-type]
+    agent = DishLookupAgent(
+        chat=wrapper,
+        service=IngredientService(session),
+        meal_service=_RaisingMealService(session, RuntimeError("retrieval down")),
+    )
+
+    result = await agent.alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    assert result.alternatives
+    assert all(item.source == "generated" for item in result.alternatives)
+    assert result.usage.calls == 1
+
+
+async def test_alternatives_retrieval_value_error_is_not_swallowed(
+    session: AsyncSession,
+) -> None:
+    # A non-positive k or over-long query is the meal service's deliberate caller-bug
+    # signal; it must surface, never be mistaken for an empty pool.
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+    wrapper = ChatModel(model=chat, model_name="stub/model")  # type: ignore[arg-type]
+    agent = DishLookupAgent(
+        chat=wrapper,
+        service=IngredientService(session),
+        meal_service=_RaisingMealService(session, ValueError("k must be >= 1")),
+    )
+
+    with pytest.raises(ValueError):
+        await agent.alternatives("anything", AlternativeGoal.SAME_STYLE, ["tomato"])
 
 
 # --- the confirmed-ingredient boundary --------------------------------------------

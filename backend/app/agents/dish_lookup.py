@@ -1084,8 +1084,19 @@ class DishLookupAgent(BaseAgent):
             if goal is AlternativeGoal.SIMILAR_FLAVOURS
             else []
         )
-        picks = await self._verified_picks(goal, dish, anchors, avoid_ingredients)
-        verified = _verified_alternatives(await self._still_safe(picks))
+        # The verified tier is additive: a DB blip or embedder fault while retrieving
+        # or re-grading must not sink a response the generation tier can still serve,
+        # so it degrades to an empty pool. A ValueError is the meal service's
+        # deliberate caller-bug signal (bad k, over-long query) and surfaces rather
+        # than masquerading as an empty pool.
+        try:
+            picks = await self._verified_picks(goal, dish, anchors, avoid_ingredients)
+            verified = _verified_alternatives(await self._still_safe(picks))
+        except ValueError:
+            raise
+        except Exception:
+            log.warning("dish_lookup.alternatives.retrieval_failed", goal=goal.value, exc_info=True)
+            verified = []
 
         # Fill verified first, deduped against the dish and each other, then gate on
         # the kept count: two pool meals sharing a name (or one echoing the dish)
