@@ -123,7 +123,7 @@ interface GeneratePanelProps {
 
 function GeneratePanel({ token, onExpired }: GeneratePanelProps) {
   const [mealType, setMealType] = useState<MealType>("breakfast");
-  const { status, events, meal, error, start } = useReasoningStream(token, onExpired);
+  const { status, events, meal, error, start, cancel } = useReasoningStream(token, onExpired);
   const streaming = status === "streaming";
 
   return (
@@ -158,6 +158,15 @@ function GeneratePanel({ token, onExpired }: GeneratePanelProps) {
         >
           {streaming ? "Composing…" : "Generate now"}
         </button>
+        {streaming && (
+          <button
+            type="button"
+            onClick={cancel}
+            className="rounded border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 cursor-pointer"
+          >
+            Stop
+          </button>
+        )}
       </div>
 
       {error && (

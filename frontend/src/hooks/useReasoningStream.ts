@@ -16,6 +16,7 @@ interface ReasoningStream {
   meal: ComposedMeal | null;
   error: string | null;
   start: (mealType: MealType) => Promise<void>;
+  cancel: () => void;
 }
 
 interface ParsedFrame {
@@ -127,5 +128,16 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
     [token, onExpired],
   );
 
-  return { status, events, meal, error, start };
+  // Abort an in-flight stream and return the panel to its pristine state. The
+  // running start() loop sees the aborted signal and bails without overwriting.
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStatus("idle");
+    setEvents([]);
+    setMeal(null);
+    setError(null);
+  }, []);
+
+  return { status, events, meal, error, start, cancel };
 }

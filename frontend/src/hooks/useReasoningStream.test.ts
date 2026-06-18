@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useReasoningStream } from "./useReasoningStream";
@@ -71,10 +71,50 @@ describe("useReasoningStream", () => {
     const { result } = renderHook(() => useReasoningStream("tok", onExpired));
     await result.current.start("snack");
 
-    await waitFor(() => expect(onExpired).toHaveBeenCalledTimes(1));
     // The auth path bails to logout, but settles on a terminal status rather than
     // dangling at "streaming", and never surfaces a scary error.
-    expect(result.current.status).toBe("expired");
+    await waitFor(() => expect(result.current.status).toBe("expired"));
+    expect(onExpired).toHaveBeenCalledTimes(1);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("cancel aborts an in-flight stream and resets to idle", async () => {
+    // A body that emits one trace frame then stays open until the request aborts,
+    // so the stream is genuinely mid-run when cancel() fires.
+    let body: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        body = controller;
+        controller.enqueue(
+          new TextEncoder().encode(
+            'event: trace\ndata: {"kind":"check","text":"Checking","ingredient":null,"compatibility":null}\n\n',
+          ),
+        );
+      },
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      init.signal?.addEventListener("abort", () => body?.error(new Error("aborted")));
+      return Promise.resolve(
+        new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    let pending: Promise<void> | undefined;
+    act(() => {
+      pending = result.current.start("lunch");
+    });
+    await waitFor(() => expect(result.current.events).toHaveLength(1));
+    expect(result.current.status).toBe("streaming");
+
+    act(() => result.current.cancel());
+    // Let the aborted run settle so it leaves no dangling promise behind.
+    await pending;
+
+    expect(result.current.status).toBe("idle");
+    expect(result.current.events).toHaveLength(0);
+    expect(result.current.meal).toBeNull();
     expect(result.current.error).toBeNull();
   });
 
