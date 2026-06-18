@@ -64,7 +64,7 @@ describe("useReasoningStream", () => {
     expect(result.current.error).toBe("The composer could not finish.");
   });
 
-  it("logs the session out on a 401", async () => {
+  it("logs the session out on a 401 and lands in a terminal state", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
     const onExpired = vi.fn();
 
@@ -72,7 +72,28 @@ describe("useReasoningStream", () => {
     await result.current.start("snack");
 
     await waitFor(() => expect(onExpired).toHaveBeenCalledTimes(1));
-    // The auth path bails to logout, so it never falls through to the error path.
+    // The auth path bails to logout, but settles on a terminal status rather than
+    // dangling at "streaming", and never surfaces a scary error.
+    expect(result.current.status).toBe("expired");
     expect(result.current.error).toBeNull();
+  });
+
+  it("fails when the stream ends without a terminal meal", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'event: trace\ndata: {"kind":"check","text":"Checking parmesan","ingredient":null,"compatibility":null}\n\n',
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    await result.current.start("lunch");
+
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(result.current.events).toHaveLength(1);
+    expect(result.current.meal).toBeNull();
+    expect(result.current.error).toBe("The stream ended before a meal was produced.");
   });
 });

@@ -8,7 +8,7 @@ import {
   type TraceEvent,
 } from "../api/admin";
 
-export type StreamStatus = "idle" | "streaming" | "done" | "error";
+export type StreamStatus = "idle" | "streaming" | "done" | "error" | "expired";
 
 interface ReasoningStream {
   status: StreamStatus;
@@ -81,6 +81,7 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
         const decoder = new TextDecoder();
         let buffer = "";
         let streamError: string | null = null;
+        let gotMeal = false;
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -94,6 +95,7 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
               setEvents((current) => [...current, parsed.data as TraceEvent]);
             } else if (parsed.event === "meal") {
               setMeal(parsed.data as ComposedMeal);
+              gotMeal = true;
             } else if (parsed.event === "error") {
               streamError = (parsed.data as { detail?: string }).detail ?? "Generation failed.";
             }
@@ -102,12 +104,19 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
         if (streamError) {
           setError(streamError);
           setStatus("error");
+        } else if (!gotMeal) {
+          // A clean close with no terminal meal means the stream dropped mid-run, a
+          // reset the server's error backstop cannot turn into an error event. Treat
+          // it as a failure instead of reporting success with nothing to show.
+          setError("The stream ended before a meal was produced.");
+          setStatus("error");
         } else {
           setStatus("done");
         }
       } catch (err) {
         if (controller.signal.aborted) return;
         if (err instanceof AdminAuthError) {
+          setStatus("expired");
           onExpired();
           return;
         }
