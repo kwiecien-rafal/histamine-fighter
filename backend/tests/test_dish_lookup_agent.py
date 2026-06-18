@@ -1649,6 +1649,31 @@ async def test_alternatives_weak_match_below_floor_falls_back_to_generation(
     assert [item.source for item in result.alternatives] == ["generated"]
 
 
+async def test_alternatives_rank_verified_picks_by_similarity_above_the_floor(
+    session: AsyncSession,
+) -> None:
+    # A real floor and pool meals of decreasing overlap with the dish make retrieval
+    # decide both order and membership: the two closest come back best first, the
+    # unrelated one falls below the floor, and generation fills the freed slot.
+    # Seeded out of similarity order so passing cannot come from insertion order.
+    await _add_approved_meal(session, name="Lemon garlic chicken", description="grilled")
+    await _add_approved_meal(session, name="Buckwheat porridge", description="warm cinnamon")
+    await _add_approved_meal(session, name="Garlic shrimp skewers", description="lemon")
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+
+    result = await _meal_agent(chat, session, min_similarity=0.3).alternatives(
+        "lemon garlic shrimp skewers", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    assert [item.name for item in result.alternatives] == [
+        "Garlic shrimp skewers",
+        "Lemon garlic chicken",
+        "Gen One",
+    ]
+    assert [item.source for item in result.alternatives] == ["verified", "verified", "generated"]
+    assert result.usage.calls == 1
+
+
 async def test_alternatives_drop_a_pool_meal_the_index_now_flags(session: AsyncSession) -> None:
     # A meal approved with an ingredient the index has since reclassified to
     # incompatible no longer grounds to safe, so it loses the verified signal and
