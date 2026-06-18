@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { RevealedBoard } from "../api/daily";
@@ -10,7 +10,11 @@ import { useDailyBoard } from "../hooks/useDailyBoard";
 import { formatRemaining, hasSeenBoard, markBoardSeen, prefersReducedMotion } from "../lib/daily";
 
 export function DailyBoard() {
-  const { board, loading, error, reload } = useDailyBoard();
+  const { board, serverOffsetMs, loading, error, reload } = useDailyBoard();
+  // Stable, void-returning so the polling effect doesn't re-subscribe each render.
+  const refresh = useCallback(() => {
+    void reload();
+  }, [reload]);
 
   return (
     <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
@@ -25,12 +29,20 @@ export function DailyBoard() {
           </p>
         </header>
 
-        {error && (
+        {/* The error only replaces the page when the first load failed; a failed
+            background reload keeps the board it already has. */}
+        {board === null && loading && (
+          <p className="text-stone-600" aria-live="polite">
+            Loading today's board…
+          </p>
+        )}
+
+        {board === null && error && (
           <div role="alert" className="text-sm text-red-700">
             <span className="font-medium">Couldn't load the board —</span> {error}{" "}
             <button
               type="button"
-              onClick={() => void reload()}
+              onClick={refresh}
               className="underline underline-offset-4 cursor-pointer"
             >
               Try again
@@ -38,17 +50,15 @@ export function DailyBoard() {
           </div>
         )}
 
-        {!error && (loading || board === null) && (
-          <p className="text-stone-600" aria-live="polite">
-            Loading today's board…
-          </p>
+        {board?.status === "locked" && (
+          <LockedView
+            revealAt={board.reveal_at}
+            serverOffsetMs={serverOffsetMs}
+            onReady={refresh}
+          />
         )}
 
-        {!error && board?.status === "locked" && (
-          <LockedView revealAt={board.reveal_at} onReady={() => void reload()} />
-        )}
-
-        {!error && board?.status === "revealed" && <RevealedView board={board} />}
+        {board?.status === "revealed" && <RevealedView key={board.date} board={board} />}
       </div>
     </main>
   );
@@ -56,28 +66,57 @@ export function DailyBoard() {
 
 interface LockedViewProps {
   revealAt: string | null;
+  serverOffsetMs: number;
   onReady: () => void;
 }
 
-function LockedView({ revealAt, onReady }: LockedViewProps) {
+// Past the reveal but still locked, the board is waiting on an admin approval, so it
+// is re-polled on a jittered interval until it flips to revealed (which unmounts this
+// view) or the cap is hit. The jitter also spreads the reload every client fires at
+// the reveal instant, so they don't stampede the read together.
+const POLL_BASE_MS = 20_000;
+const POLL_JITTER_MS = 10_000;
+const MAX_POLLS = 30;
+
+function LockedView({ revealAt, serverOffsetMs, onReady }: LockedViewProps) {
   const target = revealAt ? new Date(revealAt).getTime() : null;
-  const [now, setNow] = useState(() => Date.now());
-  const fired = useRef(false);
+  const [now, setNow] = useState(() => Date.now() + serverOffsetMs);
 
+  // Count down once per second against server-corrected time, and stop ticking the
+  // moment the reveal passes — the polling effect takes over from there.
   useEffect(() => {
-    if (target === null) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [target]);
-
-  // When the reveal time passes, pull the board once: it flips to revealed if an
-  // admin has approved it, and stays locked (showing "Revealing now") otherwise.
-  useEffect(() => {
-    if (target !== null && now >= target && !fired.current) {
-      fired.current = true;
-      onReady();
+    if (target === null || Date.now() + serverOffsetMs >= target) {
+      setNow(Date.now() + serverOffsetMs);
+      return;
     }
-  }, [target, now, onReady]);
+    const id = setInterval(() => {
+      const current = Date.now() + serverOffsetMs;
+      setNow(current);
+      if (current >= target) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+  }, [target, serverOffsetMs]);
+
+  const pastReveal = target !== null && now >= target;
+
+  useEffect(() => {
+    if (!pastReveal) return;
+    onReady();
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      timer = setTimeout(
+        () => {
+          attempts += 1;
+          onReady();
+          if (attempts < MAX_POLLS) schedule();
+        },
+        POLL_BASE_MS + Math.random() * POLL_JITTER_MS,
+      );
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [pastReveal, onReady]);
 
   if (target === null) {
     return (

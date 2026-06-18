@@ -1,9 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getDailyBoard, type DailyMealCard, type RevealedBoard } from "../api/daily";
+import {
+  getDailyBoard,
+  type DailyBoard as DailyBoardData,
+  type DailyMealCard,
+  type RevealedBoard,
+} from "../api/daily";
 import { hasSeenBoard, markBoardSeen } from "../lib/daily";
 import { DailyBoard } from "./DailyBoard";
 
@@ -15,6 +20,15 @@ vi.mock("../api/daily", async (importActual) => {
 const getMock = vi.mocked(getDailyBoard);
 
 const DATE = "2026-06-16";
+
+// The widest a single poll can be scheduled out (LockedView's base + max jitter);
+// advancing by it guarantees the next poll has fired regardless of the jitter.
+const POLL_WINDOW_MS = 30_000;
+
+// The hook reads { board, serverOffsetMs }; tests run with no clock skew.
+function resolved(board: DailyBoardData) {
+  return { board, serverOffsetMs: 0 };
+}
 
 function mealCard(): DailyMealCard {
   return {
@@ -55,10 +69,14 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("DailyBoard", () => {
   it("counts down to the reveal while locked", async () => {
     const revealAt = new Date(Date.now() + 3_600_000).toISOString();
-    getMock.mockResolvedValue({ status: "locked", date: DATE, reveal_at: revealAt });
+    getMock.mockResolvedValue(resolved({ status: "locked", date: DATE, reveal_at: revealAt }));
     renderBoard();
 
     expect(await screen.findByText("Next board in")).toBeInTheDocument();
@@ -66,14 +84,14 @@ describe("DailyBoard", () => {
   });
 
   it("explains when no board is scheduled yet", async () => {
-    getMock.mockResolvedValue({ status: "locked", date: DATE, reveal_at: null });
+    getMock.mockResolvedValue(resolved({ status: "locked", date: DATE, reveal_at: null }));
     renderBoard();
 
     expect(await screen.findByText(/hasn't been set yet/)).toBeInTheDocument();
   });
 
   it("plays the replay first, then reveals the board on skip", async () => {
-    getMock.mockResolvedValue(revealed());
+    getMock.mockResolvedValue(resolved(revealed()));
     const user = userEvent.setup();
     renderBoard();
 
@@ -89,10 +107,49 @@ describe("DailyBoard", () => {
 
   it("skips the replay for a repeat visitor who has seen today's board", async () => {
     markBoardSeen(DATE);
-    getMock.mockResolvedValue(revealed());
+    getMock.mockResolvedValue(resolved(revealed()));
     renderBoard();
 
     expect(await screen.findByText("Buckwheat porridge")).toBeInTheDocument();
     expect(screen.queryByText("Composing today's board…")).not.toBeInTheDocument();
+  });
+
+  it("re-polls while past the reveal but still awaiting approval", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-16T11:00:00Z"));
+    getMock.mockResolvedValue(
+      resolved({ status: "locked", date: DATE, reveal_at: "2026-06-16T10:00:00Z" }),
+    );
+    renderBoard();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const callsAfterLoad = getMock.mock.calls.length;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_WINDOW_MS);
+    });
+
+    expect(getMock.mock.calls.length).toBeGreaterThan(callsAfterLoad);
+    expect(screen.getByText("Revealing now…")).toBeInTheDocument();
+  });
+
+  it("keeps showing the board when a refresh fails", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-16T11:00:00Z"));
+    getMock.mockResolvedValueOnce(
+      resolved({ status: "locked", date: DATE, reveal_at: "2026-06-16T10:00:00Z" }),
+    );
+    getMock.mockRejectedValue(new Error("network down"));
+    renderBoard();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_WINDOW_MS);
+    });
+
+    // The poll failed, but the locked board it already had stays put.
+    expect(screen.getByText("Revealing now…")).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn't load the board/)).not.toBeInTheDocument();
   });
 });

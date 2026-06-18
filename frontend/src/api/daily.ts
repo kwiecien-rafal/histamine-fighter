@@ -32,10 +32,26 @@ export interface RevealedBoard {
 
 export type DailyBoard = LockedBoard | RevealedBoard;
 
-export async function getDailyBoard(): Promise<DailyBoard> {
+export interface DailyBoardResult {
+  board: DailyBoard;
+  // serverNow - clientNow at fetch time. Added to the device clock so the reveal
+  // countdown tracks the server's clock, not a skewed local one.
+  serverOffsetMs: number;
+}
+
+export async function getDailyBoard(): Promise<DailyBoardResult> {
   const response = await fetch("/api/v1/daily/meals");
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
-  return (await response.json()) as DailyBoard;
+  const board = (await response.json()) as DailyBoard;
+  return { board, serverOffsetMs: serverClockOffset(response.headers.get("Date")) };
+}
+
+// The response Date header in milliseconds, minus the device clock. Zero when the
+// header is missing or unparseable, so a client without skew just uses its own clock.
+function serverClockOffset(dateHeader: string | null): number {
+  if (dateHeader === null) return 0;
+  const serverMs = Date.parse(dateHeader);
+  return Number.isNaN(serverMs) ? 0 : serverMs - Date.now();
 }
