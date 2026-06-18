@@ -42,6 +42,15 @@ function parseFrame(frame: string): ParsedFrame | null {
   }
 }
 
+// Human-friendly copy for the statuses the generate endpoint returns before the
+// stream opens. 401 triggers logout and is handled separately; 422 is ruled out by
+// the meal-type selector.
+function startErrorMessage(status: number): string {
+  if (status === 409) return "A composition is already running. Wait for it to finish.";
+  if (status === 429) return "You've hit the rate limit. Give it a moment, then try again.";
+  return `The composer couldn't start (error ${status}).`;
+}
+
 // Streams the admin live composition over a POST (EventSource can't carry the
 // bearer token, so this reads the response body itself). Trace steps land in
 // `events` as they arrive, the terminal meal in `meal`. A 401 means the session
@@ -75,7 +84,7 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
         });
         if (response.status === 401) throw new AdminAuthError("Session expired.");
         if (!response.ok || !response.body) {
-          throw new Error(`Request failed: ${response.status}`);
+          throw new Error(startErrorMessage(response.status));
         }
 
         const reader = response.body.getReader();

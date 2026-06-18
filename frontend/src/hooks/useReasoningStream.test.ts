@@ -136,4 +136,18 @@ describe("useReasoningStream", () => {
     expect(result.current.meal).toBeNull();
     expect(result.current.error).toBe("The stream ended before a meal was produced.");
   });
+
+  const preStreamCases: Array<[number, string]> = [
+    [409, "A composition is already running. Wait for it to finish."],
+    [429, "You've hit the rate limit. Give it a moment, then try again."],
+  ];
+  it.each(preStreamCases)("maps a %i response to a friendly message", async (status, message) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
+
+    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    await result.current.start("lunch");
+
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(result.current.error).toBe(message);
+  });
 });
