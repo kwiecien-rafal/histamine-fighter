@@ -14,6 +14,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.composer import ComposerExhausted
 from app.api.admin.daily import _generation_lock
 from app.api.v1.daily import _cache_max_age
 from app.core.ratelimit import limiter
@@ -21,6 +22,7 @@ from app.core.security import create_access_token, hash_password
 from app.db.session import get_session
 from app.dependencies import get_composer_streamer
 from app.enums import ApprovalStatus, MealType
+from app.llm.errors import LLMInvocationError
 from app.main import create_app
 from app.models import DailySuggestion
 from app.models.admin_user import AdminUser
@@ -305,6 +307,34 @@ class _BoomStreamer:
         raise RuntimeError("boom: the database connection dropped")
 
 
+class _ExhaustedStreamer:
+    """Streams a step, then raises ComposerExhausted as a non-converging run does.
+
+    Low-histamine cooking is restrictive, so the loop can spend its whole budget
+    without a safe submission; the route turns that into a friendly error event.
+    """
+
+    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
+        yield TraceStreamItem(
+            event=TraceEvent(kind="reject", text="Rejected the draft: too many flagged.")
+        ).model_dump_json()
+        raise ComposerExhausted("Composer exhausted its iterations.")
+
+
+class _LLMErrorStreamer:
+    """Streams a step, then fails with an LLMError as a mid-run model call can.
+
+    Unlike the generic backstop, which hides the detail, the route's LLMError
+    branch is a clean domain message and reaches the client verbatim.
+    """
+
+    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
+        yield TraceStreamItem(
+            event=TraceEvent(kind="check", text="Checking courgette.", ingredient="courgette")
+        ).model_dump_json()
+        raise LLMInvocationError("The model cannot call tools.")
+
+
 @asynccontextmanager
 async def _sse_client(
     session: AsyncSession, streamer_cls: type[object]
@@ -387,6 +417,36 @@ async def test_generate_unexpected_failure_closes_as_an_error_event(
     assert "Something went wrong" in body
     # The raw exception detail stays in the server log, never the response.
     assert "boom" not in body
+
+
+async def test_generate_exhausted_closes_as_an_error_event(session: AsyncSession) -> None:
+    await _add_admin(session)
+
+    async with _sse_client(session, _ExhaustedStreamer) as client:
+        resp = await client.post(
+            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
+        )
+
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: trace" in body
+    assert "event: error" in body
+    assert "could not finish a safe meal" in body
+
+
+async def test_generate_llm_error_surfaces_its_message(session: AsyncSession) -> None:
+    await _add_admin(session)
+
+    async with _sse_client(session, _LLMErrorStreamer) as client:
+        resp = await client.post(
+            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
+        )
+
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: error" in body
+    # A model failure is already user-safe, so its message is shown rather than hidden.
+    assert "The model cannot call tools." in body
 
 
 async def test_generate_while_a_run_is_in_flight_is_409(
