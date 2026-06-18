@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.dish_lookup import DishLookupAgent
 from app.agents.learn import LearnAgent
+from app.config import settings
 from app.core.security import TokenError, decode_access_token
 from app.db.session import get_session
 from app.embeddings import get_embedder
@@ -71,10 +72,6 @@ def get_daily_service(
     return DailyService(session)
 
 
-# Slightly creative so a live demo varies run to run; the index still gates safety.
-_COMPOSE_TEMPERATURE = 0.4
-
-
 def get_composer_streamer() -> ComposerStreamer:
     """Wire the live composer for the admin trigger.
 
@@ -83,7 +80,7 @@ def get_composer_streamer() -> ComposerStreamer:
     headers. A bad provider config raises here (mapped to 400/501 at the boundary)
     before the stream opens; a tool-incapable model fails later as a stream error.
     """
-    chat = build_chat_model(LLMRequestConfig(), temperature=_COMPOSE_TEMPERATURE)
+    chat = build_chat_model(LLMRequestConfig(), temperature=settings.compose_temperature)
     return ComposerStreamer(chat, get_embedder())
 
 

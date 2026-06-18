@@ -49,9 +49,6 @@ from app.services.meal_service import MealService
 
 log = structlog.get_logger()
 
-# Slightly creative so the board varies day to day; the index still gates safety.
-_COMPOSE_TEMPERATURE = 0.4
-
 # Composes one meal for a slot, raising ComposerExhausted or LLMError on failure.
 ComposeFn = Callable[[MealType], Awaitable[ComposedMeal]]
 # The durability boundary: commit per meal in production, flush under test isolation.
@@ -60,7 +57,7 @@ Checkpoint = Callable[[], Awaitable[None]]
 
 def _build_agent(session: AsyncSession, embedder: Embedder) -> ComposerAgent:
     # No request in scope, so the provider resolves from settings, not X-LLM headers.
-    chat = build_chat_model(LLMRequestConfig(), temperature=_COMPOSE_TEMPERATURE)
+    chat = build_chat_model(LLMRequestConfig(), temperature=settings.compose_temperature)
     return ComposerAgent(
         chat=chat,
         ingredient_service=IngredientService(session),

@@ -47,6 +47,11 @@ class Settings(BaseSettings):
 
     llm_provider: str = "ollama"
 
+    # Composer sampling temperature, shared by the cron, the headless script, and the
+    # live admin demo so they cannot drift apart. Creative enough that meals vary run
+    # to run; safety never rides on the sampler, it is gated in code against the index.
+    compose_temperature: float = 0.4
+
     # Fixed for the whole corpus: stored and query vectors must share one model.
     embedding_backend: str = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
