@@ -121,10 +121,17 @@ def _public_trace(rows: list[DailySuggestion]) -> list[TraceEvent]:
     """The replayable trace across the day's meals, with model prose dropped.
 
     Only code-authored steps reach the public board: a ``draft`` is the model's own
-    text, which never makes a safety claim to a visitor.
+    text, which never makes a safety claim to a visitor. Each event is stamped with
+    its meal type so the replay can group the steps by dish.
     """
-    events = (TraceEvent.model_validate(raw) for row in rows for raw in row.reasoning_trace)
-    return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]
+    stamped: list[TraceEvent] = []
+    for row in rows:
+        for raw in row.reasoning_trace:
+            event = TraceEvent.model_validate(raw)
+            if event.kind in MODEL_AUTHORED_TRACE_KINDS:
+                continue
+            stamped.append(event.model_copy(update={"meal_type": row.meal_type}))
+    return stamped
 
 
 def _total_usage(rows: list[DailySuggestion]) -> LLMUsage:

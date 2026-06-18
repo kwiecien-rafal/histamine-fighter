@@ -362,13 +362,16 @@ class TraceEvent(BaseModel):
     plain-language line and ``kind`` drives the animation's styling. The ``reject``
     events ("parmesan is avoid, dropping it") are the demo payoff. ``compatibility``
     is the stable reading token the frontend maps to a label, set only on the steps
-    that read one ingredient.
+    that read one ingredient. ``meal_type`` is set on the public daily board, where
+    several meals' steps replay together, so the animation can group them by dish; it
+    is null on a single-meal stream.
     """
 
     kind: TraceKind
     text: str
     ingredient: str | None = None
     compatibility: TraceReading | None = None
+    meal_type: MealType | None = None
 
 
 class ComposedMealCard(BaseModel):

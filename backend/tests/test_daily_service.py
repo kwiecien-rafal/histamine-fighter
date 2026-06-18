@@ -137,6 +137,21 @@ async def test_revealed_board_drops_model_draft_events(session: AsyncSession) ->
     assert [event.kind for event in board.trace] == ["verify"]
 
 
+async def test_public_trace_stamps_each_event_with_its_meal_type(session: AsyncSession) -> None:
+    # The board flattens every meal's steps into one trace; each carries its slot so
+    # the replay can group them by dish.
+    await _add(session, meal_type=MealType.BREAKFAST, trace=[{"kind": "verify", "text": "b"}])
+    await _add(session, meal_type=MealType.DINNER, trace=[{"kind": "check", "text": "d"}])
+
+    board = await DailyService(session).board_for(_DAY, now=_AFTER)
+
+    assert board.status == "revealed"
+    assert [(event.meal_type, event.text) for event in board.trace] == [
+        (MealType.BREAKFAST, "b"),
+        (MealType.DINNER, "d"),
+    ]
+
+
 async def test_revealed_board_totals_usage_across_meals(session: AsyncSession) -> None:
     await _add(
         session,

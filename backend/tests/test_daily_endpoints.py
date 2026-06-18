@@ -6,13 +6,14 @@ created for today with a reveal time deliberately in the past or future.
 """
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.daily import _cache_max_age
 from app.core.ratelimit import limiter
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_session
@@ -21,6 +22,7 @@ from app.enums import ApprovalStatus, MealType
 from app.main import create_app
 from app.models import DailySuggestion
 from app.models.admin_user import AdminUser
+from app.schemas.daily import LockedBoard, RevealedBoard
 from app.schemas.meal import (
     ComposedMeal,
     MealStreamItem,
@@ -33,13 +35,14 @@ _EMAIL = "admin@example.com"
 _PASSWORD = "supersecret"
 
 
-def _content(name: str) -> dict[str, Any]:
+def _content(name: str, *, unverified: list[str] | None = None) -> dict[str, Any]:
     return {
         "name": name,
         "description": "raw courgette ribbons with olive oil and fresh herbs",
         "ingredients": [{"name": "courgette", "category": "vegetable"}],
         "recipe": ["Peel into ribbons.", "Toss with oil and herbs."],
         "tags": ["fresh"],
+        "unverified_ingredients": unverified or [],
     }
 
 
@@ -55,11 +58,12 @@ async def _add_suggestion(
     reveal_at: datetime,
     approval_status: ApprovalStatus = ApprovalStatus.APPROVED,
     name: str = "Courgette ribbon salad",
+    unverified: list[str] | None = None,
 ) -> DailySuggestion:
     row = DailySuggestion(
         suggestion_date=reveal_at.date(),
         meal_type=meal_type,
-        content=_content(name),
+        content=_content(name, unverified=unverified),
         model="fake/test",
         reasoning_trace=[{"kind": "verify", "text": "All ingredients cleared the index."}],
         reveal_at=reveal_at,
@@ -116,6 +120,29 @@ async def test_board_locked_when_no_board_scheduled(client: AsyncClient) -> None
     assert body["reveal_at"] is None
 
 
+async def test_public_card_omits_unverified_ingredients(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    # Unverified ingredients are admin-review context, never shown on the public card.
+    reveal_at = datetime.now(UTC) - timedelta(hours=2)
+    await _add_suggestion(session, reveal_at=reveal_at, unverified=["mystery spice"])
+
+    resp = await client.get("/api/v1/daily/meals")
+
+    body = resp.json()
+    assert body["status"] == "revealed"
+    assert "unverified_ingredients" not in body["meals"][0]
+
+
+async def test_board_read_sets_cache_control(client: AsyncClient, session: AsyncSession) -> None:
+    reveal_at = datetime.now(UTC) - timedelta(hours=2)
+    await _add_suggestion(session, reveal_at=reveal_at)
+
+    resp = await client.get("/api/v1/daily/meals")
+
+    assert resp.headers["cache-control"] == "public, max-age=120"
+
+
 # --- admin gate -------------------------------------------------------------------
 
 
@@ -153,6 +180,26 @@ async def test_list_pending_daily_returns_review_detail(
     assert item["content"]["ingredients"] == [{"name": "courgette", "category": "vegetable"}]
     assert item["reasoning_trace"][0]["kind"] == "verify"
     assert item["date"] == reveal_at.date().isoformat()
+
+
+async def test_admin_queue_surfaces_unverified_ingredients(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    # The reviewer must see what code could not verify, to close the gap the public
+    # card hides (the safety invariant).
+    await _add_admin(session)
+    reveal_at = datetime.now(UTC) + timedelta(days=1)
+    await _add_suggestion(
+        session,
+        reveal_at=reveal_at,
+        approval_status=ApprovalStatus.PENDING,
+        unverified=["mystery spice"],
+    )
+
+    resp = await client.get("/admin/daily", headers=_auth_header())
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["content"]["unverified_ingredients"] == ["mystery spice"]
 
 
 # --- PATCH /admin/daily/{id}/approve | reject -------------------------------------
@@ -294,3 +341,36 @@ async def test_generate_with_a_bad_meal_type_is_422(
     )
 
     assert resp.status_code == 422
+
+
+# --- _cache_max_age (pure) --------------------------------------------------------
+
+
+def test_cache_max_age_revealed_is_modest() -> None:
+    board = RevealedBoard(date=date(2026, 6, 16), model="fake/test", meals=[], trace=[])
+
+    assert _cache_max_age(board, datetime(2026, 6, 16, 11, tzinfo=UTC)) == 120
+
+
+def test_cache_max_age_locked_counts_down_to_reveal() -> None:
+    board = LockedBoard(date=date(2026, 6, 16), reveal_at=datetime(2026, 6, 16, 9, 1, tzinfo=UTC))
+
+    # 60s to reveal: above the floor, below the cap.
+    assert _cache_max_age(board, datetime(2026, 6, 16, 9, tzinfo=UTC)) == 60
+
+
+def test_cache_max_age_locked_caps_a_far_future_reveal() -> None:
+    board = LockedBoard(date=date(2026, 6, 16), reveal_at=datetime(2026, 6, 16, 10, tzinfo=UTC))
+
+    assert _cache_max_age(board, datetime(2026, 6, 16, 0, tzinfo=UTC)) == 300
+
+
+def test_cache_max_age_floors_past_reveal_and_unscheduled() -> None:
+    now = datetime(2026, 6, 16, 11, tzinfo=UTC)
+    past_reveal = LockedBoard(
+        date=date(2026, 6, 16), reveal_at=datetime(2026, 6, 16, 10, tzinfo=UTC)
+    )
+    unscheduled = LockedBoard(date=date(2026, 6, 16), reveal_at=None)
+
+    assert _cache_max_age(past_reveal, now) == 30
+    assert _cache_max_age(unscheduled, now) == 30
