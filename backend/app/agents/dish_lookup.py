@@ -1075,7 +1075,15 @@ class DishLookupAgent(BaseAgent):
         lookup is the intended vetting, not a verdict this pivot owns.
         """
         self._begin_usage()
-        anchors = await self._safe_anchors(avoid_ingredients, prefer_ingredients or [])
+        prefer = prefer_ingredients or []
+        # similar_flavours queries the pool by the safe anchors, so they are needed
+        # before retrieval. The other goals only use them to steer generation, so
+        # defer that DB work and skip it entirely when the pool fills the count.
+        anchors = (
+            await self._safe_anchors(avoid_ingredients, prefer)
+            if goal is AlternativeGoal.SIMILAR_FLAVOURS
+            else []
+        )
         picks = await self._verified_picks(goal, dish, anchors, avoid_ingredients)
         verified = _verified_alternatives(await self._still_safe(picks))
 
@@ -1088,6 +1096,8 @@ class DishLookupAgent(BaseAgent):
         _take_alternatives(suggestions, seen, verified)
         generated: list[DishAlternative] = []
         if len(suggestions) < MAX_ALTERNATIVES:
+            if goal is not AlternativeGoal.SIMILAR_FLAVOURS:
+                anchors = await self._safe_anchors(avoid_ingredients, prefer)
             already_chosen = [pick.name for pick in suggestions]
             generated = await self._generate_alternatives(
                 dish,
