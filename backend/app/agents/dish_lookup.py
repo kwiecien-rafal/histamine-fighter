@@ -510,8 +510,9 @@ def _verified_alternatives(meals: list[CuratedMeal]) -> list[DishAlternative]:
     """Approved-pool meals as verified suggestions; the description is the pitch.
 
     The claim is sound because membership means code-verified plus admin-approved.
-    A meal whose name clips to blank is skipped; dedupe and the cap happen in the
-    merge so verified picks keep precedence over generated ones.
+    A meal whose name clips to blank is skipped; dedupe and the cap happen when the
+    tiers are combined, where verified picks fill first and so keep precedence over
+    generated ones.
     """
     kept: list[DishAlternative] = []
     for meal in meals:
@@ -528,8 +529,8 @@ def _verified_alternatives(meals: list[CuratedMeal]) -> list[DishAlternative]:
 
 def _generated_alternatives(items: list[AlternativeDraft]) -> list[DishAlternative]:
     """The model's fresh ideas, clipped; blanks dropped. Makes no safety claim, so
-    each is re-vetted when the user looks it up. Dedupe and the cap happen in the
-    merge."""
+    each is re-vetted when the user looks it up. Dedupe and the cap happen when the
+    tiers are combined."""
     kept: list[DishAlternative] = []
     for item in items:
         name = _clipped(item.name, MAX_DISH_CHARS)
@@ -543,23 +544,25 @@ def _generated_alternatives(items: list[AlternativeDraft]) -> list[DishAlternati
     return kept
 
 
-def _merge_alternatives(
-    verified: list[DishAlternative], generated: list[DishAlternative], dish: str
-) -> list[DishAlternative]:
-    """Verified picks first, generation fills the rest: dedupe (verified wins a
-    name clash), drop the original dish echoed back, cap the count. An empty list
-    is a valid "nothing fits" answer."""
-    kept: list[DishAlternative] = []
-    seen = {dish.strip().casefold()}
-    for alternative in (*verified, *generated):
-        key = alternative.name.casefold()
+def _take_alternatives(
+    kept: list[DishAlternative], seen: set[str], items: Iterable[DishAlternative]
+) -> None:
+    """Append items new by casefolded name into ``kept``, up to MAX_ALTERNATIVES.
+
+    ``kept`` and ``seen`` are shared across the verified then generated passes, so
+    one cap and one dedupe span both tiers: a generated idea repeating a verified
+    name (or the dish, pre-seeded in ``seen``) cannot take a slot, and verified
+    picks keep precedence because they fill first. An empty result is a valid
+    "nothing fits" answer.
+    """
+    for item in items:
+        if len(kept) == MAX_ALTERNATIVES:
+            return
+        key = item.name.casefold()
         if key in seen:
             continue
         seen.add(key)
-        kept.append(alternative)
-        if len(kept) == MAX_ALTERNATIVES:
-            break
-    return kept
+        kept.append(item)
 
 
 def _integrity(adaptations: list[Adaptation]) -> DishIntegrity:
@@ -1075,10 +1078,18 @@ class DishLookupAgent(BaseAgent):
         anchors = await self._safe_anchors(avoid_ingredients, prefer_ingredients or [])
         picks = await self._verified_picks(goal, dish, anchors, avoid_ingredients)
         verified = _verified_alternatives(await self._still_safe(picks))
+
+        # Fill verified first, deduped against the dish and each other, then gate on
+        # the kept count: two pool meals sharing a name (or one echoing the dish)
+        # collapse to one slot here, so generation still runs to top the list up
+        # rather than the response silently coming back short.
+        seen = {dish.strip().casefold()}
+        suggestions: list[DishAlternative] = []
+        _take_alternatives(suggestions, seen, verified)
         generated: list[DishAlternative] = []
-        if len(verified) < MAX_ALTERNATIVES:
+        if len(suggestions) < MAX_ALTERNATIVES:
             generated = await self._generate_alternatives(dish, goal, anchors, avoid_ingredients)
-        suggestions = _merge_alternatives(verified, generated, dish)
+            _take_alternatives(suggestions, seen, generated)
         # Counts and the goal enum only: this always-on line carries no user content.
         log.info(
             "dish_lookup.alternatives",

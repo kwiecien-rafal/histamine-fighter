@@ -1667,6 +1667,48 @@ async def test_alternatives_drop_a_pool_meal_the_index_now_flags(session: AsyncS
     assert result.usage.calls == 1
 
 
+async def test_alternatives_collapse_duplicate_named_pool_meals(session: AsyncSession) -> None:
+    # Two approved meals can share a name (the pool has no uniqueness on it), so they
+    # collapse to one verified slot and the gate still runs generation to fill the
+    # rest, rather than the response coming back short on the inflated pool count.
+    for description in ("ribbons with basil", "ribbons with mint"):
+        await _add_approved_meal(session, name="Courgette ribbon salad", description=description)
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One", "Gen Two"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    sources = [item.source for item in result.alternatives]
+    assert sources == ["verified", "generated", "generated"]
+    assert result.usage.calls == 1
+
+
+async def test_alternatives_drop_a_verified_pick_that_echoes_the_dish(
+    session: AsyncSession,
+) -> None:
+    # A pool meal whose name is the dish being replaced is the one thing the pivot
+    # must never offer back, so it drops on the dish-echo guard and generation tops
+    # the list up instead of the slot silently vanishing.
+    await _add_approved_meal(
+        session, name="Creamy courgette pasta", description="fresh courgette with herbs"
+    )
+    await _add_approved_meal(
+        session, name="Courgette herb bowl", description="fresh courgette with herbs"
+    )
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy courgette pasta", AlternativeGoal.SAME_STYLE, ["tomato"]
+    )
+
+    names = [item.name for item in result.alternatives]
+    assert "Creamy courgette pasta" not in names
+    verified = [item.name for item in result.alternatives if item.source == "verified"]
+    assert verified == ["Courgette herb bowl"]
+    assert any(item.source == "generated" for item in result.alternatives)
+
+
 # --- the confirmed-ingredient boundary --------------------------------------------
 
 
