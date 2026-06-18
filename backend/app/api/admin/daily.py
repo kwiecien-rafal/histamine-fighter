@@ -9,6 +9,7 @@ the live demo: it streams one composition's reasoning as Server-Sent Events.
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -79,6 +80,25 @@ async def reject_suggestion(
     return suggestion
 
 
+def _log_done(meal_type: str, meal: dict[str, Any]) -> None:
+    """Record a finished live composition: the model, the meal, and the token cost.
+
+    ``compose`` logs the offline batch path; the live stream went unlogged, so an
+    admin trigger spent tokens with no server-side record of what it cost or made.
+    """
+    usage = meal.get("usage") or {}
+    log.info(
+        "composer.live.done",
+        meal_type=meal_type,
+        model=meal.get("model"),
+        name=meal.get("name"),
+        ingredients=len(meal.get("ingredients") or []),
+        unverified=len(meal.get("unverified_ingredients") or []),
+        calls=usage.get("calls"),
+        total_tokens=usage.get("total_tokens"),
+    )
+
+
 @router.post("/generate")
 @limiter.limit(llm_rate_limit)
 async def generate_live(
@@ -112,9 +132,17 @@ async def generate_live(
                     event_type = envelope["type"]
                     inner = envelope["event"] if event_type == "trace" else envelope["meal"]
                     yield {"event": event_type, "data": json.dumps(inner)}
+                    if event_type == "meal":
+                        _log_done(payload.meal_type.value, inner)
             except ComposerExhausted:
+                log.warning("composer.live.exhausted", meal_type=payload.meal_type.value)
                 yield {"event": "error", "data": json.dumps({"detail": _GENERATION_FAILED})}
             except LLMError as exc:
+                log.warning(
+                    "composer.live.llm_error",
+                    meal_type=payload.meal_type.value,
+                    error=str(exc),
+                )
                 yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
             except Exception:
                 # The 200 and headers are already sent, so an unexpected failure cannot
