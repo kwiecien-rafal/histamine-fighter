@@ -76,11 +76,27 @@ jobs:
 
   # The fast suite excludes the real-embedder tests (pyproject addopts); this job
   # runs exactly those, so the actual model path is exercised on every PR. The
-  # model download (~130 MB) is cached between runs.
+  # model download (~130 MB) is cached between runs. The meal retrieval eval is
+  # both a real-embedder and a pgvector test, so the job provisions Postgres too.
   embedding-tests:
     runs-on: ubuntu-latest
     env:
       FASTEMBED_CACHE_PATH: /home/runner/.cache/fastembed
+      DATABASE_URL: postgresql+asyncpg://histamine:histamine@localhost:5432/histamine
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: histamine
+          POSTGRES_PASSWORD: histamine
+          POSTGRES_DB: histamine
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U histamine -d histamine"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
