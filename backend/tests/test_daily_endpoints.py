@@ -14,6 +14,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.admin.daily import _generation_lock
 from app.api.v1.daily import _cache_max_age
 from app.core.ratelimit import limiter
 from app.core.security import create_access_token, hash_password
@@ -386,6 +387,37 @@ async def test_generate_unexpected_failure_closes_as_an_error_event(
     assert "Something went wrong" in body
     # The raw exception detail stays in the server log, never the response.
     assert "boom" not in body
+
+
+async def test_generate_while_a_run_is_in_flight_is_409(
+    sse_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _add_admin(session)
+
+    # Hold the same lock the route checks, standing in for a live run already streaming.
+    await _generation_lock.acquire()
+    try:
+        resp = await sse_client.post(
+            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
+        )
+    finally:
+        _generation_lock.release()
+
+    assert resp.status_code == 409
+    assert "already running" in resp.json()["detail"]
+
+
+async def test_generate_releases_the_lock_after_a_run(
+    sse_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _add_admin(session)
+
+    resp = await sse_client.post(
+        "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
+    )
+
+    assert resp.status_code == 200
+    assert not _generation_lock.locked()
 
 
 # --- _cache_max_age (pure) --------------------------------------------------------

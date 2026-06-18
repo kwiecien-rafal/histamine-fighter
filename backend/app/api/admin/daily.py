@@ -6,6 +6,7 @@ trace for the admin to actually check before signing off. The ``generate`` route
 the live demo: it streams one composition's reasoning as Server-Sent Events.
 """
 
+import asyncio
 import json
 from collections.abc import AsyncIterator
 from uuid import UUID
@@ -31,6 +32,13 @@ router = APIRouter(prefix="/admin/daily", tags=["admin"])
 
 _GENERATION_FAILED = "The composer could not finish a safe meal. Try again."
 _GENERATION_ERROR = "Something went wrong while composing the meal. Try again."
+_GENERATION_BUSY = "A live composition is already running. Wait for it to finish."
+
+# Serializes the live composer so one admin trigger cannot fan out into several
+# concurrent multi-call LLM runs (the per-IP rate limit bounds rate, not overlap).
+# Process-local: under multiple workers it guards per worker, which is enough for a
+# single-operator demo; a cross-process guard would be over-engineered here.
+_generation_lock = asyncio.Lock()
 
 
 @router.get("", response_model=list[AdminDailyRead])
@@ -83,30 +91,37 @@ async def generate_live(
 
     Each reasoning step is sent as a ``trace`` event and the finished meal as a
     terminal ``meal`` event; a failure becomes an ``error`` event so the already
-    open stream closes cleanly rather than dropping. The meal is a live demo and is
-    not saved: the nightly job populates the public board.
+    open stream closes cleanly rather than dropping. The composer is expensive, so
+    only one live run is allowed at a time: a second trigger gets 409 while one is
+    in flight. The meal is a live demo and is not saved: the nightly job populates
+    the public board.
     """
+    if _generation_lock.locked():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_GENERATION_BUSY)
 
     async def event_source() -> AsyncIterator[dict[str, str]]:
-        try:
-            async for chunk in streamer.stream(payload.meal_type):
-                # Each item is a discriminated envelope: {"type": "trace", "event": ...}
-                # or {"type": "meal", "meal": ...}. The SSE event name is its type and
-                # the inner object is the payload the client already expects.
-                envelope = json.loads(chunk)
-                event_type = envelope["type"]
-                inner = envelope["event"] if event_type == "trace" else envelope["meal"]
-                yield {"event": event_type, "data": json.dumps(inner)}
-        except ComposerExhausted:
-            yield {"event": "error", "data": json.dumps({"detail": _GENERATION_FAILED})}
-        except LLMError as exc:
-            yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
-        except Exception:
-            # The 200 and headers are already sent, so an unexpected failure cannot
-            # become an HTTP error: it has to close the stream as an error event, or
-            # the client reads a truncated stream as success. A client disconnect
-            # raises CancelledError (a BaseException), so it still propagates here.
-            log.exception("composer.live.failed", meal_type=payload.meal_type.value)
-            yield {"event": "error", "data": json.dumps({"detail": _GENERATION_ERROR})}
+        # The lock is the real guard: even if two requests slip past the check above,
+        # they run one at a time, and it releases here on completion or client cancel.
+        async with _generation_lock:
+            try:
+                async for chunk in streamer.stream(payload.meal_type):
+                    # Each item is a discriminated envelope: {"type": "trace", "event": ...}
+                    # or {"type": "meal", "meal": ...}. The SSE event name is its type and
+                    # the inner object is the payload the client already expects.
+                    envelope = json.loads(chunk)
+                    event_type = envelope["type"]
+                    inner = envelope["event"] if event_type == "trace" else envelope["meal"]
+                    yield {"event": event_type, "data": json.dumps(inner)}
+            except ComposerExhausted:
+                yield {"event": "error", "data": json.dumps({"detail": _GENERATION_FAILED})}
+            except LLMError as exc:
+                yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
+            except Exception:
+                # The 200 and headers are already sent, so an unexpected failure cannot
+                # become an HTTP error: it has to close the stream as an error event, or
+                # the client reads a truncated stream as success. A client disconnect
+                # raises CancelledError (a BaseException), so it still propagates here.
+                log.exception("composer.live.failed", meal_type=payload.meal_type.value)
+                yield {"event": "error", "data": json.dumps({"detail": _GENERATION_ERROR})}
 
     return EventSourceResponse(event_source())
