@@ -12,6 +12,9 @@ interface ReasoningReplayProps {
   // In live mode the events arrive over the wire already, so they are shown as
   // they come (no pacing, no Skip, no completion callback).
   live?: boolean;
+  // In live mode, a pulsing line marks the wait on the next model call, so the
+  // multi-second gaps between steps read as the agent thinking, not a freeze.
+  pending?: boolean;
 }
 
 const DEFAULT_STEP_MS = 1100;
@@ -27,6 +30,7 @@ export function ReasoningReplay({
   onComplete,
   stepMs = DEFAULT_STEP_MS,
   live = false,
+  pending = false,
 }: ReasoningReplayProps) {
   const [shown, setShown] = useState(() => (events.length > 0 ? 1 : 0));
 
@@ -84,6 +88,15 @@ export function ReasoningReplay({
             </Fragment>
           );
         })}
+        {live && pending && (
+          <li className="flex items-center gap-2 text-sm text-stone-400">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse"
+              aria-hidden
+            />
+            Thinking…
+          </li>
+        )}
       </ol>
     </section>
   );

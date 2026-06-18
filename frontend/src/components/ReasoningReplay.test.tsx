@@ -77,6 +77,19 @@ describe("ReasoningReplay", () => {
     expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
   });
 
+  it("pulses a thinking line while live and pending, and drops it once settled", () => {
+    const { rerender } = render(
+      <ReasoningReplay events={[event("first")]} live pending />,
+    );
+
+    expect(screen.getByText("first")).toBeInTheDocument();
+    expect(screen.getByText(/Thinking/)).toBeInTheDocument();
+
+    rerender(<ReasoningReplay events={[event("first")]} live />);
+
+    expect(screen.queryByText(/Thinking/)).not.toBeInTheDocument();
+  });
+
   it("labels each meal once as its steps begin", () => {
     const events: TraceEvent[] = [
       { ...event("b1"), meal_type: "breakfast" },

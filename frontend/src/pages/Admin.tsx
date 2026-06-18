@@ -166,9 +166,9 @@ function GeneratePanel({ token, onExpired }: GeneratePanelProps) {
         </p>
       )}
 
-      {events.length > 0 && (
+      {(streaming || events.length > 0) && (
         <div className="mt-4">
-          <ReasoningReplay events={events} live />
+          <ReasoningReplay events={events} live pending={streaming} />
         </div>
       )}
 
