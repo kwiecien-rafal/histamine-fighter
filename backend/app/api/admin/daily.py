@@ -10,6 +10,7 @@ import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sse_starlette.sse import EventSourceResponse
 
@@ -24,9 +25,12 @@ from app.schemas.admin import AdminDailyRead, DailyGenerateRequest
 from app.services.composer_streamer import ComposerStreamer
 from app.services.daily_service import DailyService
 
+log = structlog.get_logger(__name__)
+
 router = APIRouter(prefix="/admin/daily", tags=["admin"])
 
 _GENERATION_FAILED = "The composer could not finish a safe meal. Try again."
+_GENERATION_ERROR = "Something went wrong while composing the meal. Try again."
 
 
 @router.get("", response_model=list[AdminDailyRead])
@@ -97,5 +101,12 @@ async def generate_live(
             yield {"event": "error", "data": json.dumps({"detail": _GENERATION_FAILED})}
         except LLMError as exc:
             yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
+        except Exception:
+            # The 200 and headers are already sent, so an unexpected failure cannot
+            # become an HTTP error: it has to close the stream as an error event, or
+            # the client reads a truncated stream as success. A client disconnect
+            # raises CancelledError (a BaseException), so it still propagates here.
+            log.exception("composer.live.failed", meal_type=payload.meal_type.value)
+            yield {"event": "error", "data": json.dumps({"detail": _GENERATION_ERROR})}
 
     return EventSourceResponse(event_source())

@@ -6,6 +6,7 @@ created for today with a reveal time deliberately in the past or future.
 """
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -289,16 +290,32 @@ class _FakeStreamer:
         yield MealStreamItem.of(meal).model_dump_json()
 
 
-@pytest_asyncio.fixture
-async def sse_client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
-    """A client whose composer is the scripted fake, sharing the test session."""
+class _BoomStreamer:
+    """Streams one step, then fails the way a mid-stream DB or serialization error would.
+
+    The failure is neither ComposerExhausted nor LLMError, so it exercises the
+    generator's catch-all backstop rather than the tailored branches.
+    """
+
+    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
+        yield TraceStreamItem(
+            event=TraceEvent(kind="check", text="Checking courgette.", ingredient="courgette")
+        ).model_dump_json()
+        raise RuntimeError("boom: the database connection dropped")
+
+
+@asynccontextmanager
+async def _sse_client(
+    session: AsyncSession, streamer_cls: type[object]
+) -> AsyncIterator[AsyncClient]:
+    """An admin client whose composer is the given scripted fake, sharing the session."""
     app = create_app()
 
     async def _use_test_session() -> AsyncIterator[AsyncSession]:
         yield session
 
     app.dependency_overrides[get_session] = _use_test_session
-    app.dependency_overrides[get_composer_streamer] = _FakeStreamer
+    app.dependency_overrides[get_composer_streamer] = streamer_cls
     limiter.enabled = False
     transport = ASGITransport(app=app)
     try:
@@ -306,6 +323,13 @@ async def sse_client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
             yield http_client
     finally:
         limiter.enabled = True
+
+
+@pytest_asyncio.fixture
+async def sse_client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+    """The default live-compose client: a scripted trace then a composed meal."""
+    async with _sse_client(session, _FakeStreamer) as http_client:
+        yield http_client
 
 
 async def test_generate_without_a_token_is_401(client: AsyncClient) -> None:
@@ -341,6 +365,27 @@ async def test_generate_with_a_bad_meal_type_is_422(
     )
 
     assert resp.status_code == 422
+
+
+async def test_generate_unexpected_failure_closes_as_an_error_event(
+    session: AsyncSession,
+) -> None:
+    await _add_admin(session)
+
+    async with _sse_client(session, _BoomStreamer) as client:
+        resp = await client.post(
+            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
+        )
+
+    # The stream already opened with a 200, so the failure has to arrive as a terminal
+    # error event; a truncated stream would read as success on the client.
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: trace" in body
+    assert "event: error" in body
+    assert "Something went wrong" in body
+    # The raw exception detail stays in the server log, never the response.
+    assert "boom" not in body
 
 
 # --- _cache_max_age (pure) --------------------------------------------------------
