@@ -1,6 +1,6 @@
 import type { AlternativeGoal } from "../api/client";
 import type { AlternativesState } from "../hooks/useDishLookupFlow";
-import { ALTERNATIVE_SOURCE } from "../lib/alternatives";
+import { ALTERNATIVE_SOURCE, ALTERNATIVE_TAP_HINT } from "../lib/alternatives";
 import type { PivotTone } from "../lib/assessment";
 import { LLMProviderBadge } from "./LLMProviderBadge";
 
@@ -101,12 +101,15 @@ export function AlternativesPanel({
                         {suggestion.pitch}
                       </span>
                     )}
-                    <span
-                      className={`block text-xs mt-1 ${
-                        badge.verified ? "font-medium text-emerald-700" : "text-stone-400"
-                      }`}
-                    >
-                      {badge.label}
+                    {badge.provenance && (
+                      <span className="block text-xs font-medium text-emerald-700 mt-1">
+                        <span aria-hidden="true">✓ </span>
+                        <span className="sr-only">{badge.srPrefix}</span>
+                        <span>{badge.provenance}</span>
+                      </span>
+                    )}
+                    <span className="block text-xs text-stone-600 mt-1">
+                      {ALTERNATIVE_TAP_HINT}
                     </span>
                   </button>
                 </li>

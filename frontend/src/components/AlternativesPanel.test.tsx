@@ -77,7 +77,7 @@ describe("AlternativesPanel", () => {
     expect(screen.getByText("stub/model")).toBeInTheDocument();
   });
 
-  it("marks a verified pool pick as from our kitchen", () => {
+  it("marks the verified pick's provenance and keeps every card tappable", () => {
     renderPanel({
       status: "loaded",
       goal: "same_style",
@@ -89,8 +89,10 @@ describe("AlternativesPanel", () => {
       cache: {},
     });
 
-    expect(screen.getByText("✓ From our kitchen")).toBeInTheDocument();
-    expect(screen.getByText("Tap to check this dish")).toBeInTheDocument();
+    // Only the verified pick carries a provenance line.
+    expect(screen.getAllByText("From our kitchen")).toHaveLength(1);
+    // Both cards stay tappable, so the check affordance shows on each.
+    expect(screen.getAllByText("Tap to check this dish")).toHaveLength(2);
   });
 
   it("fires onChooseGoal with the picked goal", async () => {
