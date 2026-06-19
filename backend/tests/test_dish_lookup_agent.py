@@ -1674,6 +1674,46 @@ async def test_alternatives_rank_verified_picks_by_similarity_above_the_floor(
     assert result.usage.calls == 1
 
 
+async def test_alternatives_similar_flavours_query_is_the_anchors_not_the_dish(
+    session: AsyncSession,
+) -> None:
+    # similar_flavours retrieves by the safe anchors, not the dish: the anchor-matched
+    # meal surfaces, while a meal that only shares the dish's own words stays below the
+    # floor, proving the goal selects the query axis.
+    await _add_approved_meal(session, name="Basil lemon orzo", description="herbs")
+    await _add_approved_meal(session, name="Tomato pasta bake", description="creamy")
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One", "Gen Two"))
+
+    result = await _meal_agent(chat, session, min_similarity=0.5).alternatives(
+        "creamy tomato pasta", AlternativeGoal.SIMILAR_FLAVOURS, [], ["basil", "lemon"]
+    )
+
+    names = [item.name for item in result.alternatives]
+    assert names[0] == "Basil lemon orzo"
+    assert "Tomato pasta bake" not in names
+    assert [item.source for item in result.alternatives] == ["verified", "generated", "generated"]
+    assert result.usage.calls == 1
+
+
+async def test_alternatives_similar_flavours_empty_anchors_fall_back_to_generation(
+    session: AsyncSession,
+) -> None:
+    # No safe parts and an excluded ingredient the index cannot place leave no anchors,
+    # so similar_flavours has no flavour query: the pool meal never surfaces and
+    # generation fills the whole list.
+    await _add_approved_meal(session, name="Basil lemon orzo", description="herbs")
+    chat = _ScriptedChat(alternatives=_alternatives_draft("Gen One", "Gen Two", "Gen Three"))
+
+    result = await _meal_agent(chat, session).alternatives(
+        "creamy tomato pasta", AlternativeGoal.SIMILAR_FLAVOURS, ["tomato"]
+    )
+
+    names = [item.name for item in result.alternatives]
+    assert "Basil lemon orzo" not in names
+    assert [item.source for item in result.alternatives] == ["generated", "generated", "generated"]
+    assert result.usage.calls == 1
+
+
 async def test_alternatives_drop_a_pool_meal_the_index_now_flags(session: AsyncSession) -> None:
     # A meal approved with an ingredient the index has since reclassified to
     # incompatible no longer grounds to safe, so it loses the verified signal and
