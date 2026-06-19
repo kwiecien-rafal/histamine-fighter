@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.dish_lookup import DishLookupAgent
+from app.agents.dish_lookup import DishLookupAgent, _clipped_pitch
 from app.enums import (
     AdaptationAction,
     AlternativeGoal,
@@ -1848,6 +1848,25 @@ async def test_alternatives_retrieval_value_error_is_not_swallowed(
 
     with pytest.raises(ValueError):
         await agent.alternatives("anything", AlternativeGoal.SAME_STYLE, ["tomato"])
+
+
+# --- pitch clipping: a verified pitch reuses a meal description --------------------
+
+
+def test_clipped_pitch_passes_a_short_pitch_through_unchanged() -> None:
+    assert _clipped_pitch("Fresh and herby.") == "Fresh and herby."
+
+
+def test_clipped_pitch_cuts_a_long_description_on_a_word_boundary() -> None:
+    description = " ".join(["courgette"] * 60)
+    assert len(description) > MAX_PITCH_CHARS
+
+    pitch = _clipped_pitch(description)
+
+    assert pitch.endswith("…")
+    assert len(pitch) <= MAX_PITCH_CHARS
+    # Every kept token is a whole word from the source, never a mid-word fragment.
+    assert all(token == "courgette" for token in pitch[:-1].split())
 
 
 # --- the confirmed-ingredient boundary --------------------------------------------

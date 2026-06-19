@@ -316,6 +316,21 @@ def _clipped(value: str, limit: int = MAX_INGREDIENT_CHARS) -> str:
     return value.strip()[:limit].rstrip()
 
 
+def _clipped_pitch(value: str, limit: int = MAX_PITCH_CHARS) -> str:
+    """Clip a pitch on a word boundary, marking a real cut with an ellipsis.
+
+    A verified pick reuses a meal's description, which is not written to the pitch
+    length, so a plain slice would chop mid-word. Pitches within the limit pass
+    through unchanged.
+    """
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    head = text[: limit - 1].rstrip()
+    boundary = head.rsplit(" ", 1)[0] if " " in head else head
+    return f"{boundary.rstrip()}…"
+
+
 def _normalized(items: list[ProposedIngredientDraft]) -> list[ProposedIngredient]:
     """Degrade the model's draft items into valid response items.
 
@@ -520,9 +535,7 @@ def _verified_alternatives(meals: list[CuratedMeal]) -> list[DishAlternative]:
         if not name:
             continue
         kept.append(
-            DishAlternative(
-                name=name, pitch=_clipped(meal.description, MAX_PITCH_CHARS), source="verified"
-            )
+            DishAlternative(name=name, pitch=_clipped_pitch(meal.description), source="verified")
         )
     return kept
 
@@ -537,9 +550,7 @@ def _generated_alternatives(items: list[AlternativeDraft]) -> list[DishAlternati
         if not name:
             continue
         kept.append(
-            DishAlternative(
-                name=name, pitch=_clipped(item.pitch, MAX_PITCH_CHARS), source="generated"
-            )
+            DishAlternative(name=name, pitch=_clipped_pitch(item.pitch), source="generated")
         )
     return kept
 
