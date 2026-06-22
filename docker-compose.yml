@@ -28,6 +28,12 @@ services:
       - DEBUG=true
       - DATABASE_URL=postgresql+asyncpg://histamine:histamine@db:5432/histamine
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      # Cloud-provider keys for the server-side LLM paths (composer, daily cron,
+      # Learn). The container never reads the root .env, so they are forwarded here.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:20b}
