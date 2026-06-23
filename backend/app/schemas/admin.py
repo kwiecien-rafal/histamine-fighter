@@ -2,12 +2,11 @@
 
 import datetime as dt
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.enums import ApprovalStatus, MealType
+from app.enums import ApprovalStatus, MealType, Role
 from app.schemas.daily import DailyMealContent
 from app.schemas.meal import ProposedIngredient, TraceEvent
 from app.schemas.usage import LLMUsage
@@ -32,11 +31,13 @@ class DailyGenerateRequest(BaseModel):
     meal_type: MealType
 
 
-class TokenResponse(BaseModel):
-    """A bearer token the client stores and replays on admin requests."""
+class AuthUser(BaseModel):
+    """The signed-in user as the SPA sees it: enough to gate the UI, no token."""
 
-    access_token: str
-    token_type: Literal["bearer"] = "bearer"
+    model_config = ConfigDict(from_attributes=True)
+
+    email: str
+    role: Role
 
 
 class AdminMealRead(BaseModel):

@@ -1,8 +1,8 @@
 """Endpoint tests for the daily board: public read and admin review.
 
-These run against the test database (the conftest ``client`` shares the rolled-back
-session). The public read derives "today" from the real UTC clock, so rows are
-created for today with a reveal time deliberately in the past or future.
+These run against the test database (the conftest ``client``/``authenticated_client``
+share the rolled-back session). The public read derives "today" from the real UTC
+clock, so rows are created for today with a reveal time deliberately past or future.
 """
 
 from collections.abc import AsyncIterator
@@ -18,14 +18,13 @@ from app.agents.composer import ComposerExhausted
 from app.api.admin.daily import _generation_lock
 from app.api.v1.daily import _cache_max_age
 from app.core.ratelimit import limiter
-from app.core.security import create_access_token, hash_password
 from app.db.session import get_session
 from app.dependencies import get_composer_streamer
 from app.enums import ApprovalStatus, MealType
 from app.llm.errors import LLMInvocationError
 from app.main import create_app
 from app.models import DailySuggestion
-from app.models.admin_user import AdminUser
+from app.models.user import User
 from app.schemas.daily import LockedBoard, RevealedBoard
 from app.schemas.meal import (
     ComposedMeal,
@@ -34,9 +33,7 @@ from app.schemas.meal import (
     TraceEvent,
     TraceStreamItem,
 )
-
-_EMAIL = "admin@example.com"
-_PASSWORD = "supersecret"
+from tests.conftest import ADMIN_EMAIL, ADMIN_PASSWORD
 
 
 def _content(name: str, *, unverified: list[str] | None = None) -> dict[str, Any]:
@@ -48,11 +45,6 @@ def _content(name: str, *, unverified: list[str] | None = None) -> dict[str, Any
         "tags": ["fresh"],
         "unverified_ingredients": unverified or [],
     }
-
-
-async def _add_admin(session: AsyncSession) -> None:
-    session.add(AdminUser(email=_EMAIL, password_hash=hash_password(_PASSWORD)))
-    await session.flush()
 
 
 async def _add_suggestion(
@@ -76,10 +68,6 @@ async def _add_suggestion(
     session.add(row)
     await session.flush()
     return row
-
-
-def _auth_header() -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token(_EMAIL, token_version=1)}"}
 
 
 # --- GET /api/v1/daily/meals ------------------------------------------------------
@@ -159,9 +147,8 @@ async def test_list_daily_without_a_token_is_401(client: AsyncClient) -> None:
 
 
 async def test_list_pending_daily_returns_review_detail(
-    client: AsyncClient, session: AsyncSession
+    authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
-    await _add_admin(session)
     reveal_at = datetime.now(UTC) + timedelta(days=1)
     await _add_suggestion(
         session, reveal_at=reveal_at, approval_status=ApprovalStatus.PENDING, name="Pending salad"
@@ -174,7 +161,7 @@ async def test_list_pending_daily_returns_review_detail(
         name="Approved bake",
     )
 
-    resp = await client.get("/admin/daily", headers=_auth_header())
+    resp = await authenticated_client.get("/admin/daily")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -187,11 +174,10 @@ async def test_list_pending_daily_returns_review_detail(
 
 
 async def test_admin_queue_surfaces_unverified_ingredients(
-    client: AsyncClient, session: AsyncSession
+    authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
     # The reviewer must see what code could not verify, to close the gap the public
     # card hides (the safety invariant).
-    await _add_admin(session)
     reveal_at = datetime.now(UTC) + timedelta(days=1)
     await _add_suggestion(
         session,
@@ -200,7 +186,7 @@ async def test_admin_queue_surfaces_unverified_ingredients(
         unverified=["mystery spice"],
     )
 
-    resp = await client.get("/admin/daily", headers=_auth_header())
+    resp = await authenticated_client.get("/admin/daily")
 
     assert resp.status_code == 200
     assert resp.json()[0]["content"]["unverified_ingredients"] == ["mystery spice"]
@@ -210,33 +196,31 @@ async def test_admin_queue_surfaces_unverified_ingredients(
 
 
 async def test_approve_flips_status_and_stamps_the_actor(
-    client: AsyncClient, session: AsyncSession
+    authenticated_client: AsyncClient, session: AsyncSession, admin_user: User
 ) -> None:
-    await _add_admin(session)
     row = await _add_suggestion(
         session,
         reveal_at=datetime.now(UTC) + timedelta(days=1),
         approval_status=ApprovalStatus.PENDING,
     )
 
-    resp = await client.patch(f"/admin/daily/{row.id}/approve", headers=_auth_header())
+    resp = await authenticated_client.patch(f"/admin/daily/{row.id}/approve")
 
     assert resp.status_code == 200
     body = resp.json()
     assert body["approval_status"] == "approved"
-    assert body["approved_by"] == _EMAIL
+    assert body["approved_by"] == admin_user.email
     assert body["approved_at"] is not None
 
     await session.flush()
     await session.refresh(row)
     assert row.approval_status is ApprovalStatus.APPROVED
-    assert row.approved_by == _EMAIL
+    assert row.approved_by == admin_user.email
 
 
 async def test_reject_flips_status_and_clears_stamp(
-    client: AsyncClient, session: AsyncSession
+    authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
-    await _add_admin(session)
     row = await _add_suggestion(
         session,
         reveal_at=datetime.now(UTC) + timedelta(days=1),
@@ -245,7 +229,7 @@ async def test_reject_flips_status_and_clears_stamp(
     row.approved_by = "someone@example.com"
     await session.flush()
 
-    resp = await client.patch(f"/admin/daily/{row.id}/reject", headers=_auth_header())
+    resp = await authenticated_client.patch(f"/admin/daily/{row.id}/reject")
 
     assert resp.status_code == 200
     body = resp.json()
@@ -254,13 +238,9 @@ async def test_reject_flips_status_and_clears_stamp(
     assert body["approved_at"] is None
 
 
-async def test_approve_unknown_suggestion_is_404(
-    client: AsyncClient, session: AsyncSession
-) -> None:
-    await _add_admin(session)
-
-    resp = await client.patch(
-        "/admin/daily/00000000-0000-0000-0000-000000000000/approve", headers=_auth_header()
+async def test_approve_unknown_suggestion_is_404(authenticated_client: AsyncClient) -> None:
+    resp = await authenticated_client.patch(
+        "/admin/daily/00000000-0000-0000-0000-000000000000/approve"
     )
 
     assert resp.status_code == 404
@@ -339,7 +319,12 @@ class _LLMErrorStreamer:
 async def _sse_client(
     session: AsyncSession, streamer_cls: type[object]
 ) -> AsyncIterator[AsyncClient]:
-    """An admin client whose composer is the given scripted fake, sharing the session."""
+    """An authenticated admin client whose composer is the given scripted fake.
+
+    Shares the test session and logs in through the real cookie flow, so the
+    require_admin gate on generate is exercised honestly. The admin must already
+    exist in the session (request the admin_user fixture).
+    """
     app = create_app()
 
     async def _use_test_session() -> AsyncIterator[AsyncSession]:
@@ -351,13 +336,17 @@ async def _sse_client(
     transport = ASGITransport(app=app)
     try:
         async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+            login = await http_client.post(
+                "/admin/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+            )
+            assert login.status_code == 200
             yield http_client
     finally:
         limiter.enabled = True
 
 
 @pytest_asyncio.fixture
-async def sse_client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
+async def sse_client(session: AsyncSession, admin_user: User) -> AsyncIterator[AsyncClient]:
     """The default live-compose client: a scripted trace then a composed meal."""
     async with _sse_client(session, _FakeStreamer) as http_client:
         yield http_client
@@ -368,14 +357,8 @@ async def test_generate_without_a_token_is_401(client: AsyncClient) -> None:
     assert resp.status_code == 401
 
 
-async def test_generate_streams_trace_then_meal(
-    sse_client: AsyncClient, session: AsyncSession
-) -> None:
-    await _add_admin(session)
-
-    resp = await sse_client.post(
-        "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
-    )
+async def test_generate_streams_trace_then_meal(sse_client: AsyncClient) -> None:
+    resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "lunch"})
 
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/event-stream")
@@ -386,27 +369,17 @@ async def test_generate_streams_trace_then_meal(
     assert "Courgette ribbon salad" in body
 
 
-async def test_generate_with_a_bad_meal_type_is_422(
-    sse_client: AsyncClient, session: AsyncSession
-) -> None:
-    await _add_admin(session)
-
-    resp = await sse_client.post(
-        "/admin/daily/generate", json={"meal_type": "brunch"}, headers=_auth_header()
-    )
+async def test_generate_with_a_bad_meal_type_is_422(sse_client: AsyncClient) -> None:
+    resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "brunch"})
 
     assert resp.status_code == 422
 
 
 async def test_generate_unexpected_failure_closes_as_an_error_event(
-    session: AsyncSession,
+    session: AsyncSession, admin_user: User
 ) -> None:
-    await _add_admin(session)
-
     async with _sse_client(session, _BoomStreamer) as client:
-        resp = await client.post(
-            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
-        )
+        resp = await client.post("/admin/daily/generate", json={"meal_type": "lunch"})
 
     # The stream already opened with a 200, so the failure has to arrive as a terminal
     # error event; a truncated stream would read as success on the client.
@@ -419,13 +392,11 @@ async def test_generate_unexpected_failure_closes_as_an_error_event(
     assert "boom" not in body
 
 
-async def test_generate_exhausted_closes_as_an_error_event(session: AsyncSession) -> None:
-    await _add_admin(session)
-
+async def test_generate_exhausted_closes_as_an_error_event(
+    session: AsyncSession, admin_user: User
+) -> None:
     async with _sse_client(session, _ExhaustedStreamer) as client:
-        resp = await client.post(
-            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
-        )
+        resp = await client.post("/admin/daily/generate", json={"meal_type": "lunch"})
 
     assert resp.status_code == 200
     body = resp.text
@@ -434,13 +405,11 @@ async def test_generate_exhausted_closes_as_an_error_event(session: AsyncSession
     assert "could not finish a safe meal" in body
 
 
-async def test_generate_llm_error_surfaces_its_message(session: AsyncSession) -> None:
-    await _add_admin(session)
-
+async def test_generate_llm_error_surfaces_its_message(
+    session: AsyncSession, admin_user: User
+) -> None:
     async with _sse_client(session, _LLMErrorStreamer) as client:
-        resp = await client.post(
-            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
-        )
+        resp = await client.post("/admin/daily/generate", json={"meal_type": "lunch"})
 
     assert resp.status_code == 200
     body = resp.text
@@ -449,17 +418,11 @@ async def test_generate_llm_error_surfaces_its_message(session: AsyncSession) ->
     assert "The model cannot call tools." in body
 
 
-async def test_generate_while_a_run_is_in_flight_is_409(
-    sse_client: AsyncClient, session: AsyncSession
-) -> None:
-    await _add_admin(session)
-
+async def test_generate_while_a_run_is_in_flight_is_409(sse_client: AsyncClient) -> None:
     # Hold the same lock the route checks, standing in for a live run already streaming.
     await _generation_lock.acquire()
     try:
-        resp = await sse_client.post(
-            "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
-        )
+        resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "lunch"})
     finally:
         _generation_lock.release()
 
@@ -467,14 +430,8 @@ async def test_generate_while_a_run_is_in_flight_is_409(
     assert "already running" in resp.json()["detail"]
 
 
-async def test_generate_releases_the_lock_after_a_run(
-    sse_client: AsyncClient, session: AsyncSession
-) -> None:
-    await _add_admin(session)
-
-    resp = await sse_client.post(
-        "/admin/daily/generate", json={"meal_type": "lunch"}, headers=_auth_header()
-    )
+async def test_generate_releases_the_lock_after_a_run(sse_client: AsyncClient) -> None:
+    resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "lunch"})
 
     assert resp.status_code == 200
     assert not _generation_lock.locked()

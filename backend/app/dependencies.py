@@ -1,5 +1,7 @@
+from uuid import UUID
+
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyCookie
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.dish_lookup import DishLookupAgent
@@ -8,10 +10,10 @@ from app.config import settings
 from app.core.security import TokenError, decode_access_token
 from app.db.session import get_session
 from app.embeddings import get_embedder
+from app.enums import Role
 from app.llm.config import LLMRequestConfig
 from app.llm.langchain_factory import build_chat_model
-from app.models.admin_user import AdminUser
-from app.services.admin_service import AdminService
+from app.models.user import User
 from app.services.composer_streamer import ComposerStreamer
 from app.services.daily_service import DailyService
 from app.services.ingredient_service import IngredientService
@@ -19,11 +21,12 @@ from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService
 from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
+from app.services.user_service import UserService
 
-# auto_error=False so a missing or malformed header reaches get_current_admin as
-# None and is answered with 401 (not HTTPBearer's default 403). The scheme still
-# registers Bearer auth in the OpenAPI docs.
-_bearer_scheme = HTTPBearer(auto_error=False)
+# auto_error=False so a missing cookie reaches get_current_user as None and is
+# answered with 401. The scheme reads the session cookie and documents cookie auth
+# in the OpenAPI docs.
+_cookie_scheme = APIKeyCookie(name=settings.session_cookie_name, auto_error=False)
 
 
 def get_ingredient_service(
@@ -54,10 +57,10 @@ def get_meal_service(
     return MealService(session, get_embedder())
 
 
-def get_admin_service(
+def get_user_service(
     session: AsyncSession = Depends(get_session),
-) -> AdminService:
-    return AdminService(session)
+) -> UserService:
+    return UserService(session)
 
 
 def get_meal_review_service(
@@ -84,34 +87,49 @@ def get_composer_streamer() -> ComposerStreamer:
     return ComposerStreamer(chat, get_embedder())
 
 
-async def get_current_admin(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
-    admin_service: AdminService = Depends(get_admin_service),
-) -> AdminUser:
-    """Resolve the admin from the Bearer JWT, or raise 401.
+async def get_current_user(
+    token: str | None = Depends(_cookie_scheme),
+    user_service: UserService = Depends(get_user_service),
+) -> User:
+    """Resolve the current user from the session cookie, or raise 401.
 
-    The account is re-read from the database, so a token for an admin that has
-    since been removed stops working; comparing the token's version against the
-    stored one means a password reset also invalidates older tokens. Wired onto
-    admin routes only.
+    Authentication only. The account is re-read from the database every request, so
+    a token for a user that has since been removed or deactivated stops working, and
+    comparing the token's version against the stored one means a password reset
+    invalidates older tokens. Authorization (role) is left to require_admin.
     """
-    if credentials is None:
+    if token is None:
         raise _unauthorized()
     try:
-        claims = decode_access_token(credentials.credentials)
-    except TokenError as exc:
+        claims = decode_access_token(token)
+        user_id = UUID(claims.subject)
+    except (TokenError, ValueError) as exc:
         raise _unauthorized() from exc
-    admin = await admin_service.get_by_email(claims.subject)
-    if admin is None or admin.token_version != claims.token_version:
+    user = await user_service.get_by_id(user_id)
+    if user is None or not user.is_active or user.token_version != claims.token_version:
         raise _unauthorized()
-    return admin
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Gate a route to admins, running get_current_user (authN) first.
+
+    Authorization only: the user is already authenticated, so a non-admin is a
+    deliberate 403 (authenticated but not allowed), distinct from the 401 an
+    unauthenticated request gets.
+    """
+    if user.role is not Role.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required.",
+        )
+    return user
 
 
 def _unauthorized() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials.",
-        headers={"WWW-Authenticate": "Bearer"},
     )
 
 

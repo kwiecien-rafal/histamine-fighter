@@ -1,21 +1,34 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { AdminMeal, ComposedMeal, MealType } from "../api/admin";
-import { MAX_EMAIL_CHARS, MAX_PASSWORD_CHARS } from "../api/admin";
+import type { AdminDailySuggestion, AdminMeal, ComposedMeal, MealType } from "../api/admin";
+import {
+  approveDaily,
+  approveMeal,
+  listPendingDaily,
+  listPendingMeals,
+  MAX_EMAIL_CHARS,
+  MAX_PASSWORD_CHARS,
+  rejectDaily,
+  rejectMeal,
+} from "../api/admin";
 import { ComposeCost } from "../components/ComposeCost";
+import { DailySuggestionCard } from "../components/DailySuggestionCard";
 import { LLMProviderBadge } from "../components/LLMProviderBadge";
 import { MealReviewCard } from "../components/MealReviewCard";
 import { ReasoningReplay } from "../components/ReasoningReplay";
+import { ReviewQueueShell } from "../components/ReviewQueueShell";
 import { UnverifiedNote } from "../components/UnverifiedNote";
 import { useAdminSession } from "../hooks/useAdminSession";
-import { useMealReview } from "../hooks/useMealReview";
 import { useReasoningStream } from "../hooks/useReasoningStream";
+import { useReviewQueue, type ReviewAction } from "../hooks/useReviewQueue";
 import { MEAL_TYPE_LABEL, MEAL_TYPES } from "../lib/meal";
 
 export function Admin() {
-  const { token, login, logout, loggingIn, error: loginError } = useAdminSession();
-  const { meals, loading, error, decidingId, reload, decide } = useMealReview(token, logout);
+  const { user, status, login, logout, expire, loggingIn, error: loginError } = useAdminSession();
+  const isAdmin = user?.role === "admin";
+  const mealReview = useReviewQueue(isAdmin, expire, listPendingMeals, approveMeal, rejectMeal);
+  const dailyReview = useReviewQueue(isAdmin, expire, listPendingDaily, approveDaily, rejectDaily);
 
   return (
     <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
@@ -27,10 +40,10 @@ export function Admin() {
             </Link>
             <h1 className="text-3xl font-semibold">Meal review</h1>
           </div>
-          {token && (
+          {status === "authed" && (
             <button
               type="button"
-              onClick={logout}
+              onClick={() => void logout()}
               className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
             >
               Log out
@@ -38,18 +51,36 @@ export function Admin() {
           )}
         </header>
 
-        {token ? (
+        {status === "loading" ? (
+          <p className="text-stone-600">Checking your session…</p>
+        ) : isAdmin ? (
           <>
-            <GeneratePanel token={token} onExpired={logout} />
-            <ReviewQueue
-              meals={meals}
-              loading={loading}
-              error={error}
-              decidingId={decidingId}
-              onReload={() => void reload()}
-              onDecide={(id, action) => void decide(id, action)}
-            />
+            <GeneratePanel onExpired={expire} />
+            <section className="mb-8">
+              <h2 className="text-lg font-medium mb-3">Daily board</h2>
+              <DailyReviewQueue
+                suggestions={dailyReview.items}
+                loading={dailyReview.loading}
+                error={dailyReview.error}
+                decidingId={dailyReview.decidingId}
+                onReload={() => void dailyReview.reload()}
+                onDecide={(id, action) => void dailyReview.decide(id, action)}
+              />
+            </section>
+            <section>
+              <h2 className="text-lg font-medium mb-3">Curated meals</h2>
+              <ReviewQueue
+                meals={mealReview.items}
+                loading={mealReview.loading}
+                error={mealReview.error}
+                decidingId={mealReview.decidingId}
+                onReload={() => void mealReview.reload()}
+                onDecide={(id, action) => void mealReview.decide(id, action)}
+              />
+            </section>
           </>
+        ) : status === "authed" ? (
+          <p className="text-stone-600">This account doesn't have admin access.</p>
         ) : (
           <LoginForm onSubmit={login} busy={loggingIn} error={loginError} />
         )}
@@ -117,13 +148,12 @@ function LoginForm({ onSubmit, busy, error }: LoginFormProps) {
 }
 
 interface GeneratePanelProps {
-  token: string;
   onExpired: () => void;
 }
 
-function GeneratePanel({ token, onExpired }: GeneratePanelProps) {
+function GeneratePanel({ onExpired }: GeneratePanelProps) {
   const [mealType, setMealType] = useState<MealType>("breakfast");
-  const { status, events, meal, error, start, cancel } = useReasoningStream(token, onExpired);
+  const { status, events, meal, error, start, cancel } = useReasoningStream(onExpired);
   const streaming = status === "streaming";
 
   return (
@@ -230,7 +260,7 @@ interface ReviewQueueProps {
   error: string | null;
   decidingId: string | null;
   onReload: () => void;
-  onDecide: (mealId: string, action: "approve" | "reject") => void;
+  onDecide: (mealId: string, action: ReviewAction) => void;
 }
 
 function ReviewQueue({
@@ -242,31 +272,13 @@ function ReviewQueue({
   onDecide,
 }: ReviewQueueProps) {
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-stone-600">
-          {meals ? `${meals.length} waiting for review` : "Pending review"}
-        </p>
-        <button
-          type="button"
-          onClick={onReload}
-          disabled={loading}
-          className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 disabled:opacity-50 enabled:cursor-pointer"
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
-
-      {error && (
-        <p role="alert" className="text-sm text-red-700">
-          <span className="font-medium">Something went wrong —</span> {error}
-        </p>
-      )}
-
-      {meals && meals.length === 0 && !loading && (
-        <p className="text-stone-600">Nothing waiting for review. Compose some meals first.</p>
-      )}
-
+    <ReviewQueueShell
+      count={meals?.length ?? null}
+      loading={loading}
+      error={error}
+      emptyMessage="Nothing waiting for review. Compose some meals first."
+      onReload={onReload}
+    >
       {meals?.map((meal) => (
         <MealReviewCard
           key={meal.id}
@@ -276,6 +288,44 @@ function ReviewQueue({
           onReject={() => onDecide(meal.id, "reject")}
         />
       ))}
-    </section>
+    </ReviewQueueShell>
+  );
+}
+
+interface DailyReviewQueueProps {
+  suggestions: AdminDailySuggestion[] | null;
+  loading: boolean;
+  error: string | null;
+  decidingId: string | null;
+  onReload: () => void;
+  onDecide: (suggestionId: string, action: ReviewAction) => void;
+}
+
+function DailyReviewQueue({
+  suggestions,
+  loading,
+  error,
+  decidingId,
+  onReload,
+  onDecide,
+}: DailyReviewQueueProps) {
+  return (
+    <ReviewQueueShell
+      count={suggestions?.length ?? null}
+      loading={loading}
+      error={error}
+      emptyMessage="Nothing waiting for review. Generate a daily board first."
+      onReload={onReload}
+    >
+      {suggestions?.map((suggestion) => (
+        <DailySuggestionCard
+          key={suggestion.id}
+          suggestion={suggestion}
+          busy={decidingId === suggestion.id}
+          onApprove={() => onDecide(suggestion.id, "approve")}
+          onReject={() => onDecide(suggestion.id, "reject")}
+        />
+      ))}
+    </ReviewQueueShell>
   );
 }

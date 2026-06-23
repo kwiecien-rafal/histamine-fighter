@@ -1,18 +1,18 @@
 """Admin meal review: list the queue, approve, or reject a composed meal.
 
-Every route is gated by ``get_current_admin``. Approval is what lets the public
-board claim a meal is verified, so the queue returns each meal's full ingredient
-list and reasoning trace for the admin to actually check before signing off.
+Every route is gated by ``require_admin``. Approval is what lets the public board
+claim a meal is verified, so the queue returns each meal's full ingredient list and
+reasoning trace for the admin to actually check before signing off.
 """
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies import get_current_admin, get_meal_review_service
+from app.dependencies import get_meal_review_service, require_admin
 from app.enums import ApprovalStatus
 from app.models import CuratedMeal
-from app.models.admin_user import AdminUser
+from app.models.user import User
 from app.schemas.admin import AdminMealRead
 from app.services.meal_review_service import MealReviewService
 
@@ -28,7 +28,7 @@ async def list_meals(
     ),
     limit: int = Query(default=50, ge=1, le=100, description="Maximum meals to return."),
     offset: int = Query(default=0, ge=0, description="How many meals to skip."),
-    _admin: AdminUser = Depends(get_current_admin),
+    _admin: User = Depends(require_admin),
     service: MealReviewService = Depends(get_meal_review_service),
 ) -> list[CuratedMeal]:
     """List one page of meals in a review state, oldest first (defaults to pending)."""
@@ -38,7 +38,7 @@ async def list_meals(
 @router.patch("/{meal_id}/approve", response_model=AdminMealRead)
 async def approve_meal(
     meal_id: UUID,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: User = Depends(require_admin),
     service: MealReviewService = Depends(get_meal_review_service),
 ) -> CuratedMeal:
     """Approve a meal for the public pool, stamped with the approving admin."""
@@ -51,7 +51,7 @@ async def approve_meal(
 @router.patch("/{meal_id}/reject", response_model=AdminMealRead)
 async def reject_meal(
     meal_id: UUID,
-    _admin: AdminUser = Depends(get_current_admin),
+    _admin: User = Depends(require_admin),
     service: MealReviewService = Depends(get_meal_review_service),
 ) -> CuratedMeal:
     """Reject a meal, keeping it out of the pool."""

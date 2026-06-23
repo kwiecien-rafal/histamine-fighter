@@ -24,6 +24,18 @@ from app.llm.errors import LLMConfigError, LLMInvocationError, ProviderNotAvaila
 
 logger = structlog.get_logger(__name__)
 
+# State-changing methods guarded by the Origin check. GET/HEAD/OPTIONS are safe and
+# are how CORS preflight and simple reads flow, so they pass through untouched.
+_UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# Hardening headers set on every response (CLAUDE section 20). HSTS is conditional
+# and added in the middleware, since it only applies once traffic is HTTPS.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
 
 def _llm_error_handler(
     status_code: int,
@@ -61,9 +73,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Histamine Fighter", debug=settings.debug, lifespan=lifespan)
+    # allow_credentials is required for the session cookie to ride on the SPA's
+    # requests. It is safe only because allow_origins is an explicit list, never "*".
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -84,6 +99,45 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=429, content={"detail": f"Rate limit exceeded: {detail}"})
 
     app.add_exception_handler(RateLimitExceeded, _rate_limited)
+
+    @app.middleware("http")
+    async def enforce_origin(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Reject a state-changing request from an Origin we do not trust.
+
+        Defense in depth behind the session cookie's SameSite=Lax: a cross-site
+        browser request carrying an untrusted Origin is refused before it reaches a
+        route. A request with no Origin (same-origin, or a non-browser client) is
+        left to the cookie's SameSite rule.
+        """
+        origin = request.headers.get("origin")
+        if (
+            request.method in _UNSAFE_METHODS
+            and origin is not None
+            and origin not in settings.cors_origins
+        ):
+            return JSONResponse(
+                status_code=403, content={"detail": "Cross-origin request rejected."}
+            )
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def set_security_headers(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Attach baseline hardening headers to every response.
+
+        Defends against clickjacking (X-Frame-Options), MIME sniffing (nosniff), and
+        referrer leakage (Referrer-Policy). HSTS is added only on a public
+        deployment, where TLS is terminated and forcing HTTPS is safe. A strict CSP
+        for the SPA belongs in the frontend server, not on these JSON responses.
+        """
+        response = await call_next(request)
+        response.headers.update(_SECURITY_HEADERS)
+        if settings.public_deployment:
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        return response
 
     @app.middleware("http")
     async def log_request(

@@ -6,29 +6,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AdminAuthError,
   approveMeal,
+  getCurrentUser,
+  listPendingDaily,
   listPendingMeals,
   login,
   type AdminMeal,
+  type AuthUser,
 } from "../api/admin";
-import { useAdminAuthStore } from "../store/adminAuth";
 import { Admin } from "./Admin";
 
 // Keep AdminAuthError and errorMessage real (instanceof and message formatting
-// matter); stub only the network calls.
+// matter). Stub only the network calls, including the daily-board queue that runs
+// alongside the meal queue for any signed-in admin.
 vi.mock("../api/admin", async (importActual) => {
   const actual = await importActual<typeof import("../api/admin")>();
   return {
     ...actual,
+    getCurrentUser: vi.fn(),
     login: vi.fn(),
+    logout: vi.fn(),
     listPendingMeals: vi.fn(),
     approveMeal: vi.fn(),
     rejectMeal: vi.fn(),
+    listPendingDaily: vi.fn(),
+    approveDaily: vi.fn(),
+    rejectDaily: vi.fn(),
   };
 });
 
+const getCurrentUserMock = vi.mocked(getCurrentUser);
 const loginMock = vi.mocked(login);
 const listMock = vi.mocked(listPendingMeals);
 const approveMock = vi.mocked(approveMeal);
+const listDailyMock = vi.mocked(listPendingDaily);
+
+const adminUser: AuthUser = { email: "admin@example.com", role: "admin" };
 
 function meal(): AdminMeal {
   return {
@@ -62,19 +74,22 @@ function renderAdmin() {
 }
 
 beforeEach(() => {
-  localStorage.clear();
-  useAdminAuthStore.setState({ token: null });
   vi.clearAllMocks();
+  // Default: /me finds no session, so the page bootstraps to the login form. Tests
+  // that start authed override this with a resolved user.
+  getCurrentUserMock.mockRejectedValue(new AdminAuthError("No session."));
+  // These tests assert on the curated-meal queue, so the daily queue resolves empty.
+  listDailyMock.mockResolvedValue([]);
 });
 
 describe("Admin", () => {
   it("signs in and shows the pending queue", async () => {
-    loginMock.mockResolvedValueOnce({ access_token: "tok", token_type: "bearer" });
+    loginMock.mockResolvedValueOnce(adminUser);
     listMock.mockResolvedValueOnce([meal()]);
     const user = userEvent.setup();
     renderAdmin();
 
-    await user.type(screen.getByLabelText("Email"), "admin@example.com");
+    await user.type(await screen.findByLabelText("Email"), "admin@example.com");
     await user.type(screen.getByLabelText("Password"), "supersecret");
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
@@ -86,7 +101,7 @@ describe("Admin", () => {
   });
 
   it("approves a meal and drops it from the queue", async () => {
-    useAdminAuthStore.setState({ token: "tok" });
+    getCurrentUserMock.mockResolvedValueOnce(adminUser);
     listMock.mockResolvedValueOnce([meal()]);
     approveMock.mockResolvedValueOnce({ ...meal(), approval_status: "approved" });
     const user = userEvent.setup();
@@ -95,9 +110,10 @@ describe("Admin", () => {
     await screen.findByText("Courgette ribbon salad");
     await user.click(screen.getByRole("button", { name: "Approve" }));
 
-    expect(await screen.findByText(/Nothing waiting for review/)).toBeInTheDocument();
+    // The curated-meal queue empties to its own message, distinct from the daily one.
+    expect(await screen.findByText(/Compose some meals first/)).toBeInTheDocument();
     expect(screen.queryByText("Courgette ribbon salad")).not.toBeInTheDocument();
-    expect(approveMock).toHaveBeenCalledWith("tok", "meal-1");
+    expect(approveMock).toHaveBeenCalledWith("meal-1");
   });
 
   it("shows an inline error when the credentials are wrong", async () => {
@@ -105,7 +121,7 @@ describe("Admin", () => {
     const user = userEvent.setup();
     renderAdmin();
 
-    await user.type(screen.getByLabelText("Email"), "admin@example.com");
+    await user.type(await screen.findByLabelText("Email"), "admin@example.com");
     await user.type(screen.getByLabelText("Password"), "wrong");
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
@@ -113,9 +129,9 @@ describe("Admin", () => {
     expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
   });
 
-  it("returns to the login form when the stored token has expired", async () => {
-    useAdminAuthStore.setState({ token: "expired" });
-    listMock.mockRejectedValueOnce(new AdminAuthError("Invalid or expired token."));
+  it("returns to the login form when the session has expired", async () => {
+    getCurrentUserMock.mockResolvedValueOnce(adminUser);
+    listMock.mockRejectedValueOnce(new AdminAuthError("Could not validate credentials."));
     renderAdmin();
 
     expect(await screen.findByRole("button", { name: "Log in" })).toBeInTheDocument();

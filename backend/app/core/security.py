@@ -1,9 +1,9 @@
-"""Password hashing and admin JWTs.
+"""Password hashing and session JWTs.
 
-Two security primitives behind the admin gate, kept free of HTTP concerns so the
+Two security primitives behind the auth gate, kept free of HTTP concerns so the
 dependency layer maps their failures to status codes (the same separation the LLM
 domain errors follow). Passwords are bcrypt-hashed; the access token is a signed
-HS256 JWT whose subject is the admin's email.
+HS256 JWT whose subject is the user's id.
 """
 
 from dataclasses import dataclass
@@ -26,7 +26,7 @@ class TokenError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class TokenClaims:
-    """The verified claims carried by an admin access token."""
+    """The verified claims carried by an access token."""
 
     subject: str
     token_version: int
@@ -59,12 +59,14 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_access_token(
     subject: str, *, token_version: int, expires_delta: timedelta | None = None
 ) -> str:
-    """Issue a signed JWT for the subject (the admin's email).
+    """Issue a signed JWT for the given subject.
 
-    ``token_version`` is the admin's current version; ``get_current_admin`` refuses
-    a token whose version no longer matches, which is how a password reset revokes
-    outstanding tokens. ``expires_delta`` overrides the configured TTL; tests use it
-    to mint an already-expired token.
+    The subject is the user's id, not their email: email is mutable profile data
+    and PII that should not ride in a token that may be logged. ``token_version`` is
+    the user's current version. ``get_current_user`` refuses a token whose version
+    no longer matches, which is how a password reset revokes outstanding tokens.
+    ``expires_delta`` overrides the configured TTL; tests use it to mint an
+    already-expired token.
     """
     now = datetime.now(UTC)
     ttl = expires_delta or timedelta(minutes=settings.access_token_expire_minutes)

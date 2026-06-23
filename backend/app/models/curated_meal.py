@@ -9,7 +9,6 @@ pool degrades to pure relevance ranking.
 
 from collections.abc import Sequence
 from datetime import datetime
-from enum import Enum as StdEnum
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
@@ -17,15 +16,10 @@ from sqlalchemy import DateTime, Enum, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.base import Base, enum_values
 from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from app.embeddings import EMBEDDING_DIM
 from app.enums import ApprovalStatus, MealType
-
-
-def _enum_values(enum_cls: type[StdEnum]) -> list[str]:
-    """Persist enum values (e.g. 'breakfast'), not member names like 'BREAKFAST'."""
-    return [member.value for member in enum_cls.__members__.values()]
 
 
 def meal_embedding_text(name: str, description: str, tags: Sequence[str]) -> str:
@@ -52,7 +46,7 @@ class CuratedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             length=16,
             name="meal_type",
             create_constraint=True,
-            values_callable=_enum_values,
+            values_callable=enum_values,
         )
     )
     description: Mapped[str] = mapped_column(Text)
@@ -84,7 +78,7 @@ class CuratedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             length=16,
             name="approval_status",
             create_constraint=True,
-            values_callable=_enum_values,
+            values_callable=enum_values,
         ),
         default=ApprovalStatus.PENDING,
         server_default=ApprovalStatus.PENDING.value,

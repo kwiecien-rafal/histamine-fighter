@@ -15,6 +15,9 @@ from app.core.security import (
     verify_password,
 )
 
+# The token subject is the user's id (a UUID string), not their email.
+_SUBJECT = "11111111-1111-1111-1111-111111111111"
+
 
 def test_hash_then_verify_round_trips() -> None:
     digest = hash_password("correct horse battery")
@@ -42,22 +45,20 @@ def test_verify_password_treats_an_over_long_password_as_a_non_match() -> None:
 
 
 def test_token_round_trips_the_subject_and_version() -> None:
-    token = create_access_token("admin@example.com", token_version=3)
+    token = create_access_token(_SUBJECT, token_version=3)
     claims = decode_access_token(token)
-    assert claims.subject == "admin@example.com"
+    assert claims.subject == _SUBJECT
     assert claims.token_version == 3
 
 
 def test_expired_token_is_rejected() -> None:
-    token = create_access_token(
-        "admin@example.com", token_version=1, expires_delta=timedelta(minutes=-1)
-    )
+    token = create_access_token(_SUBJECT, token_version=1, expires_delta=timedelta(minutes=-1))
     with pytest.raises(TokenError):
         decode_access_token(token)
 
 
 def test_tampered_token_is_rejected() -> None:
-    token = create_access_token("admin@example.com", token_version=1)
+    token = create_access_token(_SUBJECT, token_version=1)
     with pytest.raises(TokenError):
         decode_access_token(token + "tamper")
 
@@ -71,8 +72,6 @@ def test_token_without_a_subject_is_rejected() -> None:
 
 def test_token_without_a_version_is_rejected() -> None:
     # A pre-version token (signed before the claim existed) must not slip through.
-    token = jwt.encode(
-        {"sub": "admin@example.com"}, settings.secret_key, algorithm=settings.jwt_algorithm
-    )
+    token = jwt.encode({"sub": _SUBJECT}, settings.secret_key, algorithm=settings.jwt_algorithm)
     with pytest.raises(TokenError):
         decode_access_token(token)

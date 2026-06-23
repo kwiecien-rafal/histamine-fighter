@@ -24,7 +24,7 @@ import structlog
 from app.core.logging import configure_logging
 from app.core.security import MAX_PASSWORD_BYTES
 from app.db.engine import SessionLocal
-from app.services.admin_service import AdminService
+from app.services.user_service import UserService
 
 log = structlog.get_logger()
 
@@ -56,9 +56,9 @@ def _validate_password(password: str) -> None:
 
 async def _run(email: str, password: str) -> None:
     async with SessionLocal() as session:
-        admin, created = await AdminService(session).create_or_update(email, password)
+        admin, created = await UserService(session).create_or_update(email, password)
         await session.commit()
-    log.info("create_admin.done", email=admin.email, created=created)
+    log.info("create_admin.done", email=admin.email, role=admin.role.value, created=created)
 
 
 def main() -> None:

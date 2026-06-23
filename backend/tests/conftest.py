@@ -22,12 +22,18 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 import app.models  # noqa: F401  (registers the models on Base.metadata)
 from app.config import settings
 from app.core.ratelimit import limiter
+from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import get_session
 from app.dependencies import get_knowledge_service
+from app.enums import Role
 from app.main import create_app
+from app.models.user import User
 from app.services.knowledge_service import KnowledgeService
 from tests.fakes import FakeEmbedder
+
+ADMIN_EMAIL = "admin@example.com"
+ADMIN_PASSWORD = "supersecret"
 
 
 def _test_database_url() -> URL:
@@ -124,3 +130,30 @@ async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
             yield http_client
     finally:
         limiter.enabled = True
+
+
+@pytest_asyncio.fixture
+async def admin_user(session: AsyncSession) -> User:
+    """An active admin account on the test transaction."""
+    user = User(
+        email=ADMIN_EMAIL,
+        password_hash=hash_password(ADMIN_PASSWORD),
+        role=Role.ADMIN,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+@pytest_asyncio.fixture
+async def authenticated_client(client: AsyncClient, admin_user: User) -> AsyncClient:
+    """A client that has logged in, so it carries the httpOnly session cookie.
+
+    Goes through the real /login flow rather than minting a header by hand: the
+    server sets the cookie and httpx keeps it in the jar for the rest of the test.
+    """
+    resp = await client.post(
+        "/admin/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+    )
+    assert resp.status_code == 200
+    return client

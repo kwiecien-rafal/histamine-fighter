@@ -53,3 +53,16 @@ def test_production_rejects_a_blank_secret() -> None:
 def test_strong_secret_boots_in_production() -> None:
     assert Settings(_env_file=None, public_deployment=True, secret_key=_STRONG_SECRET)
     assert Settings(_env_file=None, debug=False, secret_key=_STRONG_SECRET)
+
+
+def test_cookie_is_secure_only_on_a_public_deployment() -> None:
+    # Secure tracks TLS, which only PUBLIC_DEPLOYMENT implies. DEBUG off alone must
+    # not force it: that would drop the cookie when running with DEBUG off over http.
+    assert Settings(_env_file=None).cookie_secure is False
+    assert Settings(_env_file=None, public_deployment=True, secret_key=_STRONG_SECRET).cookie_secure
+    assert Settings(_env_file=None, debug=False, secret_key=_STRONG_SECRET).cookie_secure is False
+
+
+def test_session_cookie_max_age_tracks_the_token_lifetime() -> None:
+    settings = Settings(_env_file=None, access_token_expire_minutes=30)
+    assert settings.session_cookie_max_age == 30 * 60

@@ -1,7 +1,7 @@
 """Admin daily board: review the queue, and watch the composer compose live.
 
-Every route is gated by ``get_current_admin``. Approval is what lets a meal reach
-the public board, so the queue returns each suggestion's full content and reasoning
+Every route is gated by ``require_admin``. Approval is what lets a meal reach the
+public board, so the queue returns each suggestion's full content and reasoning
 trace for the admin to actually check before signing off. The ``generate`` route is
 the live demo: it streams one composition's reasoning as Server-Sent Events.
 """
@@ -18,11 +18,11 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.agents.composer import ComposerExhausted
 from app.core.ratelimit import limiter, llm_rate_limit
-from app.dependencies import get_composer_streamer, get_current_admin, get_daily_service
+from app.dependencies import get_composer_streamer, get_daily_service, require_admin
 from app.enums import ApprovalStatus
 from app.llm.errors import LLMError
 from app.models import DailySuggestion
-from app.models.admin_user import AdminUser
+from app.models.user import User
 from app.schemas.admin import AdminDailyRead, DailyGenerateRequest
 from app.services.composer_streamer import ComposerStreamer
 from app.services.daily_service import DailyService
@@ -47,7 +47,7 @@ async def list_daily(
     status: ApprovalStatus = Query(
         default=ApprovalStatus.PENDING, description="Which review state to list."
     ),
-    _admin: AdminUser = Depends(get_current_admin),
+    _admin: User = Depends(require_admin),
     service: DailyService = Depends(get_daily_service),
 ) -> list[DailySuggestion]:
     """List suggestions in one review state, soonest reveal date first."""
@@ -57,7 +57,7 @@ async def list_daily(
 @router.patch("/{suggestion_id}/approve", response_model=AdminDailyRead)
 async def approve_suggestion(
     suggestion_id: UUID,
-    admin: AdminUser = Depends(get_current_admin),
+    admin: User = Depends(require_admin),
     service: DailyService = Depends(get_daily_service),
 ) -> DailySuggestion:
     """Approve a suggestion for the public board, stamped with the approving admin."""
@@ -70,7 +70,7 @@ async def approve_suggestion(
 @router.patch("/{suggestion_id}/reject", response_model=AdminDailyRead)
 async def reject_suggestion(
     suggestion_id: UUID,
-    _admin: AdminUser = Depends(get_current_admin),
+    _admin: User = Depends(require_admin),
     service: DailyService = Depends(get_daily_service),
 ) -> DailySuggestion:
     """Reject a suggestion, keeping it off the board."""
@@ -104,7 +104,7 @@ def _log_done(meal_type: str, meal: dict[str, Any]) -> None:
 async def generate_live(
     request: Request,
     payload: DailyGenerateRequest,
-    _admin: AdminUser = Depends(get_current_admin),
+    _admin: User = Depends(require_admin),
     streamer: ComposerStreamer = Depends(get_composer_streamer),
 ) -> EventSourceResponse:
     """Stream one live meal composition as Server-Sent Events.

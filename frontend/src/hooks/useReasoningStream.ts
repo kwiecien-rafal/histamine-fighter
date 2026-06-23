@@ -51,11 +51,11 @@ function startErrorMessage(status: number): string {
   return `The composer couldn't start (error ${status}).`;
 }
 
-// Streams the admin live composition over a POST (EventSource can't carry the
-// bearer token, so this reads the response body itself). Trace steps land in
-// `events` as they arrive, the terminal meal in `meal`. A 401 means the session
-// lapsed, so it calls onExpired rather than surfacing a scary error.
-export function useReasoningStream(token: string | null, onExpired: () => void): ReasoningStream {
+// Streams the admin live composition over a POST (the endpoint takes a body, so
+// EventSource is not an option and this reads the response body itself). Trace steps
+// land in `events` as they arrive, the terminal meal in `meal`. A 401 means the
+// session lapsed, so it calls onExpired rather than surfacing a scary error.
+export function useReasoningStream(onExpired: () => void): ReasoningStream {
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [meal, setMeal] = useState<ComposedMeal | null>(null);
@@ -66,7 +66,6 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
 
   const start = useCallback(
     async (mealType: MealType) => {
-      if (!token) return;
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -78,7 +77,8 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
       try {
         const response = await fetch("/admin/daily/generate", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ meal_type: mealType }),
           signal: controller.signal,
         });
@@ -141,7 +141,7 @@ export function useReasoningStream(token: string | null, onExpired: () => void):
         setStatus("error");
       }
     },
-    [token, onExpired],
+    [onExpired],
   );
 
   // Abort an in-flight stream and return the panel to its pristine state. The

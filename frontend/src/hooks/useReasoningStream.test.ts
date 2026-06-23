@@ -36,7 +36,7 @@ describe("useReasoningStream", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
     await result.current.start("lunch");
 
     await waitFor(() => expect(result.current.status).toBe("done"));
@@ -46,7 +46,10 @@ describe("useReasoningStream", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+    // The session rides in the httpOnly cookie, sent because credentials are included;
+    // no bearer token is read in JS.
+    expect(init.credentials).toBe("include");
+    expect((init.headers as Record<string, string>).Authorization).toBeUndefined();
   });
 
   it("surfaces a streamed error event", async () => {
@@ -57,7 +60,7 @@ describe("useReasoningStream", () => {
       ),
     );
 
-    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
     await result.current.start("dinner");
 
     await waitFor(() => expect(result.current.status).toBe("error"));
@@ -68,7 +71,7 @@ describe("useReasoningStream", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
     const onExpired = vi.fn();
 
-    const { result } = renderHook(() => useReasoningStream("tok", onExpired));
+    const { result } = renderHook(() => useReasoningStream(onExpired));
     await result.current.start("snack");
 
     // The auth path bails to logout, but settles on a terminal status rather than
@@ -100,7 +103,7 @@ describe("useReasoningStream", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
     let pending: Promise<void> | undefined;
     act(() => {
       pending = result.current.start("lunch");
@@ -128,7 +131,7 @@ describe("useReasoningStream", () => {
       ),
     );
 
-    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
     await result.current.start("lunch");
 
     await waitFor(() => expect(result.current.status).toBe("error"));
@@ -149,7 +152,7 @@ describe("useReasoningStream", () => {
       ),
     );
 
-    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
     await result.current.start("lunch");
 
     await waitFor(() => expect(result.current.status).toBe("done"));
@@ -163,7 +166,7 @@ describe("useReasoningStream", () => {
   it.each(preStreamCases)("maps a %i response to a friendly message", async (status, message) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
 
-    const { result } = renderHook(() => useReasoningStream("tok", vi.fn()));
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
     await result.current.start("lunch");
 
     await waitFor(() => expect(result.current.status).toBe("error"));

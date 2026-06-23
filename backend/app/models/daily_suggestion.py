@@ -9,21 +9,15 @@ no embedding column.
 """
 
 from datetime import date, datetime
-from enum import Enum as StdEnum
 from typing import Any
 
 from sqlalchemy import Date, DateTime, Enum, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.base import Base, enum_values
 from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from app.enums import ApprovalStatus, MealType
-
-
-def _enum_values(enum_cls: type[StdEnum]) -> list[str]:
-    """Persist enum values (e.g. 'breakfast'), not member names like 'BREAKFAST'."""
-    return [member.value for member in enum_cls.__members__.values()]
 
 
 class DailySuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -39,7 +33,7 @@ class DailySuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             length=16,
             name="meal_type",
             create_constraint=True,
-            values_callable=_enum_values,
+            values_callable=enum_values,
         )
     )
     # The composed meal (name, description, ingredients, recipe, tags) as one blob;
@@ -62,7 +56,7 @@ class DailySuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             length=16,
             name="approval_status",
             create_constraint=True,
-            values_callable=_enum_values,
+            values_callable=enum_values,
         ),
         default=ApprovalStatus.PENDING,
         server_default=ApprovalStatus.PENDING.value,

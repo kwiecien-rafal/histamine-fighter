@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
+    # Browser session cookie carrying the admin JWT. Set httpOnly by the route so
+    # XSS cannot read it. The Secure/SameSite flags and lifetime come from below.
+    session_cookie_name: str = "hf_session"
+
     # Per-IP ceiling for the LLM-backed endpoints (the ones that cost money).
     rate_limit_per_minute: int = 10
 
@@ -64,20 +68,42 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
 
+    @property
+    def is_production(self) -> bool:
+        """Whether this runs as a production deployment.
+
+        Any production signal counts: PUBLIC_DEPLOYMENT, or DEBUG off (CLAUDE
+        section 20 mandates DEBUG=false in production). The secret-key gate and the
+        Secure-cookie gate both read this, so they cannot disagree on what counts
+        as production if one flag is later forgotten.
+        """
+        return self.public_deployment or not self.debug
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Whether the session cookie is restricted to HTTPS.
+
+        Keyed on public_deployment, the only flag that implies TLS (terminated at the
+        proxy in production, the same signal HSTS uses). Deliberately not is_production:
+        DEBUG governs error verbosity, not transport, so keying Secure on it would make
+        the cookie silently fail to set when an operator runs with DEBUG off over http.
+        """
+        return self.public_deployment
+
+    @property
+    def session_cookie_max_age(self) -> int:
+        """Session cookie lifetime in seconds, matched to the JWT it carries so the
+        two expire together."""
+        return self.access_token_expire_minutes * 60
+
     @model_validator(mode="after")
     def _validate_secret(self) -> "Settings":
-        """Require a strong admin secret in production, failing fast at startup.
-
-        Production is any production signal: PUBLIC_DEPLOYMENT, or DEBUG off
-        (CLAUDE section 20 mandates DEBUG=false in production). Tying the check to
-        both means it no longer hinges on a single flag an operator may forget.
-        """
+        """Require a strong admin secret in production, failing fast at startup."""
         # A blank SECRET_KEY is treated as unset so a copied .env.example falls
         # back to the placeholder instead of signing tokens with an empty key.
         if not self.secret_key.strip():
             self.secret_key = DEV_SECRET_KEY
-        is_production = self.public_deployment or not self.debug
-        if is_production and (self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32):
+        if self.is_production and (self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32):
             raise ValueError(
                 "SECRET_KEY must be a strong, non-default value (>=32 chars) in "
                 "production (PUBLIC_DEPLOYMENT=true or DEBUG=false)."
