@@ -107,6 +107,23 @@ def _parse_provider(name: str) -> Provider:
         raise LLMConfigError(f"Unknown LLM provider: '{name}'.") from None
 
 
+def selectable_providers() -> list[Provider]:
+    """The providers an admin may pick for the composer, in enum order.
+
+    A cloud provider is offered only when its key is configured in the environment;
+    Ollama only on a self-hosted deployment (the same gate ``resolve_llm_config``
+    enforces). Returns enum members, never key values, so the list is safe to expose.
+    """
+    available: list[Provider] = [
+        provider
+        for provider in Provider
+        if provider is not Provider.OLLAMA and _settings_api_key(provider)
+    ]
+    if not settings.public_deployment:
+        available.append(Provider.OLLAMA)
+    return available
+
+
 def _settings_api_key(provider: Provider) -> str | None:
     """The server-configured key for a cloud provider (never called for Ollama)."""
     return {

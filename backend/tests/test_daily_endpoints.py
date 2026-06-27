@@ -5,35 +5,48 @@ share the rolled-back session). The public read derives "today" from the real UT
 clock, so rows are created for today with a reveal time deliberately past or future.
 """
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.composer import ComposerExhausted
-from app.api.admin.daily import _generation_lock
 from app.api.v1.daily import _cache_max_age
-from app.core.ratelimit import limiter
-from app.db.session import get_session
-from app.dependencies import get_composer_streamer
-from app.enums import ApprovalStatus, MealType
-from app.llm.errors import LLMInvocationError
-from app.main import create_app
-from app.models import DailySuggestion
+from app.enums import ApprovalStatus, Compatibility, MealType
+from app.models import DailySuggestion, HistamineIngredient
 from app.models.user import User
 from app.schemas.daily import LockedBoard, RevealedBoard
-from app.schemas.meal import (
-    ComposedMeal,
-    MealStreamItem,
-    ProposedIngredient,
-    TraceEvent,
-    TraceStreamItem,
-)
-from tests.conftest import ADMIN_EMAIL, ADMIN_PASSWORD
+
+
+async def _seed_index(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            HistamineIngredient(
+                name="parmesan",
+                sources=["test"],
+                compatibility=Compatibility.INCOMPATIBLE,
+                category="aged hard cheese",
+            ),
+            HistamineIngredient(
+                name="courgette",
+                sources=["test"],
+                compatibility=Compatibility.WELL_TOLERATED,
+                category="vegetable",
+            ),
+        ]
+    )
+    await session.flush()
+
+
+def _edit_body(suggestion: DailySuggestion, *, ingredients: list[dict[str, str]]) -> dict[str, Any]:
+    content = suggestion.content
+    return {
+        "name": content["name"],
+        "description": content["description"],
+        "ingredients": ingredients,
+        "recipe": content["recipe"],
+        "tags": content["tags"],
+    }
 
 
 def _content(name: str, *, unverified: list[str] | None = None) -> dict[str, Any]:
@@ -135,49 +148,14 @@ async def test_board_read_sets_cache_control(client: AsyncClient, session: Async
     assert resp.headers["cache-control"] == "public, max-age=120"
 
 
-# --- admin gate -------------------------------------------------------------------
+# --- GET /admin/daily/queue -------------------------------------------------------
 
 
-async def test_list_daily_without_a_token_is_401(client: AsyncClient) -> None:
-    resp = await client.get("/admin/daily")
-    assert resp.status_code == 401
-
-
-# --- GET /admin/daily -------------------------------------------------------------
-
-
-async def test_list_pending_daily_returns_review_detail(
+async def test_admin_queue_slot_carries_review_detail(
     authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
-    reveal_at = datetime.now(UTC) + timedelta(days=1)
-    await _add_suggestion(
-        session, reveal_at=reveal_at, approval_status=ApprovalStatus.PENDING, name="Pending salad"
-    )
-    await _add_suggestion(
-        session,
-        meal_type=MealType.LUNCH,
-        reveal_at=reveal_at,
-        approval_status=ApprovalStatus.APPROVED,
-        name="Approved bake",
-    )
-
-    resp = await authenticated_client.get("/admin/daily")
-
-    assert resp.status_code == 200
-    body = resp.json()
-    assert [item["content"]["name"] for item in body] == ["Pending salad"]
-    item = body[0]
-    # The reviewer sees the full content and the trace, not just a title.
-    assert item["content"]["ingredients"] == [{"name": "courgette", "category": "vegetable"}]
-    assert item["reasoning_trace"][0]["kind"] == "verify"
-    assert item["date"] == reveal_at.date().isoformat()
-
-
-async def test_admin_queue_surfaces_unverified_ingredients(
-    authenticated_client: AsyncClient, session: AsyncSession
-) -> None:
-    # The reviewer must see what code could not verify, to close the gap the public
-    # card hides (the safety invariant).
+    # The reviewer sees the full content, the trace, and what code could not verify, to
+    # close the gap the public card hides (the safety invariant).
     reveal_at = datetime.now(UTC) + timedelta(days=1)
     await _add_suggestion(
         session,
@@ -186,10 +164,13 @@ async def test_admin_queue_surfaces_unverified_ingredients(
         unverified=["mystery spice"],
     )
 
-    resp = await authenticated_client.get("/admin/daily")
+    resp = await authenticated_client.get("/admin/daily/queue")
 
     assert resp.status_code == 200
-    assert resp.json()[0]["content"]["unverified_ingredients"] == ["mystery spice"]
+    slot = resp.json()[0]["slots"][0]
+    assert slot["content"]["ingredients"] == [{"name": "courgette", "category": "vegetable"}]
+    assert slot["reasoning_trace"][0]["kind"] == "verify"
+    assert slot["content"]["unverified_ingredients"] == ["mystery spice"]
 
 
 # --- PATCH /admin/daily/{id}/approve | reject -------------------------------------
@@ -246,195 +227,85 @@ async def test_approve_unknown_suggestion_is_404(authenticated_client: AsyncClie
     assert resp.status_code == 404
 
 
-# --- POST /admin/daily/generate (live SSE) ----------------------------------------
+# --- PATCH /admin/daily/{id} (edit) -----------------------------------------------
 
 
-class _FakeStreamer:
-    """Stands in for ComposerStreamer: a scripted trace then the composed meal.
+async def test_edit_pending_suggestion_rewrites_content_and_rederives_unverified(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    suggestion = await _add_suggestion(
+        session,
+        reveal_at=datetime.now(UTC) + timedelta(days=1),
+        approval_status=ApprovalStatus.PENDING,
+    )
+    body = _edit_body(
+        suggestion,
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "mystery spice", "category": "spice"},
+        ],
+    )
 
-    Yields the same discriminated envelopes the real ``ComposerAgent.stream``
-    emits, so the route's type-switch is exercised honestly.
-    """
-
-    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
-        yield TraceStreamItem(
-            event=TraceEvent(kind="reject", text="Dropped parmesan — avoid.", ingredient="parmesan")
-        ).model_dump_json()
-        meal = ComposedMeal(
-            name="Courgette ribbon salad",
-            meal_type=meal_type,
-            description="raw courgette ribbons with olive oil and fresh herbs",
-            ingredients=[ProposedIngredient(name="courgette", category="vegetable")],
-            recipe=["Peel into ribbons."],
-            tags=["fresh"],
-            reasoning_trace=[],
-            model="fake/test",
-        )
-        yield MealStreamItem.of(meal).model_dump_json()
-
-
-class _BoomStreamer:
-    """Streams one step, then fails the way a mid-stream DB or serialization error would.
-
-    The failure is neither ComposerExhausted nor LLMError, so it exercises the
-    generator's catch-all backstop rather than the tailored branches.
-    """
-
-    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
-        yield TraceStreamItem(
-            event=TraceEvent(kind="check", text="Checking courgette.", ingredient="courgette")
-        ).model_dump_json()
-        raise RuntimeError("boom: the database connection dropped")
-
-
-class _ExhaustedStreamer:
-    """Streams a step, then raises ComposerExhausted as a non-converging run does.
-
-    Low-histamine cooking is restrictive, so the loop can spend its whole budget
-    without a safe submission; the route turns that into a friendly error event.
-    """
-
-    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
-        yield TraceStreamItem(
-            event=TraceEvent(kind="reject", text="Rejected the draft: too many flagged.")
-        ).model_dump_json()
-        raise ComposerExhausted("Composer exhausted its iterations.")
-
-
-class _LLMErrorStreamer:
-    """Streams a step, then fails with an LLMError as a mid-run model call can.
-
-    Unlike the generic backstop, which hides the detail, the route's LLMError
-    branch is a clean domain message and reaches the client verbatim.
-    """
-
-    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
-        yield TraceStreamItem(
-            event=TraceEvent(kind="check", text="Checking courgette.", ingredient="courgette")
-        ).model_dump_json()
-        raise LLMInvocationError("The model cannot call tools.")
-
-
-@asynccontextmanager
-async def _sse_client(
-    session: AsyncSession, streamer_cls: type[object]
-) -> AsyncIterator[AsyncClient]:
-    """An authenticated admin client whose composer is the given scripted fake.
-
-    Shares the test session and logs in through the real cookie flow, so the
-    require_admin gate on generate is exercised honestly. The admin must already
-    exist in the session (request the admin_user fixture).
-    """
-    app = create_app()
-
-    async def _use_test_session() -> AsyncIterator[AsyncSession]:
-        yield session
-
-    app.dependency_overrides[get_session] = _use_test_session
-    app.dependency_overrides[get_composer_streamer] = streamer_cls
-    limiter.enabled = False
-    transport = ASGITransport(app=app)
-    try:
-        async with AsyncClient(transport=transport, base_url="http://test") as http_client:
-            login = await http_client.post(
-                "/admin/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-            )
-            assert login.status_code == 200
-            yield http_client
-    finally:
-        limiter.enabled = True
-
-
-@pytest_asyncio.fixture
-async def sse_client(session: AsyncSession, admin_user: User) -> AsyncIterator[AsyncClient]:
-    """The default live-compose client: a scripted trace then a composed meal."""
-    async with _sse_client(session, _FakeStreamer) as http_client:
-        yield http_client
-
-
-async def test_generate_without_a_token_is_401(client: AsyncClient) -> None:
-    resp = await client.post("/admin/daily/generate", json={"meal_type": "breakfast"})
-    assert resp.status_code == 401
-
-
-async def test_generate_streams_trace_then_meal(sse_client: AsyncClient) -> None:
-    resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "lunch"})
+    resp = await authenticated_client.patch(f"/admin/daily/{suggestion.id}", json=body)
 
     assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith("text/event-stream")
-    body = resp.text
-    assert "event: trace" in body
-    assert "event: meal" in body
-    assert "Dropped parmesan" in body
-    assert "Courgette ribbon salad" in body
+    content = resp.json()["content"]
+    assert [item["name"] for item in content["ingredients"]] == ["courgette", "mystery spice"]
+    assert content["unverified_ingredients"] == ["mystery spice"]
 
 
-async def test_generate_with_a_bad_meal_type_is_422(sse_client: AsyncClient) -> None:
-    resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "brunch"})
+async def test_edit_suggestion_rejects_an_introduced_blocker(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    suggestion = await _add_suggestion(
+        session,
+        reveal_at=datetime.now(UTC) + timedelta(days=1),
+        approval_status=ApprovalStatus.PENDING,
+    )
+    body = _edit_body(
+        suggestion,
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "parmesan", "category": "aged hard cheese"},
+        ],
+    )
+
+    resp = await authenticated_client.patch(f"/admin/daily/{suggestion.id}", json=body)
 
     assert resp.status_code == 422
+    assert any("parmesan" in blocker for blocker in resp.json()["detail"]["blockers"])
 
 
-async def test_generate_unexpected_failure_closes_as_an_error_event(
-    session: AsyncSession, admin_user: User
+async def test_edit_an_approved_suggestion_is_409(
+    authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
-    async with _sse_client(session, _BoomStreamer) as client:
-        resp = await client.post("/admin/daily/generate", json={"meal_type": "lunch"})
+    suggestion = await _add_suggestion(
+        session,
+        reveal_at=datetime.now(UTC) + timedelta(days=1),
+        approval_status=ApprovalStatus.APPROVED,
+    )
+    body = _edit_body(suggestion, ingredients=[{"name": "courgette", "category": "vegetable"}])
 
-    # The stream already opened with a 200, so the failure has to arrive as a terminal
-    # error event; a truncated stream would read as success on the client.
-    assert resp.status_code == 200
-    body = resp.text
-    assert "event: trace" in body
-    assert "event: error" in body
-    assert "Something went wrong" in body
-    # The raw exception detail stays in the server log, never the response.
-    assert "boom" not in body
-
-
-async def test_generate_exhausted_closes_as_an_error_event(
-    session: AsyncSession, admin_user: User
-) -> None:
-    async with _sse_client(session, _ExhaustedStreamer) as client:
-        resp = await client.post("/admin/daily/generate", json={"meal_type": "lunch"})
-
-    assert resp.status_code == 200
-    body = resp.text
-    assert "event: trace" in body
-    assert "event: error" in body
-    assert "could not finish a safe meal" in body
-
-
-async def test_generate_llm_error_surfaces_its_message(
-    session: AsyncSession, admin_user: User
-) -> None:
-    async with _sse_client(session, _LLMErrorStreamer) as client:
-        resp = await client.post("/admin/daily/generate", json={"meal_type": "lunch"})
-
-    assert resp.status_code == 200
-    body = resp.text
-    assert "event: error" in body
-    # A model failure is already user-safe, so its message is shown rather than hidden.
-    assert "The model cannot call tools." in body
-
-
-async def test_generate_while_a_run_is_in_flight_is_409(sse_client: AsyncClient) -> None:
-    # Hold the same lock the route checks, standing in for a live run already streaming.
-    await _generation_lock.acquire()
-    try:
-        resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "lunch"})
-    finally:
-        _generation_lock.release()
+    resp = await authenticated_client.patch(f"/admin/daily/{suggestion.id}", json=body)
 
     assert resp.status_code == 409
-    assert "already running" in resp.json()["detail"]
 
 
-async def test_generate_releases_the_lock_after_a_run(sse_client: AsyncClient) -> None:
-    resp = await sse_client.post("/admin/daily/generate", json={"meal_type": "lunch"})
+async def test_edit_suggestion_without_a_session_is_401(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    suggestion = await _add_suggestion(
+        session,
+        reveal_at=datetime.now(UTC) + timedelta(days=1),
+        approval_status=ApprovalStatus.PENDING,
+    )
+    body = _edit_body(suggestion, ingredients=[{"name": "courgette", "category": "vegetable"}])
 
-    assert resp.status_code == 200
-    assert not _generation_lock.locked()
+    resp = await client.patch(f"/admin/daily/{suggestion.id}", json=body)
+
+    assert resp.status_code == 401
 
 
 # --- _cache_max_age (pure) --------------------------------------------------------

@@ -5,11 +5,13 @@ locked/revealed logic takes an explicit ``now``, so the clock is deterministic
 without patching.
 """
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.enums import ApprovalStatus, MealType
 from app.models import DailySuggestion
 from app.services.daily_service import DailyService
@@ -189,16 +191,57 @@ async def test_board_ignores_other_dates(session: AsyncSession) -> None:
     assert board.reveal_at is None
 
 
-# --- review: list, approve, reject ------------------------------------------------
+# --- reveal time -----------------------------------------------------------------
 
 
-async def test_list_for_review_filters_by_status(session: AsyncSession) -> None:
-    await _add(session, meal_type=MealType.BREAKFAST, approval_status=ApprovalStatus.PENDING)
-    await _add(session, meal_type=MealType.LUNCH, approval_status=ApprovalStatus.APPROVED)
+async def test_reveal_at_for_keeps_the_hour_for_a_future_date(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "daily_reveal_hour_utc", 10)
+    now = datetime(2026, 6, 16, 8, tzinfo=UTC)
 
-    pending = await DailyService(session).list_for_review(ApprovalStatus.PENDING)
+    reveal = DailyService(session).reveal_at_for(date(2026, 6, 17), now=now)
 
-    assert [row.meal_type for row in pending] == [MealType.BREAKFAST]
+    assert reveal == datetime(2026, 6, 17, 10, tzinfo=UTC)
+
+
+async def test_reveal_at_for_clamps_a_same_day_board_to_now(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A board for today reveals as soon as it is approved, not at an hour still ahead.
+    monkeypatch.setattr(settings, "daily_reveal_hour_utc", 10)
+    now = datetime(2026, 6, 16, 8, tzinfo=UTC)
+
+    reveal = DailyService(session).reveal_at_for(date(2026, 6, 16), now=now)
+
+    assert reveal == now
+
+
+# --- queue ------------------------------------------------------------------------
+
+
+async def test_list_queue_excludes_dates_past_the_horizon(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The queue is bounded to the furthest date either path can fill, so a row far in the
+    # future stays out of the admin view and the response keeps a fixed size.
+    monkeypatch.setattr(settings, "daily_queue_max_ahead_days", 3)
+    monkeypatch.setattr(settings, "daily_cron_horizon_days", 1)
+    today = date(2026, 6, 16)
+    await _add(session, meal_type=MealType.BREAKFAST, on=today)
+    await _add(
+        session,
+        meal_type=MealType.BREAKFAST,
+        on=today + timedelta(days=10),
+        reveal_at=datetime(2026, 6, 26, 10, tzinfo=UTC),
+    )
+
+    days = await DailyService(session).list_queue(today=today)
+
+    assert [day.date for day in days] == [today]
+
+
+# --- review: approve, reject ------------------------------------------------------
 
 
 async def test_approve_stamps_actor_and_time(session: AsyncSession) -> None:

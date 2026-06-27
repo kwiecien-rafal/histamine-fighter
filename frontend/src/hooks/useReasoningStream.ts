@@ -2,20 +2,34 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   AdminAuthError,
+  errorDetail,
   errorMessage,
   type ComposedMeal,
-  type MealType,
+  type SavedEvent,
+  type SlotConflict,
   type TraceEvent,
 } from "../api/admin";
 
-export type StreamStatus = "idle" | "streaming" | "done" | "error" | "expired";
+export type StreamStatus = "idle" | "streaming" | "done" | "error" | "expired" | "conflict";
+
+// Which compose endpoint to drive and the body to send. Preview/curated take just a
+// meal type; daily adds the date and an optional replace flag for an overwrite.
+export interface ComposeStreamRequest {
+  endpoint: string;
+  body: Record<string, unknown>;
+}
 
 interface ReasoningStream {
   status: StreamStatus;
   events: TraceEvent[];
   meal: ComposedMeal | null;
   error: string | null;
-  start: (mealType: MealType) => Promise<void>;
+  // Set when a saving stream confirms persistence, so the caller can refresh its queue.
+  savedId: string | null;
+  // Set when a daily save is refused pre-stream because the slot is taken, so the caller
+  // can confirm and re-run with replace:true.
+  conflict: SlotConflict | null;
+  start: (request: ComposeStreamRequest) => Promise<void>;
   cancel: () => void;
 }
 
@@ -42,30 +56,47 @@ function parseFrame(frame: string): ParsedFrame | null {
   }
 }
 
-// Human-friendly copy for the statuses the generate endpoint returns before the
-// stream opens. 401 triggers logout and is handled separately; 422 is ruled out by
-// the meal-type selector.
+// The slot a 409 names, when the body is the structured conflict (not the busy-lock
+// 409, whose detail is a plain string). Lets the daily save offer a replace confirm.
+async function parseConflict(response: Response): Promise<SlotConflict | null> {
+  try {
+    const body = (await response.json()) as { detail?: { conflict?: SlotConflict } };
+    const conflict = body.detail?.conflict;
+    if (conflict?.existing_status) return conflict;
+  } catch {
+    // not a structured-conflict body
+  }
+  return null;
+}
+
+// Human-friendly copy for the statuses a compose endpoint returns before the stream
+// opens. 401 triggers logout and is handled separately; a structured 409 becomes a
+// conflict; a 422 carries the backend's own detail (a daily date outside the queue
+// window), surfaced verbatim rather than reduced to this generic line.
 function startErrorMessage(status: number): string {
   if (status === 409) return "A composition is already running. Wait for it to finish.";
   if (status === 429) return "You've hit the rate limit. Give it a moment, then try again.";
   return `The composer couldn't start (error ${status}).`;
 }
 
-// Streams the admin live composition over a POST (the endpoint takes a body, so
-// EventSource is not an option and this reads the response body itself). Trace steps
-// land in `events` as they arrive, the terminal meal in `meal`. A 401 means the
-// session lapsed, so it calls onExpired rather than surfacing a scary error.
+// Streams an admin composition over a POST (the endpoint takes a body, so EventSource is
+// not an option and this reads the response body itself). Trace steps land in `events` as
+// they arrive, the terminal meal in `meal`, and a saving stream ends with a `saved` frame
+// that fills `savedId`. A 401 means the session lapsed, so it calls onExpired rather than
+// surfacing a scary error; a structured 409 surfaces as `conflict` for a replace confirm.
 export function useReasoningStream(onExpired: () => void): ReasoningStream {
   const [status, setStatus] = useState<StreamStatus>("idle");
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [meal, setMeal] = useState<ComposedMeal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<SlotConflict | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const start = useCallback(
-    async (mealType: MealType) => {
+    async ({ endpoint, body }: ComposeStreamRequest) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -73,16 +104,31 @@ export function useReasoningStream(onExpired: () => void): ReasoningStream {
       setEvents([]);
       setMeal(null);
       setError(null);
+      setSavedId(null);
+      setConflict(null);
 
       try {
-        const response = await fetch("/admin/daily/generate", {
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ meal_type: mealType }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         if (response.status === 401) throw new AdminAuthError("Session expired.");
+        if (response.status === 409) {
+          const slot = await parseConflict(response);
+          if (slot) {
+            setConflict(slot);
+            setStatus("conflict");
+            return;
+          }
+        }
+        // A daily date outside the queue window 422s with an actionable detail; show it
+        // rather than the bare status, so the operator can correct the date.
+        if (response.status === 422) {
+          throw new Error(await errorDetail(response));
+        }
         if (!response.ok || !response.body) {
           throw new Error(startErrorMessage(response.status));
         }
@@ -101,6 +147,8 @@ export function useReasoningStream(onExpired: () => void): ReasoningStream {
           } else if (parsed.event === "meal") {
             setMeal(parsed.data as ComposedMeal);
             gotMeal = true;
+          } else if (parsed.event === "saved") {
+            setSavedId((parsed.data as SavedEvent).id);
           } else if (parsed.event === "error") {
             streamError = (parsed.data as { detail?: string }).detail ?? "Generation failed.";
           }
@@ -144,8 +192,8 @@ export function useReasoningStream(onExpired: () => void): ReasoningStream {
     [onExpired],
   );
 
-  // Abort an in-flight stream and return the panel to its pristine state. The
-  // running start() loop sees the aborted signal and bails without overwriting.
+  // Abort an in-flight stream and return the panel to its pristine state. The running
+  // start() loop sees the aborted signal and bails without overwriting.
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -153,7 +201,9 @@ export function useReasoningStream(onExpired: () => void): ReasoningStream {
     setEvents([]);
     setMeal(null);
     setError(null);
+    setSavedId(null);
+    setConflict(null);
   }, []);
 
-  return { status, events, meal, error, start, cancel };
+  return { status, events, meal, error, savedId, conflict, start, cancel };
 }

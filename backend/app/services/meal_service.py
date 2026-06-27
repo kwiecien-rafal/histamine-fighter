@@ -12,6 +12,7 @@ loading the model.
 
 from collections.abc import Collection
 from dataclasses import dataclass
+from uuid import UUID
 
 import structlog
 from sqlalchemy import func, select
@@ -23,6 +24,9 @@ from app.core.term_match import TermMatcher
 from app.embeddings import Embedder
 from app.enums import ApprovalStatus, MealType
 from app.models import CuratedMeal
+from app.models.curated_meal import meal_embedding_text
+from app.schemas.admin import AdminMealUpdate
+from app.schemas.meal import ComposedMeal
 
 log = structlog.get_logger(__name__)
 
@@ -62,7 +66,10 @@ class _ExcludeTerms:
 
 
 class MealService:
-    """Reads the approved meal pool by vector similarity. Never commits."""
+    """Reads the approved meal pool by similarity, and stores composed pending meals.
+
+    Never commits.
+    """
 
     default_k = 5
     # The pool is verified-safe by construction, so similarity here is pure
@@ -193,6 +200,67 @@ class MealService:
             if len(meals) == limit:
                 break
         return meals
+
+    async def store_pending(self, meal: ComposedMeal) -> CuratedMeal:
+        """Shape a composed meal into a pending curated row and add it to the session.
+
+        Embeds from the same name/description/tags text retrieval queries against, and
+        stores the full reasoning trace, usage, and producing model. Marked pending so
+        it is pool-eligible only once an admin approves. The caller (cron or the admin
+        save) owns the commit.
+        """
+        vector = (
+            await self._embedder.embed_documents(
+                [meal_embedding_text(meal.name, meal.description, meal.tags)]
+            )
+        )[0]
+        row = CuratedMeal(
+            name=meal.name,
+            meal_type=meal.meal_type,
+            description=meal.description,
+            ingredients=[ingredient.model_dump() for ingredient in meal.ingredients],
+            recipe=meal.recipe,
+            tags=meal.tags,
+            unverified_ingredients=meal.unverified_ingredients,
+            model=meal.model,
+            usage=meal.usage.model_dump(),
+            reasoning_trace=[event.model_dump() for event in meal.reasoning_trace],
+            approval_status=ApprovalStatus.PENDING,
+            embedding=vector,
+        )
+        self._session.add(row)
+        return row
+
+    async def get(self, meal_id: UUID) -> CuratedMeal | None:
+        """Return one curated meal by id, or None when there is no match."""
+        return await self._session.get(CuratedMeal, meal_id)
+
+    async def apply_edit(
+        self, meal: CuratedMeal, payload: AdminMealUpdate, *, unverified: list[str]
+    ) -> None:
+        """Apply a verified edit to a curated row, re-embedding only when text changed.
+
+        The embedding is recomputed only when the retrieval text (name, description, or
+        tags) actually changed, so an ingredient or recipe edit does not pay for an embed.
+        ``unverified`` is the re-derived not-indexed list. The caller commits.
+        """
+        reembed = (meal.name, meal.description, list(meal.tags)) != (
+            payload.name,
+            payload.description,
+            payload.tags,
+        )
+        meal.name = payload.name
+        meal.description = payload.description
+        meal.ingredients = [item.model_dump() for item in payload.ingredients]
+        meal.recipe = payload.recipe
+        meal.tags = payload.tags
+        meal.unverified_ingredients = unverified
+        if reembed:
+            meal.embedding = (
+                await self._embedder.embed_documents(
+                    [meal_embedding_text(meal.name, meal.description, meal.tags)]
+                )
+            )[0]
 
     @staticmethod
     def _is_excluded(meal: CuratedMeal, terms: _ExcludeTerms) -> bool:

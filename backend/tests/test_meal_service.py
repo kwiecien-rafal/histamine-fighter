@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.enums import ApprovalStatus, MealType
 from app.models import CuratedMeal
 from app.models.curated_meal import meal_embedding_text
+from app.schemas.admin import AdminMealUpdate
+from app.schemas.meal import ComposedMeal, ProposedIngredient, TraceEvent
 from app.services.meal_service import MealService
 from tests.fakes import FakeEmbedder
 
@@ -256,6 +258,34 @@ async def test_similarity_floor_drops_weak_matches(
     assert [match.meal.name for match in results] == ["Courgette herb salad"]
 
 
+# --- store_pending ----------------------------------------------------------------
+
+
+async def test_store_pending_persists_a_pending_row_with_trace_and_embedding(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    meal = ComposedMeal(
+        name="Courgette ribbon salad",
+        meal_type=MealType.DINNER,
+        description="raw courgette ribbons with olive oil and fresh herbs",
+        ingredients=[ProposedIngredient(name="courgette", category="vegetable")],
+        recipe=["Peel into ribbons."],
+        tags=["fresh"],
+        unverified_ingredients=["mystery spice"],
+        model="fake/test",
+        reasoning_trace=[TraceEvent(kind="verify", text="cleared the index")],
+    )
+
+    row = await MealService(session, fake_embedder).store_pending(meal)
+    await session.flush()
+
+    assert row.approval_status is ApprovalStatus.PENDING
+    assert row.name == "Courgette ribbon salad"
+    assert row.unverified_ingredients == ["mystery spice"]
+    assert [event["text"] for event in row.reasoning_trace] == ["cleared the index"]
+    assert row.embedding  # the meal was embedded for later retrieval
+
+
 async def test_off_topic_query_returns_nothing(
     session: AsyncSession, fake_embedder: FakeEmbedder
 ) -> None:
@@ -307,3 +337,74 @@ async def test_oversized_query_raises(session: AsyncSession, fake_embedder: Fake
     service = MealService(session, fake_embedder)
     with pytest.raises(ValueError, match="exceeds"):
         await service.search("x" * (MealService.max_query_length + 1))
+
+
+# --- apply_edit -------------------------------------------------------------------
+
+
+async def _add_pending(
+    session: AsyncSession, embedder: FakeEmbedder, *, name: str, description: str, tags: list[str]
+) -> CuratedMeal:
+    vector = (await embedder.embed_documents([meal_embedding_text(name, description, tags)]))[0]
+    meal = CuratedMeal(
+        name=name,
+        meal_type=MealType.DINNER,
+        description=description,
+        ingredients=[{"name": "courgette", "category": "vegetable"}],
+        recipe=["Cook it."],
+        tags=tags,
+        model="fake/test",
+        reasoning_trace=[],
+        approval_status=ApprovalStatus.PENDING,
+        embedding=vector,
+    )
+    session.add(meal)
+    await session.flush()
+    return meal
+
+
+def _update(meal: CuratedMeal, **overrides: object) -> AdminMealUpdate:
+    base: dict[str, object] = {
+        "name": meal.name,
+        "description": meal.description,
+        "ingredients": [{"name": "courgette", "category": "vegetable"}],
+        "recipe": ["Cook it."],
+        "tags": list(meal.tags),
+    }
+    base.update(overrides)
+    return AdminMealUpdate.model_validate(base)
+
+
+async def test_apply_edit_reembeds_when_text_changes(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    meal = await _add_pending(
+        session, fake_embedder, name="Old name", description="old description", tags=["a"]
+    )
+    before = list(meal.embedding)
+
+    await MealService(session, fake_embedder).apply_edit(
+        meal, _update(meal, name="A brand new name"), unverified=[]
+    )
+
+    assert meal.name == "A brand new name"
+    assert list(meal.embedding) != before  # retrieval text changed, so it re-embedded
+
+
+async def test_apply_edit_skips_reembed_when_only_ingredients_change(
+    session: AsyncSession, fake_embedder: FakeEmbedder
+) -> None:
+    meal = await _add_pending(
+        session, fake_embedder, name="Stable name", description="stable description", tags=["a"]
+    )
+    before = list(meal.embedding)
+
+    await MealService(session, fake_embedder).apply_edit(
+        meal,
+        _update(meal, ingredients=[{"name": "buckwheat", "category": "grain"}]),
+        unverified=["buckwheat"],
+    )
+
+    assert [item["name"] for item in meal.ingredients] == ["buckwheat"]
+    assert meal.unverified_ingredients == ["buckwheat"]
+    assert list(meal.embedding) == before  # text unchanged, so the embedding is untouched

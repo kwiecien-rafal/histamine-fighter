@@ -39,6 +39,17 @@ class MealVerification:
     def is_safe(self) -> bool:
         return not self.blockers and not self.recipe_flags
 
+    def offending_items(self) -> dict[str, list[str]]:
+        """The blockers and recipe flags as plain lists, for an edit's 422 body.
+
+        Pure data shaping, no HTTP: each blocker reads "ingredient (level)" and each
+        recipe flag is the index-flagged term, so the admin sees exactly what to fix.
+        """
+        return {
+            "blockers": [f"{name} ({reading.value})" for name, reading in self.blockers],
+            "recipe_flags": list(self.recipe_flags),
+        }
+
 
 def verify_meal(
     lookups: list[LookupResult], recipe_steps: list[str], risky_terms: TermMatcher

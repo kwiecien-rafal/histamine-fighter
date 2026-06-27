@@ -12,6 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 
 from app.api.admin import auth as admin_auth
+from app.api.admin import compose as admin_compose
 from app.api.admin import daily as admin_daily
 from app.api.admin import meals as admin_meals
 from app.api.v1 import daily, histamine, learn, meals
@@ -173,6 +174,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_auth.router)
     app.include_router(admin_meals.router)
     app.include_router(admin_daily.router)
+    app.include_router(admin_compose.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

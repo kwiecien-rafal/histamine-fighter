@@ -41,3 +41,11 @@ export function formatRemaining(ms: number): string {
 export function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
+
+// Format a YYYY-MM-DD calendar date in local time. new Date("2026-06-25") parses as UTC
+// midnight, which toDateString() then renders a day early west of UTC; building the date
+// from its parts keeps it on the intended day everywhere.
+export function formatBoardDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).toDateString();
+}

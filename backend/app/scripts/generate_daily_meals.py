@@ -4,8 +4,10 @@ Runs the agentic ComposerAgent once per meal type for a target date and persists
 each result as a daily_suggestions row (approval_status=pending) with its recorded
 trace and a reveal time of ``settings.daily_reveal_hour_utc`` (UTC) on that date. An
 admin approves during the day; the public board unlocks at the reveal time, replaying
-the trace as the premiere. Cron-invoked the night before; the expensive composition
-runs offline so the board read stays a cheap clock check.
+the trace as the premiere. Cron runs nightly as a gap-filler: it covers the next
+``daily_cron_horizon_days`` days starting tomorrow, so a partial day is completed and
+an empty day between two filled days is backfilled. The expensive composition runs
+offline so the board read stays a cheap clock check.
 
 Each composed meal is committed on its own, so a failure partway through keeps the
 meals already done and a re-run only fills what is missing. A slot already holding a
@@ -19,6 +21,7 @@ either run a tools-capable local model or point the composer at a capable provid
 Run it (database up, migrations applied, a tool-calling model configured):
 
     uv run --directory backend python -m app.scripts.generate_daily_meals
+    uv run --directory backend python -m app.scripts.generate_daily_meals --horizon 7
     uv run --directory backend python -m app.scripts.generate_daily_meals --date 2026-06-20
     uv run --directory backend python -m app.scripts.generate_daily_meals --meal-type dinner
 """
@@ -26,10 +29,9 @@ Run it (database up, migrations applied, a tool-calling model configured):
 import argparse
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Sequence
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.composer import ComposerAgent, ComposerExhausted
@@ -41,9 +43,10 @@ from app.enums import ApprovalStatus, MealType
 from app.llm.config import LLMRequestConfig
 from app.llm.errors import LLMError
 from app.llm.langchain_factory import build_chat_model
-from app.models import DailySuggestion
-from app.schemas.daily import DailyMealContent
+from app.models import GenerationSettings
 from app.schemas.meal import ComposedMeal
+from app.services.daily_service import DailyService
+from app.services.generation_settings_service import GenerationSettingsService
 from app.services.ingredient_service import IngredientService
 from app.services.meal_service import MealService
 
@@ -55,51 +58,21 @@ ComposeFn = Callable[[MealType], Awaitable[ComposedMeal]]
 Checkpoint = Callable[[], Awaitable[None]]
 
 
-def _build_agent(session: AsyncSession, embedder: Embedder) -> ComposerAgent:
-    # No request in scope, so the provider resolves from settings, not X-LLM headers.
-    chat = build_chat_model(LLMRequestConfig(), temperature=settings.compose_temperature)
+def _build_agent(
+    gen_settings: GenerationSettings, session: AsyncSession, embedder: Embedder
+) -> ComposerAgent:
+    # No request in scope, so the provider comes from the operator-set settings.
+    chat = build_chat_model(
+        LLMRequestConfig(
+            provider=gen_settings.composer_provider, model=gen_settings.composer_model
+        ),
+        temperature=settings.compose_temperature,
+    )
     return ComposerAgent(
         chat=chat,
         ingredient_service=IngredientService(session),
         meal_service=MealService(session, embedder),
     )
-
-
-def _reveal_at(target: date) -> datetime:
-    """The instant the target date's board unlocks: a fixed UTC hour, same for all."""
-    return datetime.combine(target, time(hour=settings.daily_reveal_hour_utc), tzinfo=UTC)
-
-
-async def _row_for(
-    session: AsyncSession, target: date, meal_type: MealType
-) -> DailySuggestion | None:
-    stmt = select(DailySuggestion).where(
-        DailySuggestion.suggestion_date == target,
-        DailySuggestion.meal_type == meal_type,
-    )
-    return (await session.execute(stmt)).scalar_one_or_none()
-
-
-def _fill(row: DailySuggestion, meal: ComposedMeal, target: date, reveal_at: datetime) -> None:
-    """Write a composed meal onto a row, (re)setting it to pending review."""
-    content = DailyMealContent(
-        name=meal.name,
-        description=meal.description,
-        ingredients=meal.ingredients,
-        recipe=meal.recipe,
-        tags=meal.tags,
-        unverified_ingredients=meal.unverified_ingredients,
-    )
-    row.suggestion_date = target
-    row.meal_type = meal.meal_type
-    row.content = content.model_dump()
-    row.model = meal.model
-    row.usage = meal.usage.model_dump()
-    row.reasoning_trace = [event.model_dump() for event in meal.reasoning_trace]
-    row.reveal_at = reveal_at
-    row.approval_status = ApprovalStatus.PENDING
-    row.approved_at = None
-    row.approved_by = None
 
 
 async def _compose_one(compose: ComposeFn, meal_type: MealType) -> ComposedMeal | None:
@@ -120,6 +93,7 @@ async def build_board(
     target: date,
     *,
     meal_types: Iterable[MealType],
+    now: datetime | None = None,
     checkpoint: Checkpoint | None = None,
 ) -> int:
     """Compose the missing meals for a date, persisting each one as it is finished.
@@ -129,20 +103,18 @@ async def build_board(
     cannot discard earlier work. Returns how many meals were stored.
     """
     persist = checkpoint or session.commit
-    reveal_at = _reveal_at(target)
+    daily = DailyService(session)
+    moment = now or datetime.now(UTC)
     stored = 0
     for meal_type in meal_types:
-        existing = await _row_for(session, target, meal_type)
+        existing = await daily.slot_for(target, meal_type)
         if existing is not None and existing.approval_status is not ApprovalStatus.REJECTED:
             log.info("daily.skip_existing", date=target.isoformat(), meal_type=meal_type.value)
             continue
         meal = await _compose_one(compose, meal_type)
         if meal is None:
             continue
-        row = existing or DailySuggestion()
-        _fill(row, meal, target, reveal_at)
-        if existing is None:
-            session.add(row)
+        await daily.store_pending(meal, target, now=moment)
         await persist()
         stored += 1
         log.info(
@@ -154,22 +126,65 @@ async def build_board(
     return stored
 
 
-async def generate(target: date, meal_types: Sequence[MealType]) -> None:
-    """Compose the target date's board and store the successes as pending rows."""
+async def build_boards(
+    session: AsyncSession,
+    compose: ComposeFn,
+    targets: Sequence[date],
+    *,
+    meal_types: Sequence[MealType],
+    now: datetime | None = None,
+    checkpoint: Checkpoint | None = None,
+) -> int:
+    """Fill each target date's board, reusing build_board's per-slot predicate.
+
+    The nightly gap-filler over a look-ahead horizon: a covered slot is skipped, a
+    partial day completed, a rejected slot recomposed, and an empty day between two
+    covered days backfilled. Idempotent, so a re-run stores only what is missing. One
+    clock is shared across the dates so the same-day reveal clamp stays consistent.
+    """
+    moment = now or datetime.now(UTC)
+    stored = 0
+    for target in targets:
+        stored += await build_board(
+            session, compose, target, meal_types=meal_types, now=moment, checkpoint=checkpoint
+        )
+    return stored
+
+
+async def generate(targets: Sequence[date], meal_types: Sequence[MealType]) -> None:
+    """Compose each target date's board and store the successes as pending rows."""
     embedder = get_embedder()
     async with SessionLocal() as session:
-        agent = _build_agent(session, embedder)
-        stored = await build_board(session, agent.compose, target, meal_types=meal_types)
-    log.info("daily.done", date=target.isoformat(), stored=stored, requested=len(meal_types))
+        gen_settings = await GenerationSettingsService(session).get()
+        try:
+            agent = _build_agent(gen_settings, session, embedder)
+        except LLMError as exc:
+            # The operator-set provider can drift out from under cron (a rotated key,
+            # or public_deployment flipped with ollama saved). Fail fast and loud.
+            log.error(
+                "compose.settings.invalid",
+                provider=gen_settings.composer_provider,
+                model=gen_settings.composer_model,
+                error=str(exc),
+            )
+            raise SystemExit(1) from exc
+        stored = await build_boards(session, agent.compose, targets, meal_types=meal_types)
+    log.info("daily.done", dates=[target.isoformat() for target in targets], stored=stored)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Compose a day's daily board.")
+    parser = argparse.ArgumentParser(description="Compose the daily board over a horizon.")
     parser.add_argument(
         "--date",
         type=date.fromisoformat,
         default=None,
-        help="Target date as YYYY-MM-DD. Defaults to tomorrow (UTC).",
+        help="Compose only this date (YYYY-MM-DD), overriding the horizon.",
+    )
+    parser.add_argument(
+        "--horizon",
+        type=int,
+        default=None,
+        help="Days from tomorrow to cover. Defaults to settings.daily_cron_horizon_days.",
     )
     parser.add_argument(
         "--meal-type",
@@ -180,12 +195,20 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _target_dates(args: argparse.Namespace) -> list[date]:
+    """Resolve the dates to compose: a forced single date, else the cron horizon."""
+    if args.date is not None:
+        return [args.date]
+    tomorrow = datetime.now(UTC).date() + timedelta(days=1)
+    horizon = args.horizon if args.horizon is not None else settings.daily_cron_horizon_days
+    return [tomorrow + timedelta(days=offset) for offset in range(horizon)]
+
+
 def main() -> None:
     configure_logging()
     args = _parse_args()
-    target = args.date or (datetime.now(UTC).date() + timedelta(days=1))
     meal_types = [MealType(args.meal_type)] if args.meal_type else list(MealType)
-    asyncio.run(generate(target, meal_types))
+    asyncio.run(generate(_target_dates(args), meal_types))
 
 
 if __name__ == "__main__":

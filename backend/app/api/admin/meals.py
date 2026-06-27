@@ -9,14 +9,24 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies import get_meal_review_service, require_admin
+from app.api.admin.edits import ensure_safe, verify_edit
+from app.dependencies import (
+    get_ingredient_service,
+    get_meal_review_service,
+    get_meal_service,
+    require_admin,
+)
 from app.enums import ApprovalStatus
 from app.models import CuratedMeal
 from app.models.user import User
-from app.schemas.admin import AdminMealRead
+from app.schemas.admin import AdminMealRead, AdminMealUpdate
+from app.services.ingredient_service import IngredientService
 from app.services.meal_review_service import MealReviewService
+from app.services.meal_service import MealService
 
 router = APIRouter(prefix="/admin/meals", tags=["admin"])
+
+_NOT_PENDING = "Only a pending meal can be edited."
 
 
 @router.get("", response_model=list[AdminMealRead])
@@ -33,6 +43,31 @@ async def list_meals(
 ) -> list[CuratedMeal]:
     """List one page of meals in a review state, oldest first (defaults to pending)."""
     return await service.list_by_status(approval_status, limit=limit, offset=offset)
+
+
+@router.patch("/{meal_id}", response_model=AdminMealRead)
+async def update_meal(
+    meal_id: UUID,
+    payload: AdminMealUpdate,
+    _admin: User = Depends(require_admin),
+    meal_service: MealService = Depends(get_meal_service),
+    ingredient_service: IngredientService = Depends(get_ingredient_service),
+) -> CuratedMeal:
+    """Edit a pending curated meal, re-verifying it against the index before saving.
+
+    Allowed only while pending (409 otherwise). The edited list is re-run through the
+    same index check a composition gets, so an introduced risky ingredient or recipe
+    mention is a 422 with the offending items, and the not-indexed list is re-derived.
+    """
+    meal = await meal_service.get(meal_id)
+    if meal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meal not found.")
+    if meal.approval_status is not ApprovalStatus.PENDING:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_PENDING)
+    verification = await verify_edit(ingredient_service, payload)
+    ensure_safe(verification)
+    await meal_service.apply_edit(meal, payload, unverified=verification.unverified)
+    return meal
 
 
 @router.patch("/{meal_id}/approve", response_model=AdminMealRead)

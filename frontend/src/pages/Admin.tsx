@@ -1,44 +1,62 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import type { AdminDailySuggestion, AdminMeal, ComposedMeal, MealType } from "../api/admin";
+import type { QueuedDay } from "../api/admin";
 import {
+  AdminAuthError,
   approveDaily,
   approveMeal,
-  listPendingDaily,
+  errorMessage,
+  listDailyQueue,
   listPendingMeals,
   MAX_EMAIL_CHARS,
   MAX_PASSWORD_CHARS,
   rejectDaily,
   rejectMeal,
+  updateDaily,
+  updateMeal,
 } from "../api/admin";
-import { ComposeCost } from "../components/ComposeCost";
+import { ComposePanel } from "../components/ComposePanel";
 import { DailySuggestionCard } from "../components/DailySuggestionCard";
-import { LLMProviderBadge } from "../components/LLMProviderBadge";
+import { GenerationSettingsPanel } from "../components/GenerationSettingsPanel";
 import { MealReviewCard } from "../components/MealReviewCard";
-import { ReasoningReplay } from "../components/ReasoningReplay";
 import { ReviewQueueShell } from "../components/ReviewQueueShell";
-import { UnverifiedNote } from "../components/UnverifiedNote";
 import { useAdminSession } from "../hooks/useAdminSession";
-import { useReasoningStream } from "../hooks/useReasoningStream";
-import { useReviewQueue, type ReviewAction } from "../hooks/useReviewQueue";
-import { MEAL_TYPE_LABEL, MEAL_TYPES } from "../lib/meal";
+import { useReviewQueue } from "../hooks/useReviewQueue";
+import { formatBoardDate } from "../lib/daily";
+import { MEAL_TYPE_LABEL } from "../lib/meal";
+
+const SECTIONS = [
+  { id: "settings", label: "Generation settings" },
+  { id: "compose", label: "Generate" },
+  { id: "queue", label: "Daily queue" },
+  { id: "curated", label: "Curated" },
+];
 
 export function Admin() {
   const { user, status, login, logout, expire, loggingIn, error: loginError } = useAdminSession();
   const isAdmin = user?.role === "admin";
-  const mealReview = useReviewQueue(isAdmin, expire, listPendingMeals, approveMeal, rejectMeal);
-  const dailyReview = useReviewQueue(isAdmin, expire, listPendingDaily, approveDaily, rejectDaily);
+  const curated = useReviewQueue(isAdmin, expire, listPendingMeals, approveMeal, rejectMeal);
+  const queue = useDailyQueue(isAdmin, expire);
+
+  // The backend serializes live compositions behind one lock, so only one panel may run at
+  // a time. Track which panel is streaming so both can disable their triggers while busy.
+  const [composing, setComposing] = useState<"daily" | "curated" | null>(null);
+  const handleComposingChange = useCallback(
+    (mode: "daily" | "curated", streaming: boolean) =>
+      setComposing((current) => (streaming ? mode : current === mode ? null : current)),
+    [],
+  );
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
+    <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-10 pb-24">
       <div className="max-w-2xl mx-auto">
-        <header className="flex items-baseline justify-between mb-8">
+        <header className="flex items-baseline justify-between mb-6">
           <div>
             <Link to="/" className="text-sm text-stone-500 hover:text-stone-800">
-              Histamine Fighter
+              ← Back to site
             </Link>
-            <h1 className="text-3xl font-semibold">Meal review</h1>
+            <h1 className="text-3xl font-semibold">Admin</h1>
           </div>
           {status === "authed" && (
             <button
@@ -55,29 +73,77 @@ export function Admin() {
           <p className="text-stone-600">Checking your session…</p>
         ) : isAdmin ? (
           <>
-            <GeneratePanel onExpired={expire} />
-            <section className="mb-8">
-              <h2 className="text-lg font-medium mb-3">Daily board</h2>
-              <DailyReviewQueue
-                suggestions={dailyReview.items}
-                loading={dailyReview.loading}
-                error={dailyReview.error}
-                decidingId={dailyReview.decidingId}
-                onReload={() => void dailyReview.reload()}
-                onDecide={(id, action) => void dailyReview.decide(id, action)}
+            <nav className="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-8 border-b border-stone-200 pb-3">
+              {SECTIONS.map((section) => (
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  className="text-stone-600 hover:text-stone-900"
+                >
+                  {section.label}
+                </a>
+              ))}
+            </nav>
+
+            <Section id="settings" title="Generation settings">
+              <GenerationSettingsPanel onExpired={expire} />
+            </Section>
+
+            <Section id="compose" title="Generate">
+              <p className="text-sm text-stone-600 mb-3">
+                Watch the composer run. Preview discards the result; Generate &amp; save adds a
+                pending row to the queue or curated pool.
+              </p>
+              <h3 className="text-sm font-medium mb-2">Daily board</h3>
+              <ComposePanel
+                mode="daily"
+                defaultDate={defaultComposeDate(queue.days)}
+                busy={composing !== null}
+                onComposingChange={handleComposingChange}
+                onSaved={queue.reload}
+                onExpired={expire}
               />
-            </section>
-            <section>
-              <h2 className="text-lg font-medium mb-3">Curated meals</h2>
-              <ReviewQueue
-                meals={mealReview.items}
-                loading={mealReview.loading}
-                error={mealReview.error}
-                decidingId={mealReview.decidingId}
-                onReload={() => void mealReview.reload()}
-                onDecide={(id, action) => void mealReview.decide(id, action)}
+              <h3 className="text-sm font-medium mt-5 mb-2">Curated pool</h3>
+              <ComposePanel
+                mode="curated"
+                busy={composing !== null}
+                onComposingChange={handleComposingChange}
+                onSaved={curated.reload}
+                onExpired={expire}
               />
-            </section>
+            </Section>
+
+            <Section id="queue" title="Daily queue">
+              <DailyQueueView
+                days={queue.days}
+                loading={queue.loading}
+                error={queue.error}
+                onReload={() => void queue.reload()}
+                onExpired={expire}
+              />
+            </Section>
+
+            <Section id="curated" title="Curated meals">
+              <ReviewQueueShell
+                count={curated.items?.length ?? null}
+                loading={curated.loading}
+                error={curated.error}
+                emptyMessage="Nothing waiting for review. Compose some meals first."
+                onReload={() => void curated.reload()}
+              >
+                {curated.items?.map((meal) => (
+                  <MealReviewCard
+                    key={meal.id}
+                    meal={meal}
+                    busy={curated.decidingId === meal.id}
+                    onApprove={() => void curated.decide(meal.id, "approve")}
+                    onReject={() => void curated.decide(meal.id, "reject")}
+                    onSaveEdit={(edit) => updateMeal(meal.id, edit).then(() => undefined)}
+                    onEdited={() => void curated.reload()}
+                  />
+                ))}
+              </ReviewQueueShell>
+            </Section>
           </>
         ) : status === "authed" ? (
           <p className="text-stone-600">This account doesn't have admin access.</p>
@@ -86,6 +152,168 @@ export function Admin() {
         )}
       </div>
     </main>
+  );
+}
+
+function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="mb-10 scroll-mt-6">
+      <h2 className="text-lg font-medium mb-3">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+// The date a new daily composition most likely targets: the earliest upcoming day still
+// missing a slot, else the day after the last queued date (so queueing further ahead does
+// not default onto a full slot), else today when nothing is queued. A fully-empty future
+// date is never in the payload, so the queue's own dates anchor the next target.
+function defaultComposeDate(days: QueuedDay[] | null): string {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!days || days.length === 0) return today;
+  const incomplete = days.find((day) => day.missing_meal_types.length > 0);
+  return incomplete ? incomplete.date : nextDay(days[days.length - 1].date);
+}
+
+// The calendar day after a YYYY-MM-DD date. Parsed and advanced in UTC so the arithmetic
+// is timezone-stable; the queue speaks calendar dates, not instants.
+function nextDay(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+interface DailyQueueState {
+  days: QueuedDay[] | null;
+  loading: boolean;
+  error: string | null;
+  reload: () => Promise<void>;
+}
+
+// The upcoming daily board grouped by date. Like useReviewQueue it runs only for an authed
+// admin and routes a 401 to onExpired, but it reads the whole queue rather than one status.
+function useDailyQueue(enabled: boolean, onExpired: () => void): DailyQueueState {
+  const [days, setDays] = useState<QueuedDay[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    if (!enabled) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setDays(await listDailyQueue());
+    } catch (err) {
+      if (err instanceof AdminAuthError) onExpired();
+      else setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [enabled, onExpired]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setDays(null);
+      return;
+    }
+    void reload();
+  }, [enabled, reload]);
+
+  return { days, loading, error, reload };
+}
+
+interface DailyQueueViewProps {
+  days: QueuedDay[] | null;
+  loading: boolean;
+  error: string | null;
+  onReload: () => void;
+  onExpired: () => void;
+}
+
+function DailyQueueView({ days, loading, error, onReload, onExpired }: DailyQueueViewProps) {
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [decideError, setDecideError] = useState<string | null>(null);
+
+  const decide = useCallback(
+    async (id: string, action: "approve" | "reject") => {
+      setDecidingId(id);
+      setDecideError(null);
+      try {
+        await (action === "approve" ? approveDaily(id) : rejectDaily(id));
+        onReload();
+      } catch (err) {
+        if (err instanceof AdminAuthError) onExpired();
+        else setDecideError(errorMessage(err));
+      } finally {
+        setDecidingId(null);
+      }
+    },
+    [onReload, onExpired],
+  );
+
+  if (loading && days === null) return <p className="text-stone-600">Loading the queue…</p>;
+  if (error && days === null) {
+    return (
+      <p role="alert" className="text-sm text-red-700">
+        {error}{" "}
+        <button type="button" onClick={onReload} className="underline cursor-pointer">
+          Try again
+        </button>
+      </p>
+    );
+  }
+  if (!days || days.length === 0) {
+    return (
+      <p className="text-stone-600">
+        Nothing scheduled. Generate a board above, or wait for the nightly job.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {decideError && (
+        <p role="alert" className="text-sm text-red-700">
+          {decideError}
+        </p>
+      )}
+      {days.map((day) => (
+        <div key={day.date}>
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="font-medium">{formatBoardDate(day.date)}</h3>
+            <span className="text-xs text-stone-500">
+              {day.approved_count} approved · {day.pending_count} pending
+            </span>
+          </div>
+          {(day.pending_count > 0 || day.missing_meal_types.length > 0) && (
+            <p className="text-xs text-amber-700 mb-2">
+              {day.approved_count === 0
+                ? "No slot is approved yet, so this day will stay locked."
+                : "Not fully approved — the public board will show only the approved meals."}
+              {day.missing_meal_types.length > 0 &&
+                ` Missing: ${day.missing_meal_types.map((m) => MEAL_TYPE_LABEL[m]).join(", ")}.`}
+            </p>
+          )}
+          <div className="space-y-3">
+            {day.slots.map((slot) => (
+              <DailySuggestionCard
+                key={slot.id}
+                suggestion={slot}
+                busy={decidingId === slot.id}
+                onApprove={() => void decide(slot.id, "approve")}
+                onReject={() => void decide(slot.id, "reject")}
+                onSaveEdit={
+                  slot.approval_status === "pending"
+                    ? (edit) => updateDaily(slot.id, edit).then(() => undefined)
+                    : undefined
+                }
+                onEdited={onReload}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -106,7 +334,7 @@ function LoginForm({ onSubmit, busy, error }: LoginFormProps) {
 
   return (
     <form onSubmit={submit} className="max-w-sm flex flex-col gap-3">
-      <p className="text-stone-600 mb-1">Sign in to review composed meals.</p>
+      <p className="text-stone-600 mb-1">Sign in to review and compose meals.</p>
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-stone-600">Email</span>
         <input
@@ -144,188 +372,5 @@ function LoginForm({ onSubmit, busy, error }: LoginFormProps) {
         {busy ? "Signing in…" : "Log in"}
       </button>
     </form>
-  );
-}
-
-interface GeneratePanelProps {
-  onExpired: () => void;
-}
-
-function GeneratePanel({ onExpired }: GeneratePanelProps) {
-  const [mealType, setMealType] = useState<MealType>("breakfast");
-  const { status, events, meal, error, start, cancel } = useReasoningStream(onExpired);
-  const streaming = status === "streaming";
-
-  return (
-    <section className="rounded border border-stone-200 bg-white p-5 mb-6">
-      <h2 className="text-lg font-medium">Watch the agent compose</h2>
-      <p className="text-sm text-stone-600 mb-3">
-        A live demo of the composer. The meal is not saved — the public board is
-        generated by the nightly job.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="generate-meal-type" className="sr-only">
-          Meal type
-        </label>
-        <select
-          id="generate-meal-type"
-          value={mealType}
-          onChange={(e) => setMealType(e.target.value as MealType)}
-          disabled={streaming}
-          className="rounded border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:border-emerald-700 disabled:opacity-50"
-        >
-          {MEAL_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {MEAL_TYPE_LABEL[type]}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => void start(mealType)}
-          disabled={streaming}
-          className="rounded bg-emerald-800 text-white px-4 py-2 text-sm disabled:opacity-50 enabled:cursor-pointer"
-        >
-          {streaming ? "Composing…" : "Generate now"}
-        </button>
-        {streaming && (
-          <button
-            type="button"
-            onClick={cancel}
-            className="rounded border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 cursor-pointer"
-          >
-            Stop
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <p role="alert" className="text-sm text-red-700 mt-3">
-          <span className="font-medium">Couldn't compose —</span> {error}
-        </p>
-      )}
-
-      {(streaming || events.length > 0) && (
-        <div className="mt-4">
-          <ReasoningReplay events={events} live pending={streaming} />
-        </div>
-      )}
-
-      {status === "done" && meal && (
-        <div className="mt-4">
-          <ComposedMealView meal={meal} />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ComposedMealView({ meal }: { meal: ComposedMeal }) {
-  return (
-    <article className="rounded border border-stone-200 bg-stone-50 p-5">
-      <div className="flex items-start justify-between gap-3 mb-1">
-        <h3 className="text-lg font-medium">{meal.name}</h3>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
-            {MEAL_TYPE_LABEL[meal.meal_type]}
-          </span>
-          <LLMProviderBadge model={meal.model} />
-        </div>
-      </div>
-      <div className="mb-2">
-        <ComposeCost usage={meal.usage} model={meal.model} />
-      </div>
-      <p className="text-sm text-stone-600 mb-3">{meal.description}</p>
-      <ul className="flex flex-wrap gap-1.5 mb-3">
-        {meal.ingredients.map((ingredient) => (
-          <li
-            key={ingredient.name}
-            className="rounded border border-stone-200 bg-white px-2 py-0.5 text-sm"
-          >
-            {ingredient.name}
-            {ingredient.category && (
-              <span className="text-stone-400"> · {ingredient.category}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-      <UnverifiedNote ingredients={meal.unverified_ingredients} />
-    </article>
-  );
-}
-
-interface ReviewQueueProps {
-  meals: AdminMeal[] | null;
-  loading: boolean;
-  error: string | null;
-  decidingId: string | null;
-  onReload: () => void;
-  onDecide: (mealId: string, action: ReviewAction) => void;
-}
-
-function ReviewQueue({
-  meals,
-  loading,
-  error,
-  decidingId,
-  onReload,
-  onDecide,
-}: ReviewQueueProps) {
-  return (
-    <ReviewQueueShell
-      count={meals?.length ?? null}
-      loading={loading}
-      error={error}
-      emptyMessage="Nothing waiting for review. Compose some meals first."
-      onReload={onReload}
-    >
-      {meals?.map((meal) => (
-        <MealReviewCard
-          key={meal.id}
-          meal={meal}
-          busy={decidingId === meal.id}
-          onApprove={() => onDecide(meal.id, "approve")}
-          onReject={() => onDecide(meal.id, "reject")}
-        />
-      ))}
-    </ReviewQueueShell>
-  );
-}
-
-interface DailyReviewQueueProps {
-  suggestions: AdminDailySuggestion[] | null;
-  loading: boolean;
-  error: string | null;
-  decidingId: string | null;
-  onReload: () => void;
-  onDecide: (suggestionId: string, action: ReviewAction) => void;
-}
-
-function DailyReviewQueue({
-  suggestions,
-  loading,
-  error,
-  decidingId,
-  onReload,
-  onDecide,
-}: DailyReviewQueueProps) {
-  return (
-    <ReviewQueueShell
-      count={suggestions?.length ?? null}
-      loading={loading}
-      error={error}
-      emptyMessage="Nothing waiting for review. Generate a daily board first."
-      onReload={onReload}
-    >
-      {suggestions?.map((suggestion) => (
-        <DailySuggestionCard
-          key={suggestion.id}
-          suggestion={suggestion}
-          busy={decidingId === suggestion.id}
-          onApprove={() => onDecide(suggestion.id, "approve")}
-          onReject={() => onDecide(suggestion.id, "reject")}
-        />
-      ))}
-    </ReviewQueueShell>
   );
 }

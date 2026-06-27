@@ -6,18 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AdminAuthError,
   approveMeal,
+  getComposeSettings,
   getCurrentUser,
-  listPendingDaily,
+  listDailyQueue,
   listPendingMeals,
   login,
   type AdminMeal,
   type AuthUser,
+  type ComposeSettings,
 } from "../api/admin";
 import { Admin } from "./Admin";
 
 // Keep AdminAuthError and errorMessage real (instanceof and message formatting
-// matter). Stub only the network calls, including the daily-board queue that runs
-// alongside the meal queue for any signed-in admin.
+// matter). Stub only the network calls the admin shell fires on mount for a signed-in
+// admin: the curated queue, the daily queue, and the generation-settings panel.
 vi.mock("../api/admin", async (importActual) => {
   const actual = await importActual<typeof import("../api/admin")>();
   return {
@@ -28,9 +30,11 @@ vi.mock("../api/admin", async (importActual) => {
     listPendingMeals: vi.fn(),
     approveMeal: vi.fn(),
     rejectMeal: vi.fn(),
-    listPendingDaily: vi.fn(),
+    listDailyQueue: vi.fn(),
     approveDaily: vi.fn(),
     rejectDaily: vi.fn(),
+    getComposeSettings: vi.fn(),
+    updateComposeSettings: vi.fn(),
   };
 });
 
@@ -38,9 +42,16 @@ const getCurrentUserMock = vi.mocked(getCurrentUser);
 const loginMock = vi.mocked(login);
 const listMock = vi.mocked(listPendingMeals);
 const approveMock = vi.mocked(approveMeal);
-const listDailyMock = vi.mocked(listPendingDaily);
+const listQueueMock = vi.mocked(listDailyQueue);
+const settingsMock = vi.mocked(getComposeSettings);
 
 const adminUser: AuthUser = { email: "admin@example.com", role: "admin" };
+
+const composeSettings: ComposeSettings = {
+  provider: "openai",
+  model: "gpt-5.4-mini",
+  available_providers: ["openai"],
+};
 
 function meal(): AdminMeal {
   return {
@@ -78,8 +89,10 @@ beforeEach(() => {
   // Default: /me finds no session, so the page bootstraps to the login form. Tests
   // that start authed override this with a resolved user.
   getCurrentUserMock.mockRejectedValue(new AdminAuthError("No session."));
-  // These tests assert on the curated-meal queue, so the daily queue resolves empty.
-  listDailyMock.mockResolvedValue([]);
+  // A signed-in admin also mounts the daily queue and the generation-settings panel;
+  // resolve them quietly so the curated-queue assertions stand on their own.
+  listQueueMock.mockResolvedValue([]);
+  settingsMock.mockResolvedValue(composeSettings);
 });
 
 describe("Admin", () => {

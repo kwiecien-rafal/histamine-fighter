@@ -12,17 +12,22 @@ the two paths can never describe the same row differently.
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.term_match import TermMatcher
 from app.enums import CompatibilityVerdict, HistamineMechanism
+from app.schemas.meal import ProposedIngredient
 from app.services.ingredient_service import (
     IngredientMatch,
     IngredientService,
     is_ambiguous,
 )
+
+if TYPE_CHECKING:
+    from app.agents.meal_verification import MealVerification
 
 log = structlog.get_logger(__name__)
 
@@ -198,3 +203,26 @@ async def lookup_ingredients(
                     results[index] = _unusable(ingredient, _LOOKUP_FAILED)
 
     return [result for result in results if result is not None]
+
+
+async def verify_submission(
+    service: IngredientService,
+    ingredients: Sequence[ProposedIngredient],
+    recipe: Sequence[str] | None,
+    *,
+    risky_terms: TermMatcher,
+) -> "MealVerification":
+    """Re-derive a meal's safety from the index: the shared composer/edit gate.
+
+    Reads every ingredient against the curated index and scans the recipe for an
+    index-flagged term, so a composition and an admin edit are vetted identically and
+    can never produce different verdicts for the same list. ``meal_verification`` is
+    imported inside the function on purpose: it depends on this module's
+    ``LookupResult``, so a module-level import here would cycle.
+    """
+    from app.agents.meal_verification import verify_meal
+
+    lookups = await lookup_ingredients(
+        service, [(item.name, item.category) for item in ingredients]
+    )
+    return verify_meal(lookups, list(recipe or []), risky_terms)

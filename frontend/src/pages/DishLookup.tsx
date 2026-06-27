@@ -1,18 +1,16 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 import { MAX_DISH_CHARS } from "../api/client";
 import { AlternativesPanel } from "../components/AlternativesPanel";
 import { AssessmentResult } from "../components/AssessmentResult";
 import { IngredientEditor } from "../components/IngredientEditor";
-import { SettingsDrawer } from "../components/SettingsDrawer";
+import { Navbar } from "../components/Navbar";
 import { UsagePanel } from "../components/UsagePanel";
 import { useDishLookupFlow } from "../hooks/useDishLookupFlow";
 import { pivotTone } from "../lib/assessment";
 
 export function DishLookup() {
   const [dish, setDish] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const {
     state,
     propose,
@@ -40,29 +38,14 @@ export function DishLookup() {
   const resultTone = state.phase === "result" ? pivotTone(state.result) : null;
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
-      <div className="max-w-xl mx-auto">
-        <header className="flex items-start justify-between mb-2">
-          <h1 className="text-3xl font-semibold">Histamine Fighter</h1>
-          <nav className="flex items-center gap-4">
-            <Link
-              to="/daily"
-              className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4"
-            >
-              Today's meals
-            </Link>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
-            >
-              Settings
-            </button>
-          </nav>
-        </header>
-        <p className="text-stone-600 mb-8">
-          Ask whether a dish is safe for histamine intolerance.
-        </p>
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-10 pb-24">
+        <div className="max-w-xl mx-auto">
+          <h1 className="text-3xl font-semibold mb-1">Is your dish safe?</h1>
+          <p className="text-stone-600 mb-8">
+            Ask whether a dish is safe for histamine intolerance.
+          </p>
 
         {(state.phase === "idle" || proposing) && (
           <>
@@ -119,13 +102,10 @@ export function DishLookup() {
             )}
           </>
         )}
-      </div>
+        </div>
 
-      <SettingsDrawer
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      />
-      <UsagePanel />
-    </main>
+        <UsagePanel />
+      </main>
+    </>
   );
 }

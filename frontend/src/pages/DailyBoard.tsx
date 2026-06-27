@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 
 import type { RevealedBoard } from "../api/daily";
 import { ComposeCost } from "../components/ComposeCost";
 import { LLMProviderBadge } from "../components/LLMProviderBadge";
 import { MealCard } from "../components/MealCard";
+import { Navbar } from "../components/Navbar";
 import { ReasoningReplay } from "../components/ReasoningReplay";
 import { useDailyBoard } from "../hooks/useDailyBoard";
 import { formatRemaining, hasSeenBoard, markBoardSeen, prefersReducedMotion } from "../lib/daily";
@@ -25,17 +25,16 @@ export function DailyBoard() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-12 pb-24">
-      <div className="max-w-2xl mx-auto">
-        <header className="mb-8">
-          <Link to="/" className="text-sm text-stone-500 hover:text-stone-800">
-            Histamine Fighter
-          </Link>
-          <h1 className="text-3xl font-semibold">Today's meals</h1>
-          <p className="text-stone-600 mt-1">
-            Four histamine-safe meals our agent composes fresh each day.
-          </p>
-        </header>
+    <>
+      <Navbar />
+      <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-10 pb-24">
+        <div className="max-w-2xl mx-auto">
+          <header className="mb-8">
+            <h1 className="text-3xl font-semibold">Today's meals</h1>
+            <p className="text-stone-600 mt-1">
+              Four histamine-safe meals our agent composes fresh each day.
+            </p>
+          </header>
 
         {/* The error only replaces the page when the first load failed; a failed
             background reload keeps the board it already has. */}
@@ -67,8 +66,9 @@ export function DailyBoard() {
         )}
 
         {board?.status === "revealed" && <RevealedView key={board.date} board={board} />}
-      </div>
-    </main>
+        </div>
+      </main>
+    </>
   );
 }
 

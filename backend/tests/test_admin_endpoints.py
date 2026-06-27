@@ -12,11 +12,49 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.embeddings import EMBEDDING_DIM
-from app.enums import ApprovalStatus, MealType
-from app.models import CuratedMeal
+from app.enums import ApprovalStatus, Compatibility, MealType
+from app.models import CuratedMeal, HistamineIngredient
 from app.models.user import User
+from app.schemas.admin import AdminMealUpdate
+from app.schemas.meal import (
+    MAX_CONFIRMED_INGREDIENTS,
+    MAX_DESCRIPTION_CHARS,
+    MAX_DISH_CHARS,
+    MAX_INGREDIENT_CHARS,
+)
 
 _ZERO_VECTOR = [0.0] * EMBEDDING_DIM
+
+
+async def _seed_index(session: AsyncSession) -> None:
+    session.add_all(
+        [
+            HistamineIngredient(
+                name="parmesan",
+                sources=["test"],
+                compatibility=Compatibility.INCOMPATIBLE,
+                category="aged hard cheese",
+            ),
+            HistamineIngredient(
+                name="courgette",
+                sources=["test"],
+                compatibility=Compatibility.WELL_TOLERATED,
+                category="vegetable",
+            ),
+        ]
+    )
+    await session.flush()
+
+
+def _edit_body(meal: CuratedMeal, *, ingredients: list[dict[str, str]]) -> dict[str, object]:
+    """A full edit body that changes only the ingredients, so the text is untouched."""
+    return {
+        "name": meal.name,
+        "description": meal.description,
+        "ingredients": ingredients,
+        "recipe": meal.recipe,
+        "tags": list(meal.tags),
+    }
 
 
 async def _add_meal(
@@ -167,5 +205,130 @@ async def test_approve_without_a_session_is_401(client: AsyncClient, session: As
     meal = await _add_meal(session)
 
     resp = await client.patch(f"/admin/meals/{meal.id}/approve")
+
+    assert resp.status_code == 401
+
+
+# --- PATCH /admin/meals/{id} (edit) -----------------------------------------------
+
+
+async def test_edit_pending_meal_rederives_unverified(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    meal = await _add_meal(session)
+    # An indexed-safe ingredient plus one the index has no entry for.
+    body = _edit_body(
+        meal,
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "mystery spice", "category": "spice"},
+        ],
+    )
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 200
+    updated = resp.json()
+    assert updated["unverified_ingredients"] == ["mystery spice"]
+    assert [item["name"] for item in updated["ingredients"]] == ["courgette", "mystery spice"]
+
+
+async def test_edit_rejects_an_introduced_blocker(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    meal = await _add_meal(session)
+    body = _edit_body(
+        meal,
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "parmesan", "category": "aged hard cheese"},
+        ],
+    )
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert any("parmesan" in blocker for blocker in detail["blockers"])
+
+
+async def test_edit_rejects_a_risky_recipe_mention(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    meal = await _add_meal(session)
+    body = _edit_body(meal, ingredients=[{"name": "courgette", "category": "vegetable"}])
+    body["recipe"] = ["Peel into ribbons.", "Top with grated parmesan."]
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 422
+    assert "parmesan" in resp.json()["detail"]["recipe_flags"]
+
+
+async def test_edit_an_approved_meal_is_409(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    meal = await _add_meal(session, approval_status=ApprovalStatus.APPROVED)
+    body = _edit_body(meal, ingredients=[{"name": "courgette", "category": "vegetable"}])
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 409
+
+
+async def test_edit_with_an_oversized_ingredient_list_is_capped_like_the_composer(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    # The composer truncates an over-cap list rather than rejecting it; an edit normalizes
+    # the same way, so a list past the cap is capped to MAX_CONFIRMED_INGREDIENTS, not 422'd.
+    meal = await _add_meal(session)
+    body = _edit_body(meal, ingredients=[{"name": f"item {n}", "category": "x"} for n in range(30)])
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 200
+    assert len(resp.json()["ingredients"]) == MAX_CONFIRMED_INGREDIENTS
+
+
+async def test_edit_truncates_an_over_long_ingredient_name_like_the_composer(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    # The composer truncates an ingredient name to the per-item cap; the edit normalizes the
+    # same way rather than 422'ing a name the composer would have stored.
+    meal = await _add_meal(session)
+    long_name = "x" * (MAX_INGREDIENT_CHARS + 50)
+    body = _edit_body(meal, ingredients=[{"name": long_name, "category": ""}])
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 200
+    assert len(resp.json()["ingredients"][0]["name"]) == MAX_INGREDIENT_CHARS
+
+
+def test_meal_edit_truncates_over_long_text_like_the_composer() -> None:
+    # A composed name/description carries no length cap, so the edit schema truncates to the
+    # same bound rather than rejecting a meal the composer could have produced.
+    update = AdminMealUpdate.model_validate(
+        {
+            "name": "n" * (MAX_DISH_CHARS + 50),
+            "description": "d" * (MAX_DESCRIPTION_CHARS + 50),
+            "ingredients": [{"name": "courgette", "category": "vegetable"}],
+            "recipe": None,
+            "tags": [],
+        }
+    )
+
+    assert len(update.name) == MAX_DISH_CHARS
+    assert len(update.description) == MAX_DESCRIPTION_CHARS
+
+
+async def test_edit_without_a_session_is_401(client: AsyncClient, session: AsyncSession) -> None:
+    meal = await _add_meal(session)
+    body = _edit_body(meal, ingredients=[{"name": "courgette", "category": "vegetable"}])
+
+    resp = await client.patch(f"/admin/meals/{meal.id}", json=body)
 
     assert resp.status_code == 401

@@ -25,21 +25,29 @@ from app.config import settings
 from app.core.logging import configure_logging
 from app.db.engine import SessionLocal
 from app.embeddings import Embedder, get_embedder
-from app.enums import ApprovalStatus, MealType
+from app.enums import MealType
 from app.llm.config import LLMRequestConfig
 from app.llm.errors import LLMError
 from app.llm.langchain_factory import build_chat_model
-from app.models import CuratedMeal
-from app.models.curated_meal import meal_embedding_text
+from app.models import GenerationSettings
+from app.schemas.meal import ComposedMeal
+from app.services.generation_settings_service import GenerationSettingsService
 from app.services.ingredient_service import IngredientService
 from app.services.meal_service import MealService
 
 log = structlog.get_logger()
 
 
-def _build_agent(session: AsyncSession, embedder: Embedder) -> ComposerAgent:
-    # No request in scope, so the provider resolves from settings, not X-LLM headers.
-    chat = build_chat_model(LLMRequestConfig(), temperature=settings.compose_temperature)
+def _build_agent(
+    gen_settings: GenerationSettings, session: AsyncSession, embedder: Embedder
+) -> ComposerAgent:
+    # No request in scope, so the provider comes from the operator-set settings.
+    chat = build_chat_model(
+        LLMRequestConfig(
+            provider=gen_settings.composer_provider, model=gen_settings.composer_model
+        ),
+        temperature=settings.compose_temperature,
+    )
     return ComposerAgent(
         chat=chat,
         ingredient_service=IngredientService(session),
@@ -47,12 +55,10 @@ def _build_agent(session: AsyncSession, embedder: Embedder) -> ComposerAgent:
     )
 
 
-async def _compose_one(
-    agent: ComposerAgent, embedder: Embedder, meal_type: MealType
-) -> CuratedMeal | None:
-    """Compose one meal and shape it into a pending row, or None when it fails."""
+async def _compose_one(agent: ComposerAgent, meal_type: MealType) -> ComposedMeal | None:
+    """Compose one meal, or None when the composer cannot finish a safe one."""
     try:
-        meal = await agent.compose(meal_type)
+        return await agent.compose(meal_type)
     except ComposerExhausted:
         log.warning("compose.exhausted", meal_type=meal_type.value)
         return None
@@ -60,37 +66,30 @@ async def _compose_one(
         log.warning("compose.failed", meal_type=meal_type.value, error=str(exc))
         return None
 
-    vector = (
-        await embedder.embed_documents(
-            [meal_embedding_text(meal.name, meal.description, meal.tags)]
-        )
-    )[0]
-    return CuratedMeal(
-        name=meal.name,
-        meal_type=meal.meal_type,
-        description=meal.description,
-        ingredients=[ingredient.model_dump() for ingredient in meal.ingredients],
-        recipe=meal.recipe,
-        tags=meal.tags,
-        unverified_ingredients=meal.unverified_ingredients,
-        model=meal.model,
-        usage=meal.usage.model_dump(),
-        reasoning_trace=[event.model_dump() for event in meal.reasoning_trace],
-        approval_status=ApprovalStatus.PENDING,
-        embedding=vector,
-    )
-
 
 async def compose_all() -> None:
     """Compose one meal per meal type and store the successes as pending rows."""
     embedder = get_embedder()
     stored = 0
     async with SessionLocal() as session:
-        agent = _build_agent(session, embedder)
+        gen_settings = await GenerationSettingsService(session).get()
+        try:
+            agent = _build_agent(gen_settings, session, embedder)
+        except LLMError as exc:
+            # The operator-set provider can drift out from under cron (a rotated key,
+            # or public_deployment flipped with ollama saved). Fail fast and loud.
+            log.error(
+                "compose.settings.invalid",
+                provider=gen_settings.composer_provider,
+                model=gen_settings.composer_model,
+                error=str(exc),
+            )
+            raise SystemExit(1) from exc
+        meal_service = MealService(session, embedder)
         for meal_type in MealType:
-            row = await _compose_one(agent, embedder, meal_type)
-            if row is not None:
-                session.add(row)
+            meal = await _compose_one(agent, meal_type)
+            if meal is not None:
+                row = await meal_service.store_pending(meal)
                 stored += 1
                 log.info("compose.stored", meal_type=meal_type.value, name=row.name)
         await session.commit()

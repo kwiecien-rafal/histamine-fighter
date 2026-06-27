@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { formatRemaining, hasSeenBoard, markBoardSeen } from "./daily";
+import { formatBoardDate, formatRemaining, hasSeenBoard, markBoardSeen } from "./daily";
+
+describe("formatBoardDate", () => {
+  it("formats a YYYY-MM-DD date on its own calendar day", () => {
+    // new Date("2026-06-25") parses as UTC midnight and slips a day west of UTC; the
+    // helper builds a local date so the calendar day is preserved.
+    expect(formatBoardDate("2026-06-25")).toContain("Jun 25 2026");
+  });
+});
 
 describe("formatRemaining", () => {
   it("drops hours and minutes once they reach zero", () => {

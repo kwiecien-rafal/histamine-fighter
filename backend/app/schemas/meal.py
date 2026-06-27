@@ -1,4 +1,6 @@
+from collections.abc import Iterable
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
@@ -20,6 +22,12 @@ MAX_CONFIRMED_INGREDIENTS = 25
 # name is never rejected downstream.
 MAX_INGREDIENT_CHARS = 80
 MAX_DISH_CHARS = 200
+# Composed-meal caps, shared by the composer's normalization and the admin edit
+# schemas so an edit can never store a meal the composer would not produce.
+MAX_DESCRIPTION_CHARS = 1000
+MAX_RECIPE_STEPS = 20
+MAX_TAGS = 8
+MAX_TAG_CHARS = 40
 MAX_REASON_CHARS = 240
 MAX_ADVISORY_CHARS = 200
 # An alternative's pitch; its name shares MAX_DISH_CHARS so a suggestion always
@@ -63,6 +71,52 @@ class ProposedIngredient(BaseModel):
 
     name: str = Field(min_length=1, max_length=MAX_INGREDIENT_CHARS)
     category: str | None = Field(default=None, max_length=MAX_INGREDIENT_CHARS)
+
+
+# The composer (on submit) and the admin edit schemas share these so a composed meal and
+# an edited one are shaped by one set of rules. Both truncate rather than reject, so a
+# freshly composed meal always round-trips back through an edit unchanged.
+
+
+def normalize_dish_text(value: str, *, max_chars: int) -> str:
+    """Strip a free-text meal field and cap its length."""
+    return value.strip()[:max_chars].rstrip()
+
+
+def normalize_ingredients(items: Iterable[tuple[str, str | None]]) -> list[ProposedIngredient]:
+    """Trim and cap each ingredient, drop blanks and case-folded duplicates, cap the count."""
+    kept: list[ProposedIngredient] = []
+    seen: set[str] = set()
+    for raw_name, raw_category in items:
+        name = raw_name.strip()[:MAX_INGREDIENT_CHARS].rstrip()
+        if not name or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        category = (raw_category or "").strip()[:MAX_INGREDIENT_CHARS].rstrip()
+        kept.append(ProposedIngredient(name=name, category=category or None))
+        if len(kept) == MAX_CONFIRMED_INGREDIENTS:
+            break
+    return kept
+
+
+def normalize_recipe(steps: Iterable[str]) -> list[str] | None:
+    """The trimmed recipe steps capped to the step limit, or None when none survive."""
+    cleaned = [step.strip() for step in steps if step.strip()][:MAX_RECIPE_STEPS]
+    return cleaned or None
+
+
+def normalize_tags(tags: Iterable[str]) -> list[str]:
+    """Trim and cap each tag, drop blanks and case-folded duplicates, cap the count."""
+    kept: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        cleaned = tag.strip()[:MAX_TAG_CHARS].rstrip()
+        if cleaned and cleaned.casefold() not in seen:
+            seen.add(cleaned.casefold())
+            kept.append(cleaned)
+        if len(kept) == MAX_TAGS:
+            break
+    return kept
 
 
 class IngredientProposalResponse(BaseModel):
@@ -397,6 +451,11 @@ class ComposedMealCard(BaseModel):
         description="Token usage of every model call the composition took.",
     )
 
+    @classmethod
+    def from_meal(cls, meal: "ComposedMeal") -> "ComposedMealCard":
+        """The card view of a composed meal, dropping the reasoning trace."""
+        return cls(**meal.model_dump(exclude={"reasoning_trace"}))
+
 
 class ComposedMeal(ComposedMealCard):
     """The full composed meal, carrying the reasoning trace persisted by the batch."""
@@ -423,7 +482,13 @@ class MealStreamItem(BaseModel):
 
     @classmethod
     def of(cls, meal: ComposedMeal) -> "MealStreamItem":
-        return cls(meal=ComposedMealCard(**meal.model_dump(exclude={"reasoning_trace"})))
+        return cls(meal=ComposedMealCard.from_meal(meal))
+
+
+class SavedEvent(BaseModel):
+    """The terminal frame on a saving compose stream: the persisted row's id."""
+
+    id: UUID
 
 
 class LookupIngredientSafety(BaseModel):

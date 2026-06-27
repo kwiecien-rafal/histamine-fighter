@@ -1,7 +1,10 @@
-import type { AdminMeal } from "../api/admin";
+import { useState } from "react";
+
+import type { AdminMeal, MealEdit } from "../api/admin";
 import { MEAL_TYPE_LABEL } from "../lib/meal";
 import { ComposeCost } from "./ComposeCost";
 import { LLMProviderBadge } from "./LLMProviderBadge";
+import { MealEditForm } from "./MealEditForm";
 import { ReviewActions } from "./ReviewActions";
 import { TraceDetails } from "./TraceDetails";
 import { UnverifiedNote } from "./UnverifiedNote";
@@ -11,9 +14,20 @@ interface MealReviewCardProps {
   busy: boolean;
   onApprove: () => void;
   onReject: () => void;
+  // When provided, the card offers an inline edit; onSaveEdit persists, onEdited refreshes.
+  onSaveEdit?: (edit: MealEdit) => Promise<void>;
+  onEdited?: () => void;
 }
 
-export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCardProps) {
+export function MealReviewCard({
+  meal,
+  busy,
+  onApprove,
+  onReject,
+  onSaveEdit,
+  onEdited,
+}: MealReviewCardProps) {
+  const [editing, setEditing] = useState(false);
   return (
     <article className="rounded border border-stone-200 bg-white p-5">
       <div className="flex items-start justify-between gap-3 mb-1">
@@ -53,7 +67,36 @@ export function MealReviewCard({ meal, busy, onApprove, onReject }: MealReviewCa
 
       <TraceDetails trace={meal.reasoning_trace} />
 
-      <ReviewActions busy={busy} onApprove={onApprove} onReject={onReject} />
+      {editing && onSaveEdit ? (
+        <MealEditForm
+          initial={{
+            name: meal.name,
+            description: meal.description,
+            ingredients: meal.ingredients,
+            recipe: meal.recipe,
+            tags: meal.tags,
+          }}
+          onSave={async (edit) => {
+            await onSaveEdit(edit);
+            setEditing(false);
+            onEdited?.();
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <ReviewActions busy={busy} onApprove={onApprove} onReject={onReject} />
+          {onSaveEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }

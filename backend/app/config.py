@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     # at the same instant for every visitor worldwide.
     daily_reveal_hour_utc: int = Field(default=10, ge=0, le=23)
 
+    # How many days ahead, starting tomorrow, the nightly cron keeps the board filled.
+    # 1 preserves the "just tomorrow" cadence; raise for a longer auto-runway.
+    daily_cron_horizon_days: int = Field(default=1, ge=1, le=14)
+
+    # The furthest ahead, in days from today, an admin may manually queue a board.
+    daily_queue_max_ahead_days: int = Field(default=14, ge=1, le=90)
+
     # Database connection. Default points at the Postgres in docker-compose.
     database_url: str = "postgresql+asyncpg://histamine:histamine@localhost:5432/histamine"
 

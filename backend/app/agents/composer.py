@@ -38,31 +38,34 @@ from pydantic import ValidationError
 
 from app.agents.base import BaseAgent
 from app.agents.dish_lookup import _grounded_verdict
-from app.agents.meal_verification import MealVerification, verify_meal
+from app.agents.meal_verification import MealVerification
 from app.agents.prompting import load_prompt, render_prompt
 from app.core.term_match import TermMatcher
 from app.enums import MealType, TraceReading
 from app.llm.errors import LLMError, LLMInvocationError
 from app.llm.langchain_factory import ChatModel
 from app.schemas.meal import (
-    MAX_CONFIRMED_INGREDIENTS,
+    MAX_DESCRIPTION_CHARS,
+    MAX_DISH_CHARS,
     MAX_INGREDIENT_CHARS,
     ComposedMeal,
     FindSafeIngredients,
     LookupIngredientSafety,
     MealStreamItem,
-    ProposedIngredient,
-    ProposedIngredientDraft,
     SearchCuratedMeals,
     SubmitMeal,
     TraceEvent,
     TraceStreamItem,
+    normalize_dish_text,
+    normalize_ingredients,
+    normalize_recipe,
+    normalize_tags,
 )
 from app.services.ingredient_lookup import (
     LookupCandidate,
     LookupResult,
     lookup_ingredient_safety,
-    lookup_ingredients,
+    verify_submission,
 )
 from app.services.ingredient_service import IngredientService
 from app.services.meal_service import MealService
@@ -72,9 +75,6 @@ log = structlog.get_logger(__name__)
 _SUBSTITUTE_LIMIT = 3
 _SEARCH_K = 3
 _MAX_TRACE_TEXT = 280
-_MAX_RECIPE_STEPS = 20
-_MAX_TAGS = 8
-_MAX_TAG_CHARS = 40
 # A hard budget on the agentic loop. Low-histamine cooking is restrictive, so a run
 # may iterate; this bounds the cost and the abandon point.
 _DEFAULT_MAX_ITERATIONS = 12
@@ -125,7 +125,7 @@ class ComposerAgent(BaseAgent):
             ComposerExhausted: the loop hit its budget without a safe submission.
             LLMInvocationError: the model failed or cannot call tools.
         """
-        async for item in self._events(meal_type):
+        async for item in self.events(meal_type):
             if isinstance(item, ComposedMeal):
                 log.info(
                     "composer.done",
@@ -137,29 +137,33 @@ class ComposerAgent(BaseAgent):
                     model=self.model_name,
                 )
                 return item
-        # _events raises ComposerExhausted rather than finishing without a meal.
+        # events raises ComposerExhausted rather than finishing without a meal.
         raise ComposerExhausted(f"Composer produced no meal for {meal_type.value}.")
 
     async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
         """Stream the run as discriminated JSON lines: trace steps, then the meal.
 
-        The first real streaming agent. Each step is a ``TraceStreamItem`` and the
-        terminal item is a ``MealStreamItem`` whose meal omits the trace (the client
-        assembled it from the steps), so a consumer switches on ``type`` instead of
-        sniffing the payload shape. Dish-lookup streaming stays unimplemented on purpose.
+        The ``BaseAgent`` streaming contract, implemented so it cannot be silently
+        dropped (CLAUDE section 8). The live admin SSE path does not go through here:
+        :class:`~app.services.composer_streamer.ComposerStreamer` consumes ``events()``
+        directly, because it needs the trace-carrying ``ComposedMeal`` to persist. Each
+        step is a ``TraceStreamItem`` and the terminal item a ``MealStreamItem`` whose
+        meal omits the trace (the client assembled it from the steps), so a consumer
+        switches on ``type`` instead of sniffing the payload shape.
         """
-        async for item in self._events(meal_type):
+        async for item in self.events(meal_type):
             if isinstance(item, ComposedMeal):
                 yield MealStreamItem.of(item).model_dump_json()
             else:
                 yield TraceStreamItem(event=item).model_dump_json()
 
-    async def _events(self, meal_type: MealType) -> AsyncIterator[TraceEvent | ComposedMeal]:
+    async def events(self, meal_type: MealType) -> AsyncIterator[TraceEvent | ComposedMeal]:
         """Drive the tool-calling loop, yielding each authored step then the meal.
 
-        Both ``compose`` and ``stream`` consume this, so the loop lives in one place.
-        The running ``trace`` becomes the meal's ``reasoning_trace``, and each new
-        event is yielded as it is appended.
+        The rich core: ``compose`` and ``stream`` consume it, and so does the live
+        streamer, which needs the terminal ``ComposedMeal`` (with its trace) to persist
+        the run. The running ``trace`` becomes the meal's ``reasoning_trace``, and each
+        new event is yielded as it is appended.
         """
         self._begin_usage()
         try:
@@ -250,8 +254,10 @@ class ComposerAgent(BaseAgent):
             trace.append(TraceEvent(kind="reject", text="The submitted meal was malformed."))
             return None, "Your SubmitMeal arguments were malformed. Resend the full meal."
 
-        ingredients = self._normalize_ingredients(submission.ingredients)
-        recipe = self._normalize_recipe(submission.recipe)
+        ingredients = normalize_ingredients(
+            (draft.name, draft.category) for draft in submission.ingredients
+        )
+        recipe = normalize_recipe(submission.recipe)
         trace.append(
             TraceEvent(
                 kind="submit",
@@ -263,10 +269,9 @@ class ComposerAgent(BaseAgent):
             trace.append(TraceEvent(kind="reject", text="No usable ingredients in the submission."))
             return None, "The submission listed no usable ingredients. List them and resubmit."
 
-        lookups = await lookup_ingredients(
-            self._ingredient_service, [(item.name, item.category) for item in ingredients]
+        verification = await verify_submission(
+            self._ingredient_service, ingredients, recipe, risky_terms=risky_terms
         )
-        verification = verify_meal(lookups, recipe or [], risky_terms)
         if not verification.is_safe:
             trace.append(self._reject_event(submission.name, verification))
             return None, self._reject_feedback(verification)
@@ -280,12 +285,14 @@ class ComposerAgent(BaseAgent):
         )
         return (
             ComposedMeal(
-                name=submission.name.strip(),
+                name=normalize_dish_text(submission.name, max_chars=MAX_DISH_CHARS),
                 meal_type=meal_type,
-                description=submission.description.strip(),
+                description=normalize_dish_text(
+                    submission.description, max_chars=MAX_DESCRIPTION_CHARS
+                ),
                 ingredients=ingredients,
                 recipe=recipe,
-                tags=self._normalize_tags(submission.tags),
+                tags=normalize_tags(submission.tags),
                 unverified_ingredients=verification.unverified,
                 reasoning_trace=list(trace),
                 model=self.model_name,
@@ -435,40 +442,6 @@ class ComposerAgent(BaseAgent):
         """Capture the model's own reasoning text as a draft step, when it wrote any."""
         text = reply.content.strip() if isinstance(reply.content, str) else ""
         return TraceEvent(kind="draft", text=text[:_MAX_TRACE_TEXT]) if text else None
-
-    @staticmethod
-    def _normalize_ingredients(drafts: list[ProposedIngredientDraft]) -> list[ProposedIngredient]:
-        """Trim and truncate each ingredient, drop blanks and duplicates, cap the count."""
-        kept: list[ProposedIngredient] = []
-        seen: set[str] = set()
-        for draft in drafts:
-            name = draft.name.strip()[:MAX_INGREDIENT_CHARS].rstrip()
-            if not name or name.casefold() in seen:
-                continue
-            seen.add(name.casefold())
-            category = (draft.category or "").strip()[:MAX_INGREDIENT_CHARS].rstrip()
-            kept.append(ProposedIngredient(name=name, category=category or None))
-            if len(kept) == MAX_CONFIRMED_INGREDIENTS:
-                break
-        return kept
-
-    @staticmethod
-    def _normalize_recipe(steps: list[str]) -> list[str] | None:
-        cleaned = [step.strip() for step in steps if step.strip()][:_MAX_RECIPE_STEPS]
-        return cleaned or None
-
-    @staticmethod
-    def _normalize_tags(tags: list[str]) -> list[str]:
-        kept: list[str] = []
-        seen: set[str] = set()
-        for tag in tags:
-            cleaned = tag.strip()[:_MAX_TAG_CHARS].rstrip()
-            if cleaned and cleaned.casefold() not in seen:
-                seen.add(cleaned.casefold())
-                kept.append(cleaned)
-            if len(kept) == _MAX_TAGS:
-                break
-        return kept
 
 
 def _arg_str(args: dict[str, object], key: str) -> str:

@@ -16,6 +16,7 @@ from app.llm.langchain_factory import build_chat_model
 from app.models.user import User
 from app.services.composer_streamer import ComposerStreamer
 from app.services.daily_service import DailyService
+from app.services.generation_settings_service import GenerationSettingsService
 from app.services.ingredient_service import IngredientService
 from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService
@@ -75,15 +76,30 @@ def get_daily_service(
     return DailyService(session)
 
 
-def get_composer_streamer() -> ComposerStreamer:
+def get_generation_settings_service(
+    session: AsyncSession = Depends(get_session),
+) -> GenerationSettingsService:
+    return GenerationSettingsService(session)
+
+
+async def get_composer_streamer(
+    session: AsyncSession = Depends(get_session),
+) -> ComposerStreamer:
     """Wire the live composer for the admin trigger.
 
-    Board composition is an operator action, not a per-user request, so the
-    provider resolves from settings like the cron scripts, never from X-LLM
-    headers. A bad provider config raises here (mapped to 400/501 at the boundary)
-    before the stream opens; a tool-incapable model fails later as a stream error.
+    Board composition is an operator action, not a per-user request, so the provider
+    resolves from the operator-set ``GenerationSettings`` (shared with the cron
+    scripts), never from X-LLM headers. A bad saved config raises here (mapped to
+    400/501 at the boundary) before the stream opens; a tool-incapable model fails
+    later as a stream error.
     """
-    chat = build_chat_model(LLMRequestConfig(), temperature=settings.compose_temperature)
+    gen_settings = await GenerationSettingsService(session).get()
+    chat = build_chat_model(
+        LLMRequestConfig(
+            provider=gen_settings.composer_provider, model=gen_settings.composer_model
+        ),
+        temperature=settings.compose_temperature,
+    )
     return ComposerStreamer(chat, get_embedder())
 
 
