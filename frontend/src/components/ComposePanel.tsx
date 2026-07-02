@@ -5,6 +5,10 @@ import { useReasoningStream } from "../hooks/useReasoningStream";
 import { MEAL_TYPE_LABEL, MEAL_TYPES } from "../lib/meal";
 import { ReasoningReplay } from "./ReasoningReplay";
 
+function mealTypeList(types: MealType[]): string {
+  return types.map((type) => MEAL_TYPE_LABEL[type]).join(", ");
+}
+
 interface ComposePanelProps {
   mode: "curated" | "daily";
   // For daily, the date to prefill (the first incomplete upcoming day, or today).
@@ -23,7 +27,9 @@ interface ComposePanelProps {
 // Drives one live composition: Generate streams the agent live and persists the result as
 // a pending row, confirming with a saved frame (which refreshes the parent queue). For
 // daily, a taken slot comes back as a conflict the operator confirms to overwrite (re-run
-// with replace). The recorded run is re-watchable per-item on the queue card afterwards.
+// with replace), and Generate board fills every open slot of the date in one stream,
+// clearing the live log as each slot starts. The recorded run is re-watchable per-item on
+// the queue card afterwards.
 export function ComposePanel({
   mode,
   defaultDate,
@@ -35,8 +41,22 @@ export function ComposePanel({
   const [mealType, setMealType] = useState<MealType>("breakfast");
   const [date, setDate] = useState(defaultDate ?? "");
   const [dateTouched, setDateTouched] = useState(false);
-  const { status, events, meal, error, savedId, conflict, start, cancel } =
-    useReasoningStream(onExpired);
+  // Whether the running (or last) stream was a full-board run, so the panel knows
+  // which success copy and progress header to show.
+  const [boardRun, setBoardRun] = useState(false);
+  const {
+    status,
+    events,
+    meal,
+    error,
+    savedId,
+    conflict,
+    currentSlot,
+    slotErrors,
+    board,
+    start,
+    cancel,
+  } = useReasoningStream(onExpired);
   const streaming = status === "streaming";
 
   useEffect(() => {
@@ -58,6 +78,7 @@ export function ComposePanel({
 
   const save = useCallback(
     (replace = false) => {
+      setBoardRun(false);
       const request =
         mode === "daily"
           ? { endpoint: "/admin/compose/daily", body: { meal_type: mealType, date, replace } }
@@ -66,6 +87,11 @@ export function ComposePanel({
     },
     [mode, mealType, date, start],
   );
+
+  const generateBoard = useCallback(() => {
+    setBoardRun(true);
+    void start({ endpoint: "/admin/compose/daily/board", body: { date } });
+  }, [date, start]);
 
   const canSave = mode === "curated" || date !== "";
   // The backend rejects a date before today (UTC); matching that here keeps the picker
@@ -112,8 +138,18 @@ export function ComposePanel({
           disabled={busy || !canSave}
           className="rounded bg-emerald-800 text-white px-4 py-2 text-sm disabled:opacity-50 enabled:cursor-pointer"
         >
-          {streaming ? "Composing…" : "Generate"}
+          {streaming && !boardRun ? "Composing…" : "Generate"}
         </button>
+        {mode === "daily" && (
+          <button
+            type="button"
+            onClick={generateBoard}
+            disabled={busy || !canSave}
+            className="rounded border border-emerald-800 text-emerald-800 px-4 py-2 text-sm disabled:opacity-50 enabled:cursor-pointer hover:enabled:bg-emerald-50"
+          >
+            {streaming && boardRun ? "Composing board…" : "Generate full board"}
+          </button>
+        )}
         {streaming && (
           <button
             type="button"
@@ -158,12 +194,40 @@ export function ComposePanel({
         </div>
       )}
 
+      {streaming && boardRun && currentSlot && (
+        <p className="text-sm text-stone-600" aria-live="polite">
+          Composing <span className="font-medium">{MEAL_TYPE_LABEL[currentSlot.meal_type]}</span> (
+          {currentSlot.index} of {currentSlot.total})…
+        </p>
+      )}
+
       {(streaming || events.length > 0) && <ReasoningReplay events={events} live pending={streaming} />}
 
-      {savedId && (
+      {slotErrors.length > 0 && (
+        <ul role="alert" className="text-sm text-red-700 space-y-1">
+          {slotErrors.map((slotError) => (
+            <li key={slotError.meal_type}>
+              <span className="font-medium">
+                {MEAL_TYPE_LABEL[slotError.meal_type]} failed —
+              </span>{" "}
+              {slotError.detail}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {savedId && !boardRun && (
         <p className="text-sm text-emerald-700">
           Saved {meal ? <span className="font-medium">{meal.name}</span> : "the meal"} to the queue
           as pending review.
+        </p>
+      )}
+
+      {board && (
+        <p className="text-sm text-emerald-700">
+          Board done — saved {mealTypeList(board.composed) || "no meals"} to the queue as pending
+          review.
+          {board.skipped.length > 0 && ` Skipped ${mealTypeList(board.skipped)} (already filled).`}
         </p>
       )}
     </section>

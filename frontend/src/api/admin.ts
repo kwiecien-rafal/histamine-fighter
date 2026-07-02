@@ -236,6 +236,35 @@ export interface SlotConflict {
   existing_status: ApprovalStatus;
 }
 
+// The body of a full-board compose-and-save: the date whose open slots to fill. Board
+// mode never replaces a pending or approved slot, so there is no replace flag.
+export interface ComposeBoardRequest {
+  date: string;
+}
+
+// Announces the board slot about to compose (1-based index of total); the live
+// composing log clears when it arrives.
+export interface SlotStartEvent {
+  meal_type: MealType;
+  index: number;
+  total: number;
+}
+
+// A non-terminal per-slot failure on a board run: the slot's compose or save failed
+// and the run moved on to the remaining slots.
+export interface SlotErrorEvent {
+  meal_type: MealType;
+  detail: string;
+}
+
+// The terminal summary of a board run. Skipped slots already held a pending or
+// approved suggestion, which a board run never replaces.
+export interface BoardSummary {
+  composed: MealType[];
+  failed: MealType[];
+  skipped: MealType[];
+}
+
 // The five admin-editable content fields, mirroring AdminMealUpdate / AdminDailyUpdate.
 // confirm_flagged is the request-only override: set on resubmit after the operator
 // confirms a flagged-ingredient warning, never persisted server-side.

@@ -55,6 +55,17 @@ class ComposeDailyRequest(BaseModel):
     replace: bool = False
 
 
+class ComposeBoardRequest(BaseModel):
+    """A full-board compose-and-save request: fill every open slot of one date.
+
+    Board mode only composes slots that are empty or hold a rejected suggestion;
+    a pending or approved slot is skipped, never replaced, so there is no
+    ``replace`` flag. The route bounds the date to the manual-queue window.
+    """
+
+    date: dt.date
+
+
 class ComposeSettingsUpdate(BaseModel):
     """An admin's choice of composer provider and model; the key stays in the env."""
 

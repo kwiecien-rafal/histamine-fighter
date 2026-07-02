@@ -163,6 +163,18 @@ class DailyService:
         reveal = datetime.combine(target, time(hour=settings.daily_reveal_hour_utc), tzinfo=UTC)
         return min(reveal, now) if target == now.date() else reveal
 
+    async def open_meal_types(self, target: date) -> list[MealType]:
+        """The slots of a date a board run may fill: empty or rejected, in meal order.
+
+        Pending and approved slots are excluded, so a full-board run never replaces
+        review work already done or published.
+        """
+        rows = await self._for_date(target)
+        blocked = {
+            row.meal_type for row in rows if row.approval_status is not ApprovalStatus.REJECTED
+        }
+        return [meal_type for meal_type in MealType if meal_type not in blocked]
+
     async def slot_for(self, target: date, meal_type: MealType) -> DailySuggestion | None:
         """Return the suggestion in one (date, meal_type) slot, or None when empty."""
         stmt = select(DailySuggestion).where(

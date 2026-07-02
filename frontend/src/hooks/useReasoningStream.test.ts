@@ -268,6 +268,103 @@ describe("useReasoningStream", () => {
     expect(JSON.parse(retry.body as string)).toMatchObject({ replace: true });
   });
 
+  const boardRequest = {
+    endpoint: "/admin/compose/daily/board",
+    body: { date: "2026-07-03" },
+  };
+  const savedMealFrame =
+    'event: meal\ndata: {"name":"Saved dish","meal_type":"lunch","description":"x","ingredients":[],"recipe":null,"tags":[],"unverified_ingredients":[],"model":"stub/model","usage":{"calls":1,"input_tokens":1,"output_tokens":1,"total_tokens":2,"steps":[]}}\n\n';
+
+  it("clears the live log on each slot frame and tracks the current slot", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'event: slot\ndata: {"meal_type":"breakfast","index":1,"total":2}\n\n',
+          'event: trace\ndata: {"kind":"check","text":"Checking oats","ingredient":null,"compatibility":null}\n\n',
+          'event: trace\ndata: {"kind":"verify","text":"Oats cleared","ingredient":null,"compatibility":null}\n\n',
+          'event: slot\ndata: {"meal_type":"lunch","index":2,"total":2}\n\n',
+          'event: trace\ndata: {"kind":"check","text":"Checking courgette","ingredient":null,"compatibility":null}\n\n',
+          'event: board\ndata: {"composed":["breakfast","lunch"],"failed":[],"skipped":["dinner","snack"]}\n\n',
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
+    await result.current.start(boardRequest);
+
+    await waitFor(() => expect(result.current.status).toBe("done"));
+    // Only the second slot's trace survives: the lunch slot frame cleared breakfast's.
+    expect(result.current.events).toHaveLength(1);
+    expect(result.current.events[0].text).toBe("Checking courgette");
+    expect(result.current.currentSlot?.meal_type).toBe("lunch");
+    expect(result.current.board?.skipped).toEqual(["dinner", "snack"]);
+  });
+
+  it("collects slot errors without terminating and saves each finished slot", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'event: slot\ndata: {"meal_type":"breakfast","index":1,"total":2}\n\n',
+          'event: slot_error\ndata: {"detail":"The composer could not finish.","meal_type":"breakfast"}\n\n',
+          'event: slot\ndata: {"meal_type":"lunch","index":2,"total":2}\n\n',
+          savedMealFrame,
+          'event: saved\ndata: {"id":"daily-42"}\n\n',
+          'event: board\ndata: {"composed":["lunch"],"failed":["breakfast"],"skipped":[]}\n\n',
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
+    await result.current.start(boardRequest);
+
+    await waitFor(() => expect(result.current.status).toBe("done"));
+    expect(result.current.error).toBeNull();
+    expect(result.current.slotErrors).toEqual([
+      { detail: "The composer could not finish.", meal_type: "breakfast" },
+    ]);
+    expect(result.current.savedId).toBe("daily-42");
+    expect(result.current.board?.failed).toEqual(["breakfast"]);
+  });
+
+  it("fails when a board stream ends without its summary", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        sseResponse([
+          'event: slot\ndata: {"meal_type":"breakfast","index":1,"total":4}\n\n',
+          savedMealFrame,
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
+    await result.current.start(boardRequest);
+
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(result.current.error).toBe("The stream ended before the board run finished.");
+  });
+
+  it("surfaces a plain 409 detail verbatim, like a full board", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ detail: "Every slot on that date is already filled." }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const { result } = renderHook(() => useReasoningStream(vi.fn()));
+    await result.current.start(boardRequest);
+
+    await waitFor(() => expect(result.current.status).toBe("error"));
+    expect(result.current.error).toBe("Every slot on that date is already filled.");
+    expect(result.current.conflict).toBeNull();
+  });
+
   it("surfaces a 422 detail as the error, not a bare status", async () => {
     vi.stubGlobal(
       "fetch",

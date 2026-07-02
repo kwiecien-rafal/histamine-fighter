@@ -85,6 +85,31 @@ class _ScriptedStreamer:
             yield {"event": "saved", "data": SavedEvent(id=saved_id).model_dump_json()}
 
 
+class _BoardStreamer:
+    """Scripted board runs: composes a fresh meal for whichever slot is requested.
+
+    Slots listed in ``failing`` raise as an exhausted composer, so a board test can
+    show the run surviving one bad slot.
+    """
+
+    def __init__(self, session: AsyncSession, *, failing: set[MealType] = frozenset()) -> None:
+        self._session = session
+        self._failing = failing
+
+    async def stream(
+        self, meal_type: MealType, *, persist: Any = None
+    ) -> AsyncIterator[dict[str, str]]:
+        if meal_type in self._failing:
+            raise ComposerExhausted("the loop spent its budget")
+        meal = _meal(meal_type, name=f"Composed {meal_type.value}")
+        for event in meal.reasoning_trace:
+            yield {"event": "trace", "data": event.model_dump_json()}
+        yield {"event": "meal", "data": MealStreamItem.of(meal).meal.model_dump_json()}
+        if persist is not None:
+            saved_id = await persist(meal, self._session)
+            yield {"event": "saved", "data": SavedEvent(id=saved_id).model_dump_json()}
+
+
 class _RaisingStreamer:
     """Streams one trace step, then raises, to exercise the route's terminal-error backstop.
 
@@ -364,6 +389,98 @@ async def test_daily_save_with_a_date_past_the_window_is_422(
     assert resp.status_code == 422
 
 
+# --- POST /admin/compose/daily/board ------------------------------------------------
+
+
+async def test_board_composes_only_the_open_slots(session: AsyncSession, admin_user: User) -> None:
+    await _add_daily(session, meal_type=MealType.LUNCH, approval_status=ApprovalStatus.APPROVED)
+    await _add_daily(session, meal_type=MealType.DINNER, approval_status=ApprovalStatus.REJECTED)
+
+    async with _compose_client(session, _BoardStreamer(session)) as client:
+        resp = await client.post("/admin/compose/daily/board", json={"date": _TOMORROW.isoformat()})
+
+    assert resp.status_code == 200
+    body = resp.text
+    # Three slot announcements, in natural meal order, with the approved lunch skipped.
+    assert '"meal_type":"breakfast","index":1,"total":3' in body
+    assert '"meal_type":"dinner","index":2,"total":3' in body
+    assert '"meal_type":"snack","index":3,"total":3' in body
+    assert body.count("event: saved") == 3
+    assert "event: board" in body
+    assert '"composed":["breakfast","dinner","snack"]' in body
+    assert '"skipped":["lunch"]' in body
+
+    rows = (
+        (
+            await session.execute(
+                select(DailySuggestion).where(DailySuggestion.suggestion_date == _TOMORROW)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    by_type = {row.meal_type: row for row in rows}
+    assert set(by_type) == set(MealType)
+    # The approved slot was never touched; the rejected one was recomposed to pending.
+    assert by_type[MealType.LUNCH].content["name"] == "Old salad"
+    assert by_type[MealType.LUNCH].approval_status is ApprovalStatus.APPROVED
+    assert by_type[MealType.DINNER].content["name"] == "Composed dinner"
+    for meal_type in (MealType.BREAKFAST, MealType.DINNER, MealType.SNACK):
+        assert by_type[meal_type].approval_status is ApprovalStatus.PENDING
+
+
+async def test_board_continues_past_a_failed_slot(session: AsyncSession, admin_user: User) -> None:
+    streamer = _BoardStreamer(session, failing={MealType.LUNCH})
+
+    async with _compose_client(session, streamer) as client:
+        resp = await client.post("/admin/compose/daily/board", json={"date": _TOMORROW.isoformat()})
+
+    assert resp.status_code == 200
+    body = resp.text
+    # The lunch failure is a per-slot frame, not the terminal error, so the run went on.
+    assert "event: slot_error" in body
+    assert "event: error" not in body
+    assert '"failed":["lunch"]' in body
+    assert '"composed":["breakfast","dinner","snack"]' in body
+
+    rows = (
+        (
+            await session.execute(
+                select(DailySuggestion).where(DailySuggestion.suggestion_date == _TOMORROW)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert {row.meal_type for row in rows} == {
+        MealType.BREAKFAST,
+        MealType.DINNER,
+        MealType.SNACK,
+    }
+
+
+async def test_board_with_no_open_slot_is_409(session: AsyncSession, admin_user: User) -> None:
+    for meal_type in MealType:
+        await _add_daily(session, meal_type=meal_type, approval_status=ApprovalStatus.PENDING)
+
+    async with _compose_client(session, _BoardStreamer(session)) as client:
+        resp = await client.post("/admin/compose/daily/board", json={"date": _TOMORROW.isoformat()})
+
+    assert resp.status_code == 409
+    assert "already filled" in resp.json()["detail"]
+
+
+async def test_board_with_a_date_past_the_window_is_422(
+    session: AsyncSession, admin_user: User
+) -> None:
+    far = datetime.now(UTC).date() + timedelta(days=settings.daily_queue_max_ahead_days + 1)
+
+    async with _compose_client(session, _BoardStreamer(session)) as client:
+        resp = await client.post("/admin/compose/daily/board", json={"date": far.isoformat()})
+
+    assert resp.status_code == 422
+
+
 # --- GET/PUT /admin/compose/settings ----------------------------------------------
 
 
@@ -469,6 +586,7 @@ _PROTECTED = [
     ("put", "/admin/compose/settings", {"provider": "openai", "model": "gpt-5.4-mini"}),
     ("post", "/admin/compose/curated", {"meal_type": "lunch"}),
     ("post", "/admin/compose/daily", {"meal_type": "lunch", "date": _TOMORROW.isoformat()}),
+    ("post", "/admin/compose/daily/board", {"date": _TOMORROW.isoformat()}),
     ("get", "/admin/daily/queue", None),
 ]
 

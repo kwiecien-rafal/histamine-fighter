@@ -1,10 +1,11 @@
 """Admin compose: stream a live composition into a pending row, and set the model.
 
-Every route is gated by ``require_admin``. The two streaming routes share one
+Every route is gated by ``require_admin``. The streaming routes share one
 process-local lock so an operator's repeated triggers cannot overlap into several
 concurrent multi-call LLM runs within a worker (per-worker, see ``_compose_lock``).
 Each persists the finished, trace-carrying meal as pending review and confirms it with
-a ``saved`` frame: curated into the pool, daily into a dated slot. The settings routes
+a ``saved`` frame: curated into the pool, daily into a dated slot, and the board route
+fills every open slot of a date in one stream. The settings routes
 read and set the operator's composer provider/model, validated through the single
 source of provider truth so a keyless or gated choice can never be saved.
 """
@@ -38,12 +39,13 @@ from app.llm.providers import resolve_llm_config, selectable_providers
 from app.models import DailySuggestion
 from app.models.user import User
 from app.schemas.admin import (
+    ComposeBoardRequest,
     ComposeDailyRequest,
     ComposeRequest,
     ComposeSettingsRead,
     ComposeSettingsUpdate,
 )
-from app.schemas.meal import ComposedMeal
+from app.schemas.meal import BoardSummaryEvent, ComposedMeal, SlotStartEvent
 from app.services.composer_streamer import ComposerStreamer, Persist
 from app.services.daily_service import DailyService
 from app.services.generation_settings_service import GenerationSettingsService
@@ -57,6 +59,7 @@ _GENERATION_FAILED = "The composer could not finish a safe meal. Try again."
 _GENERATION_ERROR = "Something went wrong while composing the meal. Try again."
 _GENERATION_BUSY = "A live composition is already running. Wait for it to finish."
 _SLOT_TAKEN = "That daily slot already holds a suggestion. Confirm to replace it."
+_BOARD_FULL = "Every slot on that date is already filled. Reject or remove one first."
 
 # Serializes the live composer so one admin trigger cannot fan out into several
 # concurrent multi-call LLM runs (the per-IP rate limit bounds rate, not overlap).
@@ -113,43 +116,67 @@ def _conflict_detail(
     }
 
 
-def _compose_response(
-    meal_type: MealType, streamer: ComposerStreamer, *, persist: Persist
-) -> EventSourceResponse:
-    """Stream one composition as SSE, saving it as pending, behind the shared lock.
+def _failure_frame(event: str, detail: str, meal_type: MealType) -> dict[str, str]:
+    return {"event": event, "data": json.dumps({"detail": detail, "meal_type": meal_type.value})}
 
-    A second trigger while one is in flight gets 409. The stream relays the streamer's
-    frames and turns a compose failure into a terminal ``error`` frame, so an already
-    open stream closes cleanly rather than the client reading a truncated stream as
-    success.
+
+async def _slot_frames(
+    meal_type: MealType, streamer: ComposerStreamer, persist: Persist, *, error_event: str
+) -> AsyncIterator[dict[str, str]]:
+    """Relay one composition's frames, closing its failures as ``error_event``.
+
+    Compose failures (the loop's budget, a model error) and the streamer's own save
+    failure all land on ``error_event``: the single-slot stream passes ``error`` so
+    the failure is terminal, the board passes ``slot_error`` so it can move on to the
+    remaining slots. An unexpected exception propagates to the caller's backstop.
+    """
+    try:
+        async for frame in streamer.stream(meal_type, persist=persist):
+            if frame["event"] == "error":
+                frame = {"event": error_event, "data": frame["data"]}
+            yield frame
+            if frame["event"] == "meal":
+                _log_done(meal_type.value, json.loads(frame["data"]))
+    except ComposerExhausted:
+        log.warning("composer.live.exhausted", meal_type=meal_type.value)
+        yield _failure_frame(error_event, _GENERATION_FAILED, meal_type)
+    except LLMError as exc:
+        log.warning("composer.live.llm_error", meal_type=meal_type.value, error=str(exc))
+        yield _failure_frame(error_event, str(exc), meal_type)
+
+
+def _locked_sse(frames: AsyncIterator[dict[str, str]], *, run: str) -> EventSourceResponse:
+    """Stream compose frames as SSE behind the shared lock, with the error backstop.
+
+    A second trigger while one is in flight gets 409; the lock is the real guard, so
+    even if two requests slip past the check they run one at a time, and it releases
+    on completion or client cancel. The 200 and headers are already sent by the time
+    an unexpected failure lands, so it cannot become an HTTP error: it has to close
+    the open stream as a terminal ``error`` frame. A client disconnect raises
+    CancelledError (a BaseException), so it still propagates rather than being
+    swallowed.
     """
     if _compose_lock.locked():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_GENERATION_BUSY)
 
     async def event_source() -> AsyncIterator[dict[str, str]]:
-        # The lock is the real guard: even if two requests slip past the check above,
-        # they run one at a time, and it releases here on completion or client cancel.
         async with _compose_lock:
             try:
-                async for frame in streamer.stream(meal_type, persist=persist):
+                async for frame in frames:
                     yield frame
-                    if frame["event"] == "meal":
-                        _log_done(meal_type.value, json.loads(frame["data"]))
-            except ComposerExhausted:
-                log.warning("composer.live.exhausted", meal_type=meal_type.value)
-                yield {"event": "error", "data": json.dumps({"detail": _GENERATION_FAILED})}
-            except LLMError as exc:
-                log.warning("composer.live.llm_error", meal_type=meal_type.value, error=str(exc))
-                yield {"event": "error", "data": json.dumps({"detail": str(exc)})}
             except Exception:
-                # The 200 and headers are already sent, so an unexpected failure cannot
-                # become an HTTP error: it has to close the stream as an error event. A
-                # client disconnect raises CancelledError (a BaseException), so it still
-                # propagates here rather than being swallowed.
-                log.exception("composer.live.failed", meal_type=meal_type.value)
+                log.exception("composer.live.failed", run=run)
                 yield {"event": "error", "data": json.dumps({"detail": _GENERATION_ERROR})}
 
     return EventSourceResponse(event_source())
+
+
+def _compose_response(
+    meal_type: MealType, streamer: ComposerStreamer, *, persist: Persist
+) -> EventSourceResponse:
+    """Stream one composition as SSE, saving it as pending, behind the shared lock."""
+    frames = _slot_frames(meal_type, streamer, persist, error_event="error")
+    return _locked_sse(frames, run=meal_type.value)
 
 
 @router.post("/curated")
@@ -207,6 +234,65 @@ async def compose_daily(
         return row.id
 
     return _compose_response(payload.meal_type, streamer, persist=persist)
+
+
+async def _board_frames(
+    target: date, open_types: list[MealType], streamer: ComposerStreamer, *, now: datetime
+) -> AsyncIterator[dict[str, str]]:
+    """Compose the date's open slots in sequence, announcing each with ``slot``.
+
+    ``open_types`` comes from the route's pre-check, which runs before the lock is
+    taken, so it is racy on its own; as in the single-slot route, the persist callback
+    re-reads the slot on the stream's session and refuses a concurrent fill. That
+    refusal surfaces as the slot's ``slot_error`` and the run moves on.
+    """
+
+    async def persist(meal: ComposedMeal, session: AsyncSession) -> UUID:
+        service = DailyService(session)
+        if meal.meal_type not in await service.open_meal_types(target):
+            raise RuntimeError("The daily slot was filled by a concurrent run.")
+        row = await service.store_pending(meal, target, now=now)
+        await session.flush()
+        return row.id
+
+    composed: list[MealType] = []
+    failed: list[MealType] = []
+    for index, meal_type in enumerate(open_types, start=1):
+        start = SlotStartEvent(meal_type=meal_type, index=index, total=len(open_types))
+        yield {"event": "slot", "data": start.model_dump_json()}
+        saved = False
+        async for frame in _slot_frames(meal_type, streamer, persist, error_event="slot_error"):
+            yield frame
+            saved = saved or frame["event"] == "saved"
+        (composed if saved else failed).append(meal_type)
+
+    skipped = [meal_type for meal_type in MealType if meal_type not in open_types]
+    summary = BoardSummaryEvent(composed=composed, failed=failed, skipped=skipped)
+    yield {"event": "board", "data": summary.model_dump_json()}
+
+
+@router.post("/daily/board")
+@limiter.limit(llm_rate_limit)
+async def compose_daily_board(
+    request: Request,
+    payload: ComposeBoardRequest,
+    _admin: User = Depends(require_admin),
+    streamer: ComposerStreamer = Depends(get_composer_streamer),
+    daily: DailyService = Depends(get_daily_service),
+) -> EventSourceResponse:
+    """Compose every open slot of one date in a single stream, saving each as pending.
+
+    Board mode fills only slots that are empty or rejected; a pending or approved slot
+    is never replaced, so a board run cannot destroy review work. A date with no open
+    slot is a 409 before any tokens are spent. The whole board runs under one hold of
+    the compose lock, so the nightly cron or a second trigger cannot interleave.
+    """
+    now = datetime.now(UTC)
+    _ensure_within_queue_window(payload.date, now)
+    open_types = await daily.open_meal_types(payload.date)
+    if not open_types:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_BOARD_FULL)
+    return _locked_sse(_board_frames(payload.date, open_types, streamer, now=now), run="board")
 
 
 @router.get("/settings", response_model=ComposeSettingsRead)

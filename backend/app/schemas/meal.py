@@ -549,6 +549,26 @@ class SavedEvent(BaseModel):
     id: UUID
 
 
+class SlotStartEvent(BaseModel):
+    """Announces the board slot about to compose; the client clears its live log on it."""
+
+    meal_type: MealType
+    index: int
+    total: int
+
+
+class BoardSummaryEvent(BaseModel):
+    """The terminal frame of a board run: how each of the date's slots ended up.
+
+    ``skipped`` are the slots already holding a pending or approved suggestion, which
+    a board run never replaces.
+    """
+
+    composed: list[MealType]
+    failed: list[MealType]
+    skipped: list[MealType]
+
+
 class LookupIngredientSafety(BaseModel):
     """Look up one ingredient's histamine compatibility in the curated index."""
 
