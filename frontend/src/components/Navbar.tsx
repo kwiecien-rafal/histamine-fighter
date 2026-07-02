@@ -27,6 +27,7 @@ export function Navbar() {
               Home
             </NavItem>
             <NavItem to="/daily">Today's meals</NavItem>
+            <NavItem to="/meals">Safe meals</NavItem>
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}

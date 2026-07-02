@@ -210,6 +210,17 @@ class MealEditFields(BaseModel):
         return normalize_tags(tag for tag in value if isinstance(tag, str))
 
 
+class AdminMealCreate(MealEditFields):
+    """A hand-written meal an admin authors directly, with no composer in the loop.
+
+    Adds the one field a creation needs that an edit cannot change, the slot the meal
+    belongs to, to the shared editable surface. It clears the identical index gate a
+    composed meal does, so a manual entry is held to the same safety bar.
+    """
+
+    meal_type: MealType
+
+
 class AdminMealUpdate(MealEditFields):
     """An admin's edit to a pending curated meal."""
 

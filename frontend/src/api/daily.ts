@@ -1,18 +1,13 @@
-import type { MealType, TraceEvent } from "./admin";
-import type { LLMUsage, ProposedIngredient } from "./client";
+import type { PublicMeal } from "./domain";
+import type { LLMUsage } from "./client";
 import { errorDetail } from "./errors";
 
 // The public daily board. A plain GET, no auth and no LLM headers: the meals were
 // composed offline and approved, so the page only reads pre-generated rows.
 
-export interface DailyMealCard {
-  meal_type: MealType;
-  name: string;
-  description: string;
-  ingredients: ProposedIngredient[];
-  recipe: string[] | null;
-  tags: string[];
-}
+// A revealed board card is exactly the shared public meal view; the browse detail uses
+// the same shape, so they share one type rather than drifting apart.
+export type DailyMealCard = PublicMeal;
 
 export interface LockedBoard {
   status: "locked";
@@ -24,9 +19,10 @@ export interface LockedBoard {
 export interface RevealedBoard {
   status: "revealed";
   date: string;
+  // The board's representative model, used only to price the aggregate cost. Per-meal
+  // attribution lives on each card's own model.
   model: string;
   meals: DailyMealCard[];
-  trace: TraceEvent[];
   // Total token usage of composing the day's meals.
   usage: LLMUsage;
 }
@@ -41,7 +37,16 @@ export interface DailyBoardResult {
 }
 
 export async function getDailyBoard(): Promise<DailyBoardResult> {
-  const response = await fetch("/api/v1/daily/meals");
+  return fetchBoard("/api/v1/daily/meals");
+}
+
+// A past day within the history window; the endpoint 404s anything outside it.
+export async function getDailyBoardFor(date: string): Promise<DailyBoardResult> {
+  return fetchBoard(`/api/v1/daily/meals/${date}`);
+}
+
+async function fetchBoard(path: string): Promise<DailyBoardResult> {
+  const response = await fetch(path);
   if (!response.ok) {
     throw new Error(await errorDetail(response));
   }

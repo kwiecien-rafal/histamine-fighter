@@ -20,9 +20,10 @@ interface ComposePanelProps {
   onExpired: () => void;
 }
 
-// Drives one live composition: Preview streams without saving, Generate & save persists
-// and confirms with a saved frame (which refreshes the parent queue). For daily, a taken
-// slot comes back as a conflict the operator confirms to overwrite (re-run with replace).
+// Drives one live composition: Generate streams the agent live and persists the result as
+// a pending row, confirming with a saved frame (which refreshes the parent queue). For
+// daily, a taken slot comes back as a conflict the operator confirms to overwrite (re-run
+// with replace). The recorded run is re-watchable per-item on the queue card afterwards.
 export function ComposePanel({
   mode,
   defaultDate,
@@ -66,9 +67,6 @@ export function ComposePanel({
     [mode, mealType, date, start],
   );
 
-  const preview = () =>
-    void start({ endpoint: "/admin/compose/preview", body: { meal_type: mealType } });
-
   const canSave = mode === "curated" || date !== "";
   // The backend rejects a date before today (UTC); matching that here keeps the picker
   // from offering a value the daily save would only 422.
@@ -110,19 +108,11 @@ export function ComposePanel({
         )}
         <button
           type="button"
-          onClick={preview}
-          disabled={busy}
-          className="rounded border border-stone-300 px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-50 enabled:cursor-pointer"
-        >
-          Preview
-        </button>
-        <button
-          type="button"
           onClick={() => save()}
           disabled={busy || !canSave}
           className="rounded bg-emerald-800 text-white px-4 py-2 text-sm disabled:opacity-50 enabled:cursor-pointer"
         >
-          {streaming ? "Composing…" : "Generate & save"}
+          {streaming ? "Composing…" : "Generate"}
         </button>
         {streaming && (
           <button
@@ -170,15 +160,11 @@ export function ComposePanel({
 
       {(streaming || events.length > 0) && <ReasoningReplay events={events} live pending={streaming} />}
 
-      {savedId ? (
-        <p className="text-sm text-emerald-700">Saved to the queue as pending review.</p>
-      ) : (
-        status === "done" &&
-        meal && (
-          <p className="text-sm text-stone-600">
-            Preview of <span className="font-medium">{meal.name}</span> — not saved.
-          </p>
-        )
+      {savedId && (
+        <p className="text-sm text-emerald-700">
+          Saved {meal ? <span className="font-medium">{meal.name}</span> : "the meal"} to the queue
+          as pending review.
+        </p>
       )}
     </section>
   );

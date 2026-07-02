@@ -1,4 +1,4 @@
-"""Endpoint tests for the admin compose router: preview, save, settings, and the queue.
+"""Endpoint tests for the admin compose router: save, settings, and the queue.
 
 The streaming routes are driven with a scripted fake streamer so no model runs. For the
 save paths the fake runs the route's persist callback on the rolled-back test session
@@ -24,6 +24,7 @@ from app.core.ratelimit import limiter
 from app.core.security import hash_password
 from app.db.session import get_session
 from app.dependencies import get_composer_streamer
+from app.embeddings import get_embedder
 from app.enums import ApprovalStatus, MealType, Role
 from app.llm.errors import LLMInvocationError
 from app.main import create_app
@@ -114,6 +115,9 @@ async def _compose_client(session: AsyncSession, streamer: object) -> AsyncItera
 
     app.dependency_overrides[get_session] = _use_test_session
     app.dependency_overrides[get_composer_streamer] = lambda: streamer
+    # The curated route embeds through the real singleton; the deterministic fake keeps
+    # tests off the ONNX model and decoupled from which route happens to embed.
+    app.dependency_overrides[get_embedder] = lambda: FakeEmbedder()
     limiter.enabled = False
     transport = ASGITransport(app=app)
     try:
@@ -156,40 +160,29 @@ async def _add_daily(
     return row
 
 
-# --- POST /admin/compose/preview --------------------------------------------------
+# --- compose streaming: shared route behavior -------------------------------------
+# These exercise the route-level guards (validation, the in-flight lock, the terminal
+# error backstop) shared by every compose stream, driven through the daily route as a
+# representative example; the scripted streamer means no model ever runs.
 
 
-async def test_preview_streams_trace_then_meal_without_saving(
-    session: AsyncSession, admin_user: User
-) -> None:
+async def test_compose_with_a_bad_meal_type_is_422(session: AsyncSession, admin_user: User) -> None:
     async with _compose_client(session, _ScriptedStreamer(_meal())) as client:
-        resp = await client.post("/admin/compose/preview", json={"meal_type": "lunch"})
-
-    assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith("text/event-stream")
-    body = resp.text
-    assert "event: trace" in body
-    assert "event: meal" in body
-    assert "Dropped parmesan" in body
-    assert "Courgette ribbon salad" in body
-    assert "event: saved" not in body  # preview never persists
-    assert (await session.execute(select(CuratedMeal))).first() is None
-
-
-async def test_preview_with_a_bad_meal_type_is_422(session: AsyncSession, admin_user: User) -> None:
-    async with _compose_client(session, _ScriptedStreamer(_meal())) as client:
-        resp = await client.post("/admin/compose/preview", json={"meal_type": "brunch"})
+        resp = await client.post("/admin/compose/curated", json={"meal_type": "brunch"})
 
     assert resp.status_code == 422
 
 
-async def test_preview_while_a_run_is_in_flight_is_409(
+async def test_compose_while_a_run_is_in_flight_is_409(
     session: AsyncSession, admin_user: User
 ) -> None:
     await compose._compose_lock.acquire()
     try:
         async with _compose_client(session, _ScriptedStreamer(_meal())) as client:
-            resp = await client.post("/admin/compose/preview", json={"meal_type": "lunch"})
+            resp = await client.post(
+                "/admin/compose/daily",
+                json={"meal_type": "lunch", "date": _TOMORROW.isoformat()},
+            )
     finally:
         compose._compose_lock.release()
 
@@ -197,12 +190,14 @@ async def test_preview_while_a_run_is_in_flight_is_409(
     assert "already running" in resp.json()["detail"]
 
 
-async def test_preview_exhausted_closes_as_an_error_event(
+async def test_compose_exhausted_closes_as_an_error_event(
     session: AsyncSession, admin_user: User
 ) -> None:
     streamer = _RaisingStreamer(ComposerExhausted("the loop spent its budget"))
     async with _compose_client(session, streamer) as client:
-        resp = await client.post("/admin/compose/preview", json={"meal_type": "lunch"})
+        resp = await client.post(
+            "/admin/compose/daily", json={"meal_type": "lunch", "date": _TOMORROW.isoformat()}
+        )
 
     assert resp.status_code == 200
     body = resp.text
@@ -211,12 +206,14 @@ async def test_preview_exhausted_closes_as_an_error_event(
     assert "could not finish a safe meal" in body
 
 
-async def test_preview_llm_error_surfaces_its_message(
+async def test_compose_llm_error_surfaces_its_message(
     session: AsyncSession, admin_user: User
 ) -> None:
     streamer = _RaisingStreamer(LLMInvocationError("The model cannot call tools."))
     async with _compose_client(session, streamer) as client:
-        resp = await client.post("/admin/compose/preview", json={"meal_type": "lunch"})
+        resp = await client.post(
+            "/admin/compose/daily", json={"meal_type": "lunch", "date": _TOMORROW.isoformat()}
+        )
 
     assert resp.status_code == 200
     body = resp.text
@@ -225,12 +222,14 @@ async def test_preview_llm_error_surfaces_its_message(
     assert "The model cannot call tools." in body
 
 
-async def test_preview_unexpected_failure_closes_as_an_error_event(
+async def test_compose_unexpected_failure_closes_as_an_error_event(
     session: AsyncSession, admin_user: User
 ) -> None:
     streamer = _RaisingStreamer(RuntimeError("boom: the database connection dropped"))
     async with _compose_client(session, streamer) as client:
-        resp = await client.post("/admin/compose/preview", json={"meal_type": "lunch"})
+        resp = await client.post(
+            "/admin/compose/daily", json={"meal_type": "lunch", "date": _TOMORROW.isoformat()}
+        )
 
     assert resp.status_code == 200
     body = resp.text
@@ -244,17 +243,19 @@ async def test_preview_unexpected_failure_closes_as_an_error_event(
 
 
 async def test_curated_save_inserts_one_pending_row_with_trace_and_embedding(
-    session: AsyncSession, admin_user: User, monkeypatch: pytest.MonkeyPatch
+    session: AsyncSession, admin_user: User
 ) -> None:
-    # The route embeds through the real singleton; swap in the deterministic fake.
-    monkeypatch.setattr(compose, "get_embedder", lambda: FakeEmbedder())
     streamer = _ScriptedStreamer(_meal(), session=session)
 
     async with _compose_client(session, streamer) as client:
         resp = await client.post("/admin/compose/curated", json={"meal_type": "lunch"})
 
     assert resp.status_code == 200
-    assert "event: saved" in resp.text
+    body = resp.text
+    assert "event: trace" in body
+    assert "Dropped parmesan" in body  # the trace streams to the client as it runs
+    assert "event: meal" in body
+    assert "event: saved" in body
 
     rows = (await session.execute(select(CuratedMeal))).scalars().all()
     assert len(rows) == 1
@@ -466,7 +467,6 @@ async def non_admin_client(client: AsyncClient, session: AsyncSession) -> AsyncC
 _PROTECTED = [
     ("get", "/admin/compose/settings", None),
     ("put", "/admin/compose/settings", {"provider": "openai", "model": "gpt-5.4-mini"}),
-    ("post", "/admin/compose/preview", {"meal_type": "lunch"}),
     ("post", "/admin/compose/curated", {"meal_type": "lunch"}),
     ("post", "/admin/compose/daily", {"meal_type": "lunch", "date": _TOMORROW.isoformat()}),
     ("get", "/admin/daily/queue", None),

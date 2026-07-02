@@ -1,27 +1,6 @@
 // Display and timing helpers for the daily board. The branded copy and badges
 // live here, off the wire, per CLAUDE section 19.
 
-// Remembers the last board date the visitor watched in full, so the premiere
-// replay plays once a day and repeat visits go straight to the board (CLAUDE
-// section 6: the animation must not become daily friction).
-const SEEN_KEY = "hf.daily.seen";
-
-export function hasSeenBoard(date: string): boolean {
-  try {
-    return localStorage.getItem(SEEN_KEY) === date;
-  } catch {
-    return false;
-  }
-}
-
-export function markBoardSeen(date: string): void {
-  try {
-    localStorage.setItem(SEEN_KEY, date);
-  } catch {
-    // storage disabled (private mode): the replay simply plays again next visit.
-  }
-}
-
 // Whole seconds left until the reveal as a compact "3h 12m 05s"; the hours and
 // minutes segments drop off once they reach zero so a near reveal stays readable.
 export function formatRemaining(ms: number): string {
@@ -36,7 +15,7 @@ export function formatRemaining(ms: number): string {
   return parts.join(" ");
 }
 
-// Honour the OS "reduce motion" setting by skipping the replay. matchMedia is
+// Honour the OS "reduce motion" setting by skipping the paced replay. matchMedia is
 // absent in jsdom, so the optional chaining keeps tests on the animated path.
 export function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -48,4 +27,22 @@ export function prefersReducedMotion(): boolean {
 export function formatBoardDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
   return new Date(year, month - 1, day).toDateString();
+}
+
+// How many days back the past-board view can step. Mirrors the backend's
+// daily_history_days default; the dated endpoint 404s anything older, so this only
+// caps the navigation, it does not own the bound.
+export const PAST_BOARD_WINDOW_DAYS = 7;
+
+// Today as YYYY-MM-DD in UTC, matching the backend's UTC "today" so the navigation
+// bounds line up with the window the dated endpoint accepts.
+export function todayIsoUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Shift a YYYY-MM-DD date by whole days, in UTC so it never drifts across a timezone
+// boundary. Lexical string comparison of two such dates is also a valid date order.
+export function shiftIsoDate(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
 }

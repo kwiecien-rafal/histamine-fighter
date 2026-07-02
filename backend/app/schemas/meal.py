@@ -416,16 +416,74 @@ class TraceEvent(BaseModel):
     plain-language line and ``kind`` drives the animation's styling. The ``reject``
     events ("parmesan is avoid, dropping it") are the demo payoff. ``compatibility``
     is the stable reading token the frontend maps to a label, set only on the steps
-    that read one ingredient. ``meal_type`` is set on the public daily board, where
-    several meals' steps replay together, so the animation can group them by dish; it
-    is null on a single-meal stream.
+    that read one ingredient.
     """
 
     kind: TraceKind
     text: str
     ingredient: str | None = None
     compatibility: TraceReading | None = None
-    meal_type: MealType | None = None
+
+
+def public_trace(events: Iterable[TraceEvent]) -> list[TraceEvent]:
+    """The replayable trace with the model's own prose dropped.
+
+    Only code-authored steps reach a public surface: a ``draft`` is the model's text,
+    which never makes a safety claim to a visitor. The admin views keep the full trace.
+    """
+    return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]
+
+
+class PublicMealView(BaseModel):
+    """The full public view of a composed meal, shared by every surface that shows one.
+
+    The daily board card and the curated browse detail are the same shape, so they
+    share this base rather than drifting apart. The ``trace`` is filtered to
+    code-authored steps (the model's prose never reaches a visitor); ``model`` is
+    per-card so attribution stays truthful when a board mixes models. No verdict
+    travels: membership in the approved pool is the safety signal.
+    """
+
+    meal_type: MealType
+    model: str = Field(description="Which model composed this meal.")
+    name: str
+    description: str
+    ingredients: list[ProposedIngredient]
+    recipe: list[str] | None
+    tags: list[str]
+    trace: list[TraceEvent]
+
+
+class PublicMealCard(BaseModel):
+    """One approved meal as the browse *list* serves it: a lean summary, not the meal.
+
+    The list ships no ingredients, recipe, or trace, only whether a recipe and a
+    replayable trace exist (``has_recipe`` / ``has_trace``), so a page of many meals
+    stays small; the full detail loads from ``GET /api/v1/meals/{id}`` on click. The
+    ``id`` is the stable key and the deep link to that detail.
+    """
+
+    id: UUID
+    meal_type: MealType
+    model: str
+    name: str
+    description: str
+    tags: list[str]
+    has_recipe: bool
+    has_trace: bool
+
+
+class PublicMealDetail(PublicMealView):
+    """One approved meal in full: the deep-linked detail with recipe and replay trace."""
+
+    id: UUID
+
+
+class PublicMealPage(BaseModel):
+    """One page of the browse plus the total approved count, so the client can page."""
+
+    items: list[PublicMealCard]
+    total: int
 
 
 class ComposedMealCard(BaseModel):

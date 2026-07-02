@@ -4,11 +4,14 @@ import { Link } from "react-router-dom";
 import type { QueuedDay } from "../api/admin";
 import {
   AdminAuthError,
+  type ApprovalStatus,
   approveDaily,
   approveMeal,
+  deleteDaily,
+  deleteMeal,
   errorMessage,
   listDailyQueue,
-  listPendingMeals,
+  listMeals,
   MAX_EMAIL_CHARS,
   MAX_PASSWORD_CHARS,
   rejectDaily,
@@ -20,7 +23,9 @@ import { ComposePanel } from "../components/ComposePanel";
 import { DailySuggestionCard } from "../components/DailySuggestionCard";
 import { GenerationSettingsPanel } from "../components/GenerationSettingsPanel";
 import { MealReviewCard } from "../components/MealReviewCard";
+import { NewMealForm } from "../components/NewMealForm";
 import { ReviewQueueShell } from "../components/ReviewQueueShell";
+import { StatusTabs } from "../components/StatusTabs";
 import { useAdminSession } from "../hooks/useAdminSession";
 import { useReviewQueue } from "../hooks/useReviewQueue";
 import { formatBoardDate } from "../lib/daily";
@@ -33,10 +38,42 @@ const SECTIONS = [
   { id: "curated", label: "Curated" },
 ];
 
+// Per-status copy for the curated browse tabs: the tab label, the count wording, the
+// pre-load placeholder, and the empty message. Pending keeps the review-queue voice;
+// the others read as a browsable archive.
+const CURATED_TABS: Record<
+  ApprovalStatus,
+  { label: string; countNoun: string; idleLabel: string; emptyMessage: string }
+> = {
+  pending: {
+    label: "Pending",
+    countNoun: "waiting for review",
+    idleLabel: "Pending review",
+    emptyMessage: "Nothing waiting for review. Compose some meals first.",
+  },
+  approved: {
+    label: "Approved",
+    countNoun: "approved",
+    idleLabel: "Approved meals",
+    emptyMessage: "No approved meals yet.",
+  },
+  rejected: {
+    label: "Rejected",
+    countNoun: "rejected",
+    idleLabel: "Rejected meals",
+    emptyMessage: "No rejected meals.",
+  },
+};
+const CURATED_ORDER: ApprovalStatus[] = ["pending", "approved", "rejected"];
+
 export function Admin() {
   const { user, status, login, logout, expire, loggingIn, error: loginError } = useAdminSession();
   const isAdmin = user?.role === "admin";
-  const curated = useReviewQueue(isAdmin, expire, listPendingMeals, approveMeal, rejectMeal);
+  // The curated section browses one approval state at a time; switching tabs swaps the
+  // list call, which re-runs the queue's load (the callback identity changes).
+  const [curatedStatus, setCuratedStatus] = useState<ApprovalStatus>("pending");
+  const listCurated = useCallback(() => listMeals(curatedStatus), [curatedStatus]);
+  const curated = useReviewQueue(isAdmin, expire, listCurated, approveMeal, rejectMeal, deleteMeal);
   const queue = useDailyQueue(isAdmin, expire);
 
   // The backend serializes live compositions behind one lock, so only one panel may run at
@@ -91,8 +128,8 @@ export function Admin() {
 
             <Section id="compose" title="Generate">
               <p className="text-sm text-stone-600 mb-3">
-                Watch the composer run. Preview discards the result; Generate &amp; save adds a
-                pending row to the queue or curated pool.
+                Watch the composer run. Each generation adds a pending row to the queue or curated
+                pool, which you can review, edit, watch again, or remove below.
               </p>
               <h3 className="text-sm font-medium mb-2">Daily board</h3>
               <ComposePanel
@@ -124,25 +161,53 @@ export function Admin() {
             </Section>
 
             <Section id="curated" title="Curated meals">
-              <ReviewQueueShell
-                count={curated.items?.length ?? null}
-                loading={curated.loading}
-                error={curated.error}
-                emptyMessage="Nothing waiting for review. Compose some meals first."
-                onReload={() => void curated.reload()}
-              >
-                {curated.items?.map((meal) => (
-                  <MealReviewCard
-                    key={meal.id}
-                    meal={meal}
-                    busy={curated.decidingId === meal.id}
-                    onApprove={() => void curated.decide(meal.id, "approve")}
-                    onReject={() => void curated.decide(meal.id, "reject")}
-                    onSaveEdit={(edit) => updateMeal(meal.id, edit).then(() => undefined)}
-                    onEdited={() => void curated.reload()}
-                  />
-                ))}
-              </ReviewQueueShell>
+              <div className="mb-4">
+                <NewMealForm
+                  onCreated={() => {
+                    // A manual meal lands pending; show that tab, reloading it directly when
+                    // it is already the active one (a same-status set would not re-fetch).
+                    if (curatedStatus === "pending") void curated.reload();
+                    else setCuratedStatus("pending");
+                  }}
+                />
+              </div>
+              <StatusTabs
+                tabs={CURATED_ORDER}
+                active={curatedStatus}
+                label={(tabStatus) => CURATED_TABS[tabStatus].label}
+                onSelect={setCuratedStatus}
+                ariaLabel="Curated meal status"
+                panelId="curated-panel"
+                idPrefix="curated-tab"
+              />
+              <div id="curated-panel" role="tabpanel" aria-labelledby={`curated-tab-${curatedStatus}`}>
+                <ReviewQueueShell
+                  count={curated.items?.length ?? null}
+                  loading={curated.loading}
+                  error={curated.error}
+                  emptyMessage={CURATED_TABS[curatedStatus].emptyMessage}
+                  countNoun={CURATED_TABS[curatedStatus].countNoun}
+                  idleLabel={CURATED_TABS[curatedStatus].idleLabel}
+                  onReload={() => void curated.reload()}
+                >
+                  {curated.items?.map((meal) => (
+                    <MealReviewCard
+                      key={meal.id}
+                      meal={meal}
+                      busy={curated.decidingId === meal.id}
+                      onApprove={() => void curated.decide(meal.id, "approve")}
+                      onReject={() => void curated.decide(meal.id, "reject")}
+                      onRemove={() => void curated.decide(meal.id, "delete")}
+                      onSaveEdit={
+                        meal.approval_status === "pending"
+                          ? (edit) => updateMeal(meal.id, edit).then(() => undefined)
+                          : undefined
+                      }
+                      onEdited={() => void curated.reload()}
+                    />
+                  ))}
+                </ReviewQueueShell>
+              </div>
             </Section>
           </>
         ) : status === "authed" ? (
@@ -235,11 +300,15 @@ function DailyQueueView({ days, loading, error, onReload, onExpired }: DailyQueu
   const [decideError, setDecideError] = useState<string | null>(null);
 
   const decide = useCallback(
-    async (id: string, action: "approve" | "reject") => {
+    async (id: string, action: "approve" | "reject" | "delete") => {
       setDecidingId(id);
       setDecideError(null);
       try {
-        await (action === "approve" ? approveDaily(id) : rejectDaily(id));
+        await (action === "approve"
+          ? approveDaily(id)
+          : action === "reject"
+            ? rejectDaily(id)
+            : deleteDaily(id));
         onReload();
       } catch (err) {
         if (err instanceof AdminAuthError) onExpired();
@@ -302,6 +371,7 @@ function DailyQueueView({ days, loading, error, onReload, onExpired }: DailyQueu
                 busy={decidingId === slot.id}
                 onApprove={() => void decide(slot.id, "approve")}
                 onReject={() => void decide(slot.id, "reject")}
+                onRemove={() => void decide(slot.id, "delete")}
                 onSaveEdit={
                   slot.approval_status === "pending"
                     ? (edit) => updateDaily(slot.id, edit).then(() => undefined)

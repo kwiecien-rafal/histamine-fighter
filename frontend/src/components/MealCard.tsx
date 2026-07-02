@@ -1,14 +1,20 @@
-import type { DailyMealCard } from "../api/daily";
+import { useState } from "react";
+
+import type { PublicMeal } from "../api/domain";
 import { MEAL_TYPE_LABEL } from "../lib/meal";
+import { MealAttribution } from "./MealAttribution";
+import { ReplayDialog } from "./ReplayDialog";
 
 interface MealCardProps {
-  meal: DailyMealCard;
+  meal: PublicMeal;
 }
 
-// One meal on the public board. Every meal here cleared the curated index and an
-// admin approved it, so the verified badge is a constant signal, not a per-row
-// claim. The model badge is shown once at the board level, not repeated per card.
+// The full view of an approved meal, shared by the daily board and the browse detail.
+// Every meal here cleared the curated index and an admin approved it, so the verified
+// badge is a constant signal, not a per-row claim. The model badge is per-card: a board
+// can mix models when an admin regenerates a single slot.
 export function MealCard({ meal }: MealCardProps) {
+  const [watching, setWatching] = useState(false);
   return (
     <article className="rounded border border-stone-200 bg-white p-5">
       <div className="flex items-start justify-between gap-3 mb-1">
@@ -68,6 +74,23 @@ export function MealCard({ meal }: MealCardProps) {
             ))}
           </ol>
         </details>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
+        <MealAttribution model={meal.model} />
+        {meal.trace.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setWatching(true)}
+            className="text-sm text-emerald-800 hover:text-emerald-900 underline underline-offset-4 cursor-pointer"
+          >
+            Watch how it was composed
+          </button>
+        )}
+      </div>
+
+      {watching && (
+        <ReplayDialog title={meal.name} trace={meal.trace} onClose={() => setWatching(false)} />
       )}
     </article>
   );

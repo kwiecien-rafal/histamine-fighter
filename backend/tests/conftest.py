@@ -25,11 +25,12 @@ from app.core.ratelimit import limiter
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import get_session
-from app.dependencies import get_knowledge_service
+from app.dependencies import get_knowledge_service, get_meal_service
 from app.enums import Role
 from app.main import create_app
 from app.models.user import User
 from app.services.knowledge_service import KnowledgeService
+from app.services.meal_service import MealService
 from tests.fakes import FakeEmbedder
 
 ADMIN_EMAIL = "admin@example.com"
@@ -116,10 +117,14 @@ async def client(session: AsyncSession) -> AsyncIterator[AsyncClient]:
     def _use_fake_embedder() -> KnowledgeService:
         return KnowledgeService(session, FakeEmbedder())
 
+    def _use_fake_meal_service() -> MealService:
+        return MealService(session, FakeEmbedder())
+
     app.dependency_overrides[get_session] = _use_test_session
     # The real embedder would download a model on first use; API tests retrieve
     # through the deterministic fake instead.
     app.dependency_overrides[get_knowledge_service] = _use_fake_embedder
+    app.dependency_overrides[get_meal_service] = _use_fake_meal_service
     # The limiter is process-wide and counts by client IP, which is the same for
     # every test request; disabled here so unrelated tests cannot trip it. The
     # rate-limit tests re-enable it explicitly.

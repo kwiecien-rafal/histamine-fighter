@@ -83,3 +83,14 @@ async def reject_suggestion(
     if suggestion is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found.")
     return suggestion
+
+
+@router.delete("/{suggestion_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_suggestion(
+    suggestion_id: UUID,
+    admin: User = Depends(require_admin),
+    service: DailyService = Depends(get_daily_service),
+) -> None:
+    """Permanently remove a suggestion, freeing its slot (the hard counterpart to reject)."""
+    if not await service.delete(suggestion_id, actor=admin.email):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found.")

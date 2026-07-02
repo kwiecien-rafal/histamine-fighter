@@ -51,4 +51,23 @@ describe("MealEditForm", () => {
       }),
     );
   });
+
+  it("shows a meal-type selector and the create label in create mode", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(
+      <MealEditForm
+        initial={initial()}
+        mealType={{ value: "breakfast", onChange: vi.fn() }}
+        submitLabel="Create meal"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Meal type")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create meal" }));
+    expect(onSave).toHaveBeenCalled();
+  });
 });

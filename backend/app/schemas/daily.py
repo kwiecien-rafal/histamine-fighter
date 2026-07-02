@@ -1,7 +1,7 @@
 """Schemas for the daily board: the stored meal content and the public payloads.
 
 A board is either ``locked`` (before its reveal time, or not yet approved) or
-``revealed`` (the meal cards plus the composer's recorded trace to replay). The
+``revealed`` (the meal cards, each carrying its own model and replayable trace). The
 two share the ``status`` discriminator so the frontend can switch on one field.
 No verdict travels on a card: a daily meal is safe by construction (it cleared
 the index when composed) and approved by an admin, so membership is the signal.
@@ -12,8 +12,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from app.enums import MealType
-from app.schemas.meal import ProposedIngredient, TraceEvent
+from app.schemas.meal import ProposedIngredient, PublicMealView
 from app.schemas.usage import LLMUsage
 
 
@@ -32,15 +31,12 @@ class DailyMealContent(BaseModel):
     unverified_ingredients: list[str] = Field(default_factory=list)
 
 
-class DailyMealCard(BaseModel):
-    """One revealed meal on the board: its slot plus its stored content."""
+class DailyMealCard(PublicMealView):
+    """One revealed meal on the board: exactly the shared public view, nothing board-only.
 
-    meal_type: MealType
-    name: str
-    description: str
-    ingredients: list[ProposedIngredient]
-    recipe: list[str] | None
-    tags: list[str]
+    The board offers a per-card "watch how it was composed" replay off the inherited
+    ``trace`` instead of one premiere up front.
+    """
 
 
 class LockedBoard(BaseModel):
@@ -56,15 +52,15 @@ class LockedBoard(BaseModel):
 
 
 class RevealedBoard(BaseModel):
-    """The unlocked board: the day's approved meals and the trace to replay."""
+    """The unlocked board: the day's approved meals, each carrying its own trace."""
 
     status: Literal["revealed"] = "revealed"
     date: dt.date
-    model: str = Field(description="Which model composed the day's meals.")
-    meals: list[DailyMealCard]
-    trace: list[TraceEvent] = Field(
-        description="The composer's recorded reasoning across the day's meals, in order."
+    model: str = Field(
+        description="The board's representative model, used to price the aggregate cost. "
+        "Per-meal attribution lives on each card's ``model``."
     )
+    meals: list[DailyMealCard]
     usage: LLMUsage = Field(
         default_factory=LLMUsage,
         description="Total token usage of composing the day's meals.",

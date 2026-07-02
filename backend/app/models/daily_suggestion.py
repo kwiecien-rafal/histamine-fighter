@@ -3,9 +3,9 @@
 Each row is one meal type's suggestion for a date: the composer's recorded output
 (content + reasoning trace), the time it unlocks, and its approval state. The public
 board reads these by date and reveals them once ``reveal_at`` has passed and an admin
-has approved, replaying the recorded trace as the premiere. Unlike curated_meals
-these are read by ``(suggestion_date, meal_type)``, not by similarity, so there is
-no embedding column.
+has approved; the recorded trace backs a per-meal "how it was composed" replay. Unlike
+curated_meals these are read by ``(suggestion_date, meal_type)``, not by similarity, so
+there is no embedding column.
 """
 
 from datetime import date, datetime

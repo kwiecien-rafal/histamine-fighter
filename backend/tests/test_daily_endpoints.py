@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.daily import _cache_max_age
@@ -100,7 +101,10 @@ async def test_board_revealed_when_approved_and_past_reveal(
     assert body["model"] == "fake/test"
     assert body["meals"][0]["name"] == "Courgette ribbon salad"
     assert body["meals"][0]["meal_type"] == "breakfast"
-    assert body["trace"][0]["kind"] == "verify"
+    # Model and trace ride on each card now, for per-card attribution and the
+    # "watch how it was composed" replay.
+    assert body["meals"][0]["model"] == "fake/test"
+    assert body["meals"][0]["trace"][0]["kind"] == "verify"
 
 
 async def test_board_locked_before_reveal_time(client: AsyncClient, session: AsyncSession) -> None:
@@ -146,6 +150,73 @@ async def test_board_read_sets_cache_control(client: AsyncClient, session: Async
     resp = await client.get("/api/v1/daily/meals")
 
     assert resp.headers["cache-control"] == "public, max-age=120"
+
+
+# --- GET /api/v1/daily/meals/{date} -----------------------------------------------
+
+
+async def test_dated_board_returns_a_past_revealed_day(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    reveal_at = datetime.now(UTC) - timedelta(days=3)
+    await _add_suggestion(session, reveal_at=reveal_at)
+    on = reveal_at.date()
+
+    resp = await client.get(f"/api/v1/daily/meals/{on.isoformat()}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "revealed"
+    assert body["date"] == on.isoformat()
+    assert body["meals"][0]["name"] == "Courgette ribbon salad"
+    # A past day is immutable, so it caches for an hour rather than tracking the clock.
+    assert resp.headers["cache-control"] == "public, max-age=3600"
+
+
+async def test_dated_board_past_day_with_nothing_approved_is_locked(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    reveal_at = datetime.now(UTC) - timedelta(days=3)
+    await _add_suggestion(session, reveal_at=reveal_at, approval_status=ApprovalStatus.PENDING)
+    on = reveal_at.date()
+
+    resp = await client.get(f"/api/v1/daily/meals/{on.isoformat()}")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "locked"
+    assert "meals" not in body
+
+
+async def test_dated_board_accepts_today_with_the_live_cache(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    reveal_at = datetime.now(UTC) - timedelta(hours=2)
+    await _add_suggestion(session, reveal_at=reveal_at)
+    today = datetime.now(UTC).date()
+
+    resp = await client.get(f"/api/v1/daily/meals/{today.isoformat()}")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "revealed"
+    # Today through the dated route still tracks the reveal clock, not the past-day cap.
+    assert resp.headers["cache-control"] == "public, max-age=120"
+
+
+async def test_dated_board_older_than_the_window_is_404(client: AsyncClient) -> None:
+    old = (datetime.now(UTC) - timedelta(days=8)).date()
+
+    resp = await client.get(f"/api/v1/daily/meals/{old.isoformat()}")
+
+    assert resp.status_code == 404
+
+
+async def test_dated_board_future_date_is_404(client: AsyncClient) -> None:
+    future = (datetime.now(UTC) + timedelta(days=1)).date()
+
+    resp = await client.get(f"/api/v1/daily/meals/{future.isoformat()}")
+
+    assert resp.status_code == 404
 
 
 # --- GET /admin/daily/queue -------------------------------------------------------
@@ -223,6 +294,34 @@ async def test_approve_unknown_suggestion_is_404(authenticated_client: AsyncClie
     resp = await authenticated_client.patch(
         "/admin/daily/00000000-0000-0000-0000-000000000000/approve"
     )
+
+    assert resp.status_code == 404
+
+
+# --- DELETE /admin/daily/{id} -----------------------------------------------------
+
+
+async def test_delete_suggestion_removes_the_row(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    row = await _add_suggestion(
+        session,
+        reveal_at=datetime.now(UTC) + timedelta(days=1),
+        approval_status=ApprovalStatus.PENDING,
+    )
+
+    resp = await authenticated_client.delete(f"/admin/daily/{row.id}")
+
+    assert resp.status_code == 204
+    await session.flush()
+    remaining = (
+        await session.execute(select(DailySuggestion).where(DailySuggestion.id == row.id))
+    ).scalar_one_or_none()
+    assert remaining is None
+
+
+async def test_delete_unknown_suggestion_is_404(authenticated_client: AsyncClient) -> None:
+    resp = await authenticated_client.delete("/admin/daily/00000000-0000-0000-0000-000000000000")
 
     assert resp.status_code == 404
 
@@ -312,7 +411,7 @@ async def test_edit_suggestion_without_a_session_is_401(
 
 
 def test_cache_max_age_revealed_is_modest() -> None:
-    board = RevealedBoard(date=date(2026, 6, 16), model="fake/test", meals=[], trace=[])
+    board = RevealedBoard(date=date(2026, 6, 16), model="fake/test", meals=[])
 
     assert _cache_max_age(board, datetime(2026, 6, 16, 11, tzinfo=UTC)) == 120
 

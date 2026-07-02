@@ -40,6 +40,7 @@ describe("DailySuggestionCard", () => {
         busy={false}
         onApprove={vi.fn()}
         onReject={vi.fn()}
+        onRemove={vi.fn()}
       />,
     );
 
@@ -61,6 +62,7 @@ describe("DailySuggestionCard", () => {
         busy={false}
         onApprove={onApprove}
         onReject={onReject}
+        onRemove={vi.fn()}
       />,
     );
 
@@ -71,9 +73,35 @@ describe("DailySuggestionCard", () => {
     expect(onReject).toHaveBeenCalledTimes(1);
   });
 
+  it("removes only after a one-step confirm", async () => {
+    const onRemove = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DailySuggestionCard
+        suggestion={suggestion()}
+        busy={false}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onRemove={onRemove}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(onRemove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+    expect(onRemove).toHaveBeenCalledTimes(1);
+  });
+
   it("disables the actions while a decision is in flight", () => {
     render(
-      <DailySuggestionCard suggestion={suggestion()} busy onApprove={vi.fn()} onReject={vi.fn()} />,
+      <DailySuggestionCard
+        suggestion={suggestion()}
+        busy
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        onRemove={vi.fn()}
+      />,
     );
 
     expect(screen.getByRole("button", { name: "Approve" })).toBeDisabled();

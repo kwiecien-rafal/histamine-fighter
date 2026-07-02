@@ -1,13 +1,19 @@
 import { useState } from "react";
 
-import { EditRejectedError, errorMessage, type MealEdit } from "../api/admin";
+import { EditRejectedError, errorMessage, type MealEdit, type MealType } from "../api/admin";
 import { MAX_DISH_CHARS, MAX_INGREDIENT_CHARS, MAX_INGREDIENTS } from "../api/client";
+import { MEAL_TYPE_LABEL, MEAL_TYPES } from "../lib/meal";
 
 interface MealEditFormProps {
   initial: MealEdit;
   // Persists the edit; throws EditRejectedError on a failed index re-check (422).
   onSave: (edit: MealEdit) => Promise<void>;
   onCancel: () => void;
+  // Create mode: a controlled meal-type selector the form renders above the fields, since a
+  // new meal needs a slot an edit cannot change. The parent owns the value and folds it into
+  // its create call; the edit callers omit it (an existing meal's slot is fixed).
+  mealType?: { value: MealType; onChange: (value: MealType) => void };
+  submitLabel?: string;
 }
 
 interface Row {
@@ -15,10 +21,17 @@ interface Row {
   category: string;
 }
 
-// Shared edit form for a pending curated meal or daily suggestion. It edits the five
-// content fields the backend allows, re-runs the same index check on save, and surfaces
-// the 422 blocker list so the admin sees exactly what to fix rather than a bare status.
-export function MealEditForm({ initial, onSave, onCancel }: MealEditFormProps) {
+// Shared form for the five content fields the backend allows, re-running the same index
+// check on save and surfacing the 422 blocker list so the admin sees exactly what to fix
+// rather than a bare status. Edits a pending curated meal or daily suggestion; in create
+// mode (a `mealType` selector is passed) it also authors a manual meal from empty fields.
+export function MealEditForm({
+  initial,
+  onSave,
+  onCancel,
+  mealType,
+  submitLabel = "Save changes",
+}: MealEditFormProps) {
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
   const [rows, setRows] = useState<Row[]>(() =>
@@ -35,6 +48,12 @@ export function MealEditForm({ initial, onSave, onCancel }: MealEditFormProps) {
   function setRow(index: number, patch: Partial<Row>) {
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
+
+  // Mirror the server's minimums (name, description, at least one named ingredient) so a
+  // blank create can't be sent only to bounce as a schema 422 the form would show as a
+  // bare "rejected" line. The index re-check still owns the safety verdict on submit.
+  const canSubmit =
+    name.trim().length > 0 && description.trim().length > 0 && rows.some((row) => row.name.trim());
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,6 +87,21 @@ export function MealEditForm({ initial, onSave, onCancel }: MealEditFormProps) {
       onSubmit={(e) => void submit(e)}
       className="mt-3 rounded border border-stone-200 bg-stone-50 p-4 space-y-3"
     >
+      {mealType && (
+        <Field label="Meal type">
+          <select
+            value={mealType.value}
+            onChange={(e) => mealType.onChange(e.target.value as MealType)}
+            className="w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+          >
+            {MEAL_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {MEAL_TYPE_LABEL[type]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field label="Name">
         <input
           value={name}
@@ -161,10 +195,10 @@ export function MealEditForm({ initial, onSave, onCancel }: MealEditFormProps) {
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || !canSubmit}
           className="rounded bg-emerald-800 text-white px-3 py-1.5 text-sm disabled:opacity-50 enabled:cursor-pointer"
         >
-          {saving ? "Saving…" : "Save changes"}
+          {saving ? "Saving…" : submitLabel}
         </button>
         <button
           type="button"

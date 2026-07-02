@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { formatBoardDate, formatRemaining, hasSeenBoard, markBoardSeen } from "./daily";
+import { formatBoardDate, formatRemaining, shiftIsoDate } from "./daily";
 
 describe("formatBoardDate", () => {
   it("formats a YYYY-MM-DD date on its own calendar day", () => {
@@ -22,17 +22,13 @@ describe("formatRemaining", () => {
   });
 });
 
-describe("seen-today tracking", () => {
-  beforeEach(() => {
-    localStorage.clear();
+describe("shiftIsoDate", () => {
+  it("shifts by whole days across a month boundary", () => {
+    expect(shiftIsoDate("2026-07-01", -1)).toBe("2026-06-30");
+    expect(shiftIsoDate("2026-06-30", 1)).toBe("2026-07-01");
   });
 
-  it("remembers only the exact date marked", () => {
-    expect(hasSeenBoard("2026-06-16")).toBe(false);
-
-    markBoardSeen("2026-06-16");
-
-    expect(hasSeenBoard("2026-06-16")).toBe(true);
-    expect(hasSeenBoard("2026-06-17")).toBe(false);
+  it("is a no-op for a zero shift", () => {
+    expect(shiftIsoDate("2026-06-16", 0)).toBe("2026-06-16");
   });
 });

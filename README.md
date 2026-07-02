@@ -17,6 +17,7 @@ Current main functionalities:
 - [Install](#install)
 - [Usage](#usage)
 - [Configuration](#configuration)
+- [Operations](#operations)
 - [Maintainers](#maintainers)
 - [Contributing](#contributing)
 - [License](#license)
@@ -87,6 +88,15 @@ uv run --directory backend alembic upgrade head
 ## Configuration
 
 All settings are environment variables, documented inline in `.env.example`. The app reads `.env` from the repo root. User-supplied LLM keys travel as request headers and are never stored.
+
+## Operations
+
+Production runs on managed Postgres (Supabase). Most state is regenerable: meals can be recomposed by the agent and daily boards re-run from the cron. What cannot be regenerated is the human curation layer, the approvals and any hand-edits to a composed meal. That is the data worth protecting.
+
+- **Backups.** Supabase takes automated daily backups, and supports point-in-time recovery (PITR) on its paid tiers. Enable PITR for the production project so a bad migration or an accidental delete can be rolled back to the minute. Restore from the Supabase dashboard (Database, then Backups), or restore into a fresh project and repoint `DATABASE_URL`.
+- **Migrations.** `alembic upgrade head` runs on every deploy, before the new backend starts. Author and review migrations locally; never edit the schema by hand.
+- **Least privilege.** The application connects with a role that can read and write the app tables but cannot alter the schema. Migrations run under a separate, higher-privilege role at deploy time only.
+- **History retention.** The nightly board cron prunes `daily_suggestions` older than `DAILY_HISTORY_DAYS` (default 7), the same window the public past-board view reads, so the table stays bounded to what can be shown.
 
 ## Maintainers
 

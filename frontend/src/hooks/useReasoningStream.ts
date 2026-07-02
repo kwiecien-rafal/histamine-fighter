@@ -12,8 +12,8 @@ import {
 
 export type StreamStatus = "idle" | "streaming" | "done" | "error" | "expired" | "conflict";
 
-// Which compose endpoint to drive and the body to send. Preview/curated take just a
-// meal type; daily adds the date and an optional replace flag for an overwrite.
+// Which compose endpoint to drive and the body to send. Curated takes just a meal
+// type; daily adds the date and an optional replace flag for an overwrite.
 export interface ComposeStreamRequest {
   endpoint: string;
   body: Record<string, unknown>;

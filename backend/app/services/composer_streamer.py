@@ -6,8 +6,7 @@ compose one meal in real time. It owns a database session for the life of the st
 rather than the request-scoped one, because a streaming response outlives the request
 that started it.
 
-The preview trigger discards the result (``persist=None``), exactly the old demo. The
-curated and daily save triggers pass a ``persist`` callback that writes the finished,
+The curated and daily triggers pass a ``persist`` callback that writes the finished,
 trace-carrying meal on the stream's own session; the streamer commits it and emits a
 final ``saved`` frame, or an ``error`` frame if the write fails (tokens already spent,
 nothing stored, retryable).
@@ -46,13 +45,13 @@ class ComposerStreamer:
         self._embedder = embedder
 
     async def stream(
-        self, meal_type: MealType, *, persist: Persist | None = None
+        self, meal_type: MealType, *, persist: Persist
     ) -> AsyncIterator[dict[str, str]]:
         """Yield SSE frames: a ``trace`` per step, the ``meal``, then ``saved``/``error``.
 
-        When ``persist`` is set, the finished meal is written and committed on the
-        stream's own session after the ``meal`` frame, then confirmed with a ``saved``
-        frame carrying its id. ``persist=None`` is the non-saving preview.
+        The finished meal is written and committed on the stream's own session after the
+        ``meal`` frame, then confirmed with a ``saved`` frame carrying its id (or an
+        ``error`` frame if the write fails).
         """
         async with SessionLocal() as session:
             agent = ComposerAgent(
@@ -63,8 +62,7 @@ class ComposerStreamer:
             async for item in agent.events(meal_type):
                 if isinstance(item, ComposedMeal):
                     yield _frame("meal", ComposedMealCard.from_meal(item).model_dump_json())
-                    if persist is not None:
-                        yield await self._save(item, session, persist)
+                    yield await self._save(item, session, persist)
                 else:
                     yield _frame("trace", item.model_dump_json())
 

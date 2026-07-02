@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -21,7 +21,7 @@ from app.enums import ApprovalStatus, MealType
 from app.models import DailySuggestion
 from app.schemas.admin import AdminDailyRead, AdminDailyUpdate, QueuedDay
 from app.schemas.daily import DailyMealCard, DailyMealContent, LockedBoard, RevealedBoard
-from app.schemas.meal import MODEL_AUTHORED_TRACE_KINDS, ComposedMeal, TraceEvent
+from app.schemas.meal import ComposedMeal, TraceEvent, public_trace
 from app.schemas.usage import LLMUsage
 
 log = structlog.get_logger(__name__)
@@ -57,7 +57,6 @@ class DailyService:
             date=on,
             model=ordered[0].model,
             meals=[_to_card(row) for row in ordered],
-            trace=_public_trace(ordered),
             usage=_total_usage(ordered),
         )
 
@@ -111,8 +110,7 @@ class DailyService:
         """Approve a suggestion for the public board, stamping the actor and time.
 
         Allowed even after the reveal time: a late approval is additive, joining the
-        day's board the next time it is read, and the frontend's once-per-day replay
-        guard means it never re-triggers the premiere animation.
+        day's board the next time it is read.
 
         Returns the updated row, or None when no suggestion has that id.
         """
@@ -138,6 +136,20 @@ class DailyService:
         suggestion.approved_by = None
         log.info("daily.rejected", suggestion_id=str(suggestion_id))
         return suggestion
+
+    async def delete(self, suggestion_id: UUID, *, actor: str) -> bool:
+        """Permanently remove a suggestion, freeing its slot. False when none has that id.
+
+        The hard counterpart to ``reject``: reject keeps the slot filled but off the
+        board, delete empties it so the slot can be composed afresh. The actor is logged
+        because a hard delete leaves nothing on the row to audit afterwards.
+        """
+        suggestion = await self._session.get(DailySuggestion, suggestion_id)
+        if suggestion is None:
+            return False
+        await self._session.delete(suggestion)
+        log.info("daily.deleted", suggestion_id=str(suggestion_id), actor=actor)
+        return True
 
     def reveal_at_for(self, target: date, *, now: datetime) -> datetime:
         """The instant the target date's board unlocks.
@@ -218,6 +230,19 @@ class DailyService:
             self._session.add(row)
         return row
 
+    async def prune_before(self, cutoff: date) -> int:
+        """Delete suggestions dated before ``cutoff``, returning how many were removed.
+
+        Run by the nightly cron to bound the table to the history window the public
+        past-board view can still read. The caller commits.
+        """
+        deleted = await self._session.execute(
+            delete(DailySuggestion)
+            .where(DailySuggestion.suggestion_date < cutoff)
+            .returning(DailySuggestion.id)
+        )
+        return len(deleted.all())
+
     async def _for_date(self, on: date) -> list[DailySuggestion]:
         stmt = select(DailySuggestion).where(DailySuggestion.suggestion_date == on)
         return list((await self._session.execute(stmt)).scalars().all())
@@ -225,27 +250,16 @@ class DailyService:
 
 def _to_card(row: DailySuggestion) -> DailyMealCard:
     content = DailyMealContent.model_validate(row.content)
-    # unverified_ingredients is review-queue context, not a public card field.
+    events = [TraceEvent.model_validate(raw) for raw in row.reasoning_trace]
+    # unverified_ingredients is review-queue context, not a public card field; the trace
+    # is filtered to the code-authored steps the public board may show. The model rides on
+    # the card, not the board: an operator can regenerate one slot with a different model.
     return DailyMealCard(
-        meal_type=row.meal_type, **content.model_dump(exclude={"unverified_ingredients"})
+        meal_type=row.meal_type,
+        model=row.model,
+        trace=public_trace(events),
+        **content.model_dump(exclude={"unverified_ingredients"}),
     )
-
-
-def _public_trace(rows: list[DailySuggestion]) -> list[TraceEvent]:
-    """The replayable trace across the day's meals, with model prose dropped.
-
-    Only code-authored steps reach the public board: a ``draft`` is the model's own
-    text, which never makes a safety claim to a visitor. Each event is stamped with
-    its meal type so the replay can group the steps by dish.
-    """
-    stamped: list[TraceEvent] = []
-    for row in rows:
-        for raw in row.reasoning_trace:
-            event = TraceEvent.model_validate(raw)
-            if event.kind in MODEL_AUTHORED_TRACE_KINDS:
-                continue
-            stamped.append(event.model_copy(update={"meal_type": row.meal_type}))
-    return stamped
 
 
 def _total_usage(rows: list[DailySuggestion]) -> LLMUsage:

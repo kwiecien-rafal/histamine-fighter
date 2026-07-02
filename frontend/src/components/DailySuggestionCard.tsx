@@ -14,6 +14,8 @@ interface DailySuggestionCardProps {
   busy: boolean;
   onApprove: () => void;
   onReject: () => void;
+  // Hard-deletes the suggestion, freeing its slot (the counterpart to reject).
+  onRemove: () => void;
   // When provided, the card offers an inline edit; onSaveEdit persists, onEdited refreshes.
   onSaveEdit?: (edit: MealEdit) => Promise<void>;
   onEdited?: () => void;
@@ -24,6 +26,7 @@ export function DailySuggestionCard({
   busy,
   onApprove,
   onReject,
+  onRemove,
   onSaveEdit,
   onEdited,
 }: DailySuggestionCardProps) {
@@ -88,8 +91,13 @@ export function DailySuggestionCard({
           onCancel={() => setEditing(false)}
         />
       ) : (
-        <div className="flex items-center justify-between gap-3">
-          <ReviewActions busy={busy} onApprove={onApprove} onReject={onReject} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ReviewActions
+            busy={busy}
+            onApprove={suggestion.approval_status !== "approved" ? onApprove : undefined}
+            onReject={suggestion.approval_status !== "rejected" ? onReject : undefined}
+            onRemove={onRemove}
+          />
           {onSaveEdit && (
             <button
               type="button"

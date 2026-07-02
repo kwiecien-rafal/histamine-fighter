@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # The furthest ahead, in days from today, an admin may manually queue a board.
     daily_queue_max_ahead_days: int = Field(default=14, ge=1, le=90)
 
+    # How many days back the public past-board view can read, and the retention the
+    # nightly cron prunes to. The two share one value so history stays bounded to
+    # exactly what can be shown.
+    daily_history_days: int = Field(default=7, ge=1, le=90)
+
     # Database connection. Default points at the Postgres in docker-compose.
     database_url: str = "postgresql+asyncpg://histamine:histamine@localhost:5432/histamine"
 

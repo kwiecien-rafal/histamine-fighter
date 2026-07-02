@@ -1,4 +1,4 @@
-"""Endpoint tests for the curated-meal review gate: list, approve, reject.
+"""Endpoint tests for the curated-meal review gate: list, approve, reject, delete.
 
 These run against the test database (the conftest ``authenticated_client`` shares the
 rolled-back session and carries the session cookie), so they cover the real path end
@@ -9,6 +9,7 @@ Login, logout, and the auth/role gate itself live in test_auth_endpoints.
 from datetime import UTC, datetime
 
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.embeddings import EMBEDDING_DIM
@@ -22,6 +23,7 @@ from app.schemas.meal import (
     MAX_DISH_CHARS,
     MAX_INGREDIENT_CHARS,
 )
+from app.services.meal_service import MANUAL_MODEL
 
 _ZERO_VECTOR = [0.0] * EMBEDDING_DIM
 
@@ -54,6 +56,24 @@ def _edit_body(meal: CuratedMeal, *, ingredients: list[dict[str, str]]) -> dict[
         "ingredients": ingredients,
         "recipe": meal.recipe,
         "tags": list(meal.tags),
+    }
+
+
+def _create_body(
+    *,
+    ingredients: list[dict[str, str]],
+    meal_type: str = "lunch",
+    recipe: list[str] | None = None,
+    tags: list[str] | None = None,
+) -> dict[str, object]:
+    """A manual-meal create body: the editable fields plus the slot a new meal needs."""
+    return {
+        "name": "Courgette ribbon salad",
+        "description": "raw courgette ribbons with olive oil and fresh herbs",
+        "meal_type": meal_type,
+        "ingredients": ingredients,
+        "recipe": recipe,
+        "tags": tags or [],
     }
 
 
@@ -205,6 +225,127 @@ async def test_approve_without_a_session_is_401(client: AsyncClient, session: As
     meal = await _add_meal(session)
 
     resp = await client.patch(f"/admin/meals/{meal.id}/approve")
+
+    assert resp.status_code == 401
+
+
+# --- DELETE /admin/meals/{id} -----------------------------------------------------
+
+
+async def test_delete_meal_removes_the_row(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    meal = await _add_meal(session)
+
+    resp = await authenticated_client.delete(f"/admin/meals/{meal.id}")
+
+    assert resp.status_code == 204
+    await session.flush()
+    remaining = (
+        await session.execute(select(CuratedMeal).where(CuratedMeal.id == meal.id))
+    ).scalar_one_or_none()
+    assert remaining is None
+
+
+async def test_delete_unknown_meal_is_404(authenticated_client: AsyncClient) -> None:
+    resp = await authenticated_client.delete("/admin/meals/00000000-0000-0000-0000-000000000000")
+
+    assert resp.status_code == 404
+
+
+# --- POST /admin/meals (manual create) --------------------------------------------
+
+
+def test_manual_model_sentinel_is_stable() -> None:
+    # The frontend hardcodes the same literal (api/domain.ts MANUAL_MODEL) to render
+    # "Curated by admin". Pinned on both sides so a one-sided rename fails a test here
+    # rather than silently rendering a manual meal as "Composed by MANUAL".
+    assert MANUAL_MODEL == "manual"
+
+
+async def test_create_manual_meal_lands_pending(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    body = _create_body(ingredients=[{"name": "courgette", "category": "vegetable"}])
+
+    resp = await authenticated_client.post("/admin/meals", json=body)
+
+    assert resp.status_code == 201
+    created = resp.json()
+    assert created["approval_status"] == "pending"
+    # No model composed it: the manual sentinel stands in, with no usage and no trace, so
+    # the UI shows "Curated by admin" and offers no replay.
+    assert created["model"] == MANUAL_MODEL
+    assert created["usage"] is None
+    assert created["reasoning_trace"] == []
+    # The server-default timestamp is populated by the endpoint's flush, so the response
+    # carries it (AdminMealRead requires created_at); a missing flush would 500 here.
+    assert created["created_at"]
+
+    await session.flush()
+    stored = (
+        await session.execute(select(CuratedMeal).where(CuratedMeal.id == created["id"]))
+    ).scalar_one()
+    assert stored.approval_status is ApprovalStatus.PENDING
+    assert stored.model == MANUAL_MODEL
+
+
+async def test_create_manual_meal_records_unverified_ingredients(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    # An indexed-safe ingredient plus one the index has no entry for: a miss is unknown,
+    # not unsafe, so it clears the gate but is recorded for the approving admin.
+    body = _create_body(
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "mystery spice", "category": "spice"},
+        ]
+    )
+
+    resp = await authenticated_client.post("/admin/meals", json=body)
+
+    assert resp.status_code == 201
+    assert resp.json()["unverified_ingredients"] == ["mystery spice"]
+
+
+async def test_create_manual_meal_rejects_a_blocker(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    body = _create_body(
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "parmesan", "category": "aged hard cheese"},
+        ]
+    )
+
+    resp = await authenticated_client.post("/admin/meals", json=body)
+
+    assert resp.status_code == 422
+    assert any("parmesan" in blocker for blocker in resp.json()["detail"]["blockers"])
+
+
+async def test_create_manual_meal_rejects_a_risky_recipe_mention(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    body = _create_body(
+        ingredients=[{"name": "courgette", "category": "vegetable"}],
+        recipe=["Peel into ribbons.", "Top with grated parmesan."],
+    )
+
+    resp = await authenticated_client.post("/admin/meals", json=body)
+
+    assert resp.status_code == 422
+    assert "parmesan" in resp.json()["detail"]["recipe_flags"]
+
+
+async def test_create_without_a_session_is_401(client: AsyncClient) -> None:
+    body = _create_body(ingredients=[{"name": "courgette", "category": "vegetable"}])
+
+    resp = await client.post("/admin/meals", json=body)
 
     assert resp.status_code == 401
 

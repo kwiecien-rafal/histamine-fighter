@@ -19,9 +19,9 @@ function sseResponse(frames: string[]): Response {
   });
 }
 
-// The preview request shape the hook now takes; the endpoint and body are parametrized.
-function preview(mealType: string) {
-  return { endpoint: "/admin/compose/preview", body: { meal_type: mealType } };
+// The compose request shape the hook takes; the endpoint and body are parametrized.
+function composeRequest(mealType: string) {
+  return { endpoint: "/admin/compose/curated", body: { meal_type: mealType } };
 }
 
 afterEach(() => {
@@ -42,7 +42,7 @@ describe("useReasoningStream", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { result } = renderHook(() => useReasoningStream(vi.fn()));
-    await result.current.start(preview("lunch"));
+    await result.current.start(composeRequest("lunch"));
 
     await waitFor(() => expect(result.current.status).toBe("done"));
     expect(result.current.events).toHaveLength(1);
@@ -66,7 +66,7 @@ describe("useReasoningStream", () => {
     );
 
     const { result } = renderHook(() => useReasoningStream(vi.fn()));
-    await result.current.start(preview("dinner"));
+    await result.current.start(composeRequest("dinner"));
 
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.error).toBe("The composer could not finish.");
@@ -77,7 +77,7 @@ describe("useReasoningStream", () => {
     const onExpired = vi.fn();
 
     const { result } = renderHook(() => useReasoningStream(onExpired));
-    await result.current.start(preview("snack"));
+    await result.current.start(composeRequest("snack"));
 
     // The auth path bails to logout, but settles on a terminal status rather than
     // dangling at "streaming", and never surfaces a scary error.
@@ -111,7 +111,7 @@ describe("useReasoningStream", () => {
     const { result } = renderHook(() => useReasoningStream(vi.fn()));
     let pending: Promise<void> | undefined;
     act(() => {
-      pending = result.current.start(preview("lunch"));
+      pending = result.current.start(composeRequest("lunch"));
     });
     await waitFor(() => expect(result.current.events).toHaveLength(1));
     expect(result.current.status).toBe("streaming");
@@ -137,7 +137,7 @@ describe("useReasoningStream", () => {
     );
 
     const { result } = renderHook(() => useReasoningStream(vi.fn()));
-    await result.current.start(preview("lunch"));
+    await result.current.start(composeRequest("lunch"));
 
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.events).toHaveLength(1);
@@ -158,7 +158,7 @@ describe("useReasoningStream", () => {
     );
 
     const { result } = renderHook(() => useReasoningStream(vi.fn()));
-    await result.current.start(preview("lunch"));
+    await result.current.start(composeRequest("lunch"));
 
     await waitFor(() => expect(result.current.status).toBe("done"));
     expect(result.current.meal?.name).toBe("Courgette salad");
@@ -172,7 +172,7 @@ describe("useReasoningStream", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status })));
 
     const { result } = renderHook(() => useReasoningStream(vi.fn()));
-    await result.current.start(preview("lunch"));
+    await result.current.start(composeRequest("lunch"));
 
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.error).toBe(message);

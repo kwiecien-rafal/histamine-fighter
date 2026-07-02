@@ -72,6 +72,7 @@ async def test_board_revealed_past_reveal_and_approved(session: AsyncSession) ->
     assert board.date == _DAY
     assert board.model == "fake/test"
     assert [card.meal_type for card in board.meals] == [MealType.BREAKFAST, MealType.LUNCH]
+    assert all(card.model == "fake/test" for card in board.meals)
 
 
 async def test_board_locked_before_reveal_time(session: AsyncSession) -> None:
@@ -110,8 +111,9 @@ async def test_revealed_board_drops_unapproved_meals(session: AsyncSession) -> N
     assert [card.meal_type for card in board.meals] == [MealType.BREAKFAST]
 
 
-async def test_cards_and_trace_follow_meal_order(session: AsyncSession) -> None:
-    # Inserted out of order; the board sorts into natural meal order, not by id.
+async def test_cards_follow_meal_order_and_carry_their_own_trace(session: AsyncSession) -> None:
+    # Inserted out of order; the board sorts into natural meal order, not by id, and each
+    # card carries only its own meal's steps (the per-card "watch how it was composed").
     await _add(session, meal_type=MealType.DINNER, trace=[{"kind": "verify", "text": "d"}])
     await _add(session, meal_type=MealType.BREAKFAST, trace=[{"kind": "verify", "text": "b"}])
 
@@ -119,10 +121,10 @@ async def test_cards_and_trace_follow_meal_order(session: AsyncSession) -> None:
 
     assert board.status == "revealed"
     assert [card.meal_type for card in board.meals] == [MealType.BREAKFAST, MealType.DINNER]
-    assert [event.text for event in board.trace] == ["b", "d"]
+    assert [[event.text for event in card.trace] for card in board.meals] == [["b"], ["d"]]
 
 
-async def test_revealed_board_drops_model_draft_events(session: AsyncSession) -> None:
+async def test_card_trace_drops_model_draft_events(session: AsyncSession) -> None:
     # `draft` is the model's own prose; the public board shows only code-authored steps.
     await _add(
         session,
@@ -136,22 +138,7 @@ async def test_revealed_board_drops_model_draft_events(session: AsyncSession) ->
     board = await DailyService(session).board_for(_DAY, now=_AFTER)
 
     assert board.status == "revealed"
-    assert [event.kind for event in board.trace] == ["verify"]
-
-
-async def test_public_trace_stamps_each_event_with_its_meal_type(session: AsyncSession) -> None:
-    # The board flattens every meal's steps into one trace; each carries its slot so
-    # the replay can group them by dish.
-    await _add(session, meal_type=MealType.BREAKFAST, trace=[{"kind": "verify", "text": "b"}])
-    await _add(session, meal_type=MealType.DINNER, trace=[{"kind": "check", "text": "d"}])
-
-    board = await DailyService(session).board_for(_DAY, now=_AFTER)
-
-    assert board.status == "revealed"
-    assert [(event.meal_type, event.text) for event in board.trace] == [
-        (MealType.BREAKFAST, "b"),
-        (MealType.DINNER, "d"),
-    ]
+    assert [event.kind for event in board.meals[0].trace] == ["verify"]
 
 
 async def test_revealed_board_totals_usage_across_meals(session: AsyncSession) -> None:
@@ -277,3 +264,28 @@ async def test_approve_unknown_suggestion_returns_none(session: AsyncSession) ->
     )
 
     assert result is None
+
+
+# --- prune ------------------------------------------------------------------------
+
+
+async def test_prune_before_removes_older_dates_and_keeps_the_cutoff(session: AsyncSession) -> None:
+    cutoff = date(2026, 6, 16)
+    old_reveal = datetime(2026, 6, 14, 10, tzinfo=UTC)
+    await _add(session, meal_type=MealType.BREAKFAST, on=date(2026, 6, 14), reveal_at=old_reveal)
+    await _add(session, meal_type=MealType.LUNCH, on=date(2026, 6, 14), reveal_at=old_reveal)
+    kept = await _add(session, meal_type=MealType.BREAKFAST, on=cutoff)
+
+    removed = await DailyService(session).prune_before(cutoff)
+
+    # The window is inclusive of its oldest day, so the cutoff date itself survives.
+    assert removed == 2
+    assert await DailyService(session).get(kept.id) is not None
+
+
+async def test_prune_before_removes_nothing_when_all_within_window(session: AsyncSession) -> None:
+    await _add(session, meal_type=MealType.BREAKFAST, on=_DAY)
+
+    removed = await DailyService(session).prune_before(date(2026, 6, 14))
+
+    assert removed == 0

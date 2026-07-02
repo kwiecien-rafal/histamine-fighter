@@ -9,7 +9,7 @@ import {
   getComposeSettings,
   getCurrentUser,
   listDailyQueue,
-  listPendingMeals,
+  listMeals,
   login,
   type AdminMeal,
   type AuthUser,
@@ -27,9 +27,10 @@ vi.mock("../api/admin", async (importActual) => {
     getCurrentUser: vi.fn(),
     login: vi.fn(),
     logout: vi.fn(),
-    listPendingMeals: vi.fn(),
+    listMeals: vi.fn(),
     approveMeal: vi.fn(),
     rejectMeal: vi.fn(),
+    deleteMeal: vi.fn(),
     listDailyQueue: vi.fn(),
     approveDaily: vi.fn(),
     rejectDaily: vi.fn(),
@@ -40,7 +41,7 @@ vi.mock("../api/admin", async (importActual) => {
 
 const getCurrentUserMock = vi.mocked(getCurrentUser);
 const loginMock = vi.mocked(login);
-const listMock = vi.mocked(listPendingMeals);
+const listMock = vi.mocked(listMeals);
 const approveMock = vi.mocked(approveMeal);
 const listQueueMock = vi.mocked(listDailyQueue);
 const settingsMock = vi.mocked(getComposeSettings);
@@ -127,6 +128,22 @@ describe("Admin", () => {
     expect(await screen.findByText(/Compose some meals first/)).toBeInTheDocument();
     expect(screen.queryByText("Courgette ribbon salad")).not.toBeInTheDocument();
     expect(approveMock).toHaveBeenCalledWith("meal-1");
+  });
+
+  it("switches curated tabs and reloads that status", async () => {
+    getCurrentUserMock.mockResolvedValueOnce(adminUser);
+    listMock.mockResolvedValueOnce([meal()]); // pending, on mount
+    listMock.mockResolvedValueOnce([
+      { ...meal(), id: "meal-2", name: "Approved bake", approval_status: "approved" },
+    ]);
+    const user = userEvent.setup();
+    renderAdmin();
+
+    await screen.findByText("Courgette ribbon salad");
+    await user.click(screen.getByRole("tab", { name: "Approved" }));
+
+    expect(await screen.findByText("Approved bake")).toBeInTheDocument();
+    expect(listMock).toHaveBeenCalledWith("approved");
   });
 
   it("shows an inline error when the credentials are wrong", async () => {

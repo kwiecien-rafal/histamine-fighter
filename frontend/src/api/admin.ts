@@ -1,9 +1,12 @@
 import type { LLMUsage, ProposedIngredient } from "./client";
+import type { MealType, TraceEvent } from "./domain";
 import { errorDetail } from "./errors";
 
 export { errorDetail, errorMessage } from "./errors";
+// The neutral domain types live in ./domain; re-exported so existing admin imports
+// keep working while the public clients depend on ./domain directly.
+export type { MealType, TraceEvent, TraceKind, TraceReading } from "./domain";
 
-export type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 export type Role = "user" | "admin";
 
@@ -11,28 +14,6 @@ export type Role = "user" | "admin";
 // the input instead of bouncing back as a 422.
 export const MAX_EMAIL_CHARS = 320;
 export const MAX_PASSWORD_CHARS = 128;
-
-// The stable reading token a trace step carries; the UI maps it to a label.
-export type TraceReading = "safe" | "depends" | "avoid" | "unverifiable" | "not_indexed";
-
-export type TraceKind =
-  | "draft"
-  | "check"
-  | "search"
-  | "options"
-  | "reject"
-  | "submit"
-  | "verify";
-
-export interface TraceEvent {
-  kind: TraceKind;
-  text: string;
-  ingredient: string | null;
-  compatibility: TraceReading | null;
-  // Set on the public daily board, where several meals' steps replay together, so
-  // the animation can group them by dish; absent on a single-meal stream.
-  meal_type?: MealType | null;
-}
 
 export interface AdminMeal {
   id: string;
@@ -160,8 +141,8 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return (await response.json()) as AuthUser;
 }
 
-export async function listPendingMeals(): Promise<AdminMeal[]> {
-  const response = await authedRequest("/admin/meals?status=pending");
+export async function listMeals(status: ApprovalStatus): Promise<AdminMeal[]> {
+  const response = await authedRequest(`/admin/meals?status=${status}`);
   return (await response.json()) as AdminMeal[];
 }
 
@@ -175,6 +156,10 @@ export async function rejectMeal(mealId: string): Promise<AdminMeal> {
   return (await response.json()) as AdminMeal;
 }
 
+export async function deleteMeal(mealId: string): Promise<void> {
+  await authedRequest(`/admin/meals/${mealId}`, { method: "DELETE" });
+}
+
 export async function approveDaily(suggestionId: string): Promise<AdminDailySuggestion> {
   const response = await authedRequest(`/admin/daily/${suggestionId}/approve`, { method: "PATCH" });
   return (await response.json()) as AdminDailySuggestion;
@@ -183,6 +168,10 @@ export async function approveDaily(suggestionId: string): Promise<AdminDailySugg
 export async function rejectDaily(suggestionId: string): Promise<AdminDailySuggestion> {
   const response = await authedRequest(`/admin/daily/${suggestionId}/reject`, { method: "PATCH" });
   return (await response.json()) as AdminDailySuggestion;
+}
+
+export async function deleteDaily(suggestionId: string): Promise<void> {
+  await authedRequest(`/admin/daily/${suggestionId}`, { method: "DELETE" });
 }
 
 // The operator-set composer model. Mirrors ComposeSettingsRead: the current choice
@@ -256,6 +245,12 @@ export interface MealEdit {
   tags: string[];
 }
 
+// A hand-authored manual meal, mirroring AdminMealCreate: the editable fields plus the slot
+// a new meal needs (an edit cannot change a meal's type, so MealEdit omits it).
+export interface MealCreate extends MealEdit {
+  meal_type: MealType;
+}
+
 // The offending items a 422 carries when an edit fails the index re-check, so the edit
 // form can show exactly what to fix rather than a bare status.
 export interface EditRejection {
@@ -270,28 +265,38 @@ export class EditRejectedError extends Error {
   }
 }
 
-async function patchEdit<T>(path: string, edit: MealEdit): Promise<T> {
+// Shared writer for a meal create or edit: both hit the same index gate, so both share the
+// composer-style 422 handling that surfaces the offending items for the form to display.
+async function writeMeal<T>(
+  method: "POST" | "PATCH",
+  path: string,
+  body: MealEdit | MealCreate,
+): Promise<T> {
   const response = await rawAuthedRequest(path, {
-    method: "PATCH",
+    method,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(edit),
+    body: JSON.stringify(body),
   });
   if (response.status === 422) {
-    const body = (await response.json().catch(() => null)) as { detail?: EditRejection } | null;
-    const detail = body?.detail;
+    const errorBody = (await response.json().catch(() => null)) as { detail?: EditRejection } | null;
+    const detail = errorBody?.detail;
     // The composer-style 422 carries the offending items; a plain schema 422 (e.g. an
     // oversized list the form should have blocked) falls back to a generic line.
     if (detail && Array.isArray(detail.blockers)) throw new EditRejectedError(detail);
-    throw new Error("The edit was rejected.");
+    throw new Error("The meal was rejected.");
   }
   if (!response.ok) throw new Error(await errorDetail(response));
   return (await response.json()) as T;
 }
 
+export function createMeal(meal: MealCreate): Promise<AdminMeal> {
+  return writeMeal("POST", "/admin/meals", meal);
+}
+
 export function updateMeal(mealId: string, edit: MealEdit): Promise<AdminMeal> {
-  return patchEdit(`/admin/meals/${mealId}`, edit);
+  return writeMeal("PATCH", `/admin/meals/${mealId}`, edit);
 }
 
 export function updateDaily(suggestionId: string, edit: MealEdit): Promise<AdminDailySuggestion> {
-  return patchEdit(`/admin/daily/${suggestionId}`, edit);
+  return writeMeal("PATCH", `/admin/daily/${suggestionId}`, edit);
 }

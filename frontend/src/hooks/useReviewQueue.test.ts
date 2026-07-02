@@ -14,9 +14,10 @@ const onExpired = vi.fn();
 const list = vi.fn(() => Promise.resolve<Item[]>([]));
 const approve = vi.fn((id: string) => Promise.resolve(id));
 const reject = vi.fn((id: string) => Promise.resolve(id));
+const remove = vi.fn((id: string) => Promise.resolve(id));
 
 function renderQueue(enabled = true) {
-  return renderHook(() => useReviewQueue<Item>(enabled, onExpired, list, approve, reject));
+  return renderHook(() => useReviewQueue<Item>(enabled, onExpired, list, approve, reject, remove));
 }
 
 afterEach(() => {
@@ -64,6 +65,42 @@ describe("useReviewQueue", () => {
 
     expect(reject).toHaveBeenCalledWith("s1");
     expect(result.current.items).toHaveLength(0);
+  });
+
+  it("drops an item from the queue once deleted", async () => {
+    list.mockResolvedValueOnce([{ id: "s1" }]);
+    const { result } = renderQueue();
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.decide("s1", "delete");
+    });
+
+    expect(remove).toHaveBeenCalledWith("s1");
+    expect(result.current.items).toHaveLength(0);
+  });
+
+  it("keeps the newest load when an older one resolves later", async () => {
+    let resolveOld!: (items: Item[]) => void;
+    let resolveNew!: (items: Item[]) => void;
+    list.mockReturnValueOnce(new Promise<Item[]>((resolve) => (resolveOld = resolve)));
+    list.mockReturnValueOnce(new Promise<Item[]>((resolve) => (resolveNew = resolve)));
+
+    const { result } = renderQueue(); // mount fires the first (old) load, still pending
+    act(() => {
+      void result.current.reload(); // a second (newer) load supersedes it
+    });
+
+    // The newer load resolves first and lands.
+    resolveNew([{ id: "new" }]);
+    await waitFor(() => expect(result.current.items).toEqual([{ id: "new" }]));
+
+    // The stale older load resolves after it, and must not overwrite the newer result.
+    resolveOld([{ id: "old" }]);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.items).toEqual([{ id: "new" }]);
   });
 
   it("logs the session out on a 401", async () => {

@@ -82,21 +82,7 @@ def _streamer(monkeypatch: pytest.MonkeyPatch) -> tuple[ComposerStreamer, _FakeS
     return streamer, session
 
 
-async def test_preview_streams_trace_then_meal_without_saving(
-    _streamer: tuple[ComposerStreamer, _FakeSession],
-) -> None:
-    streamer, session = _streamer
-
-    frames = [frame async for frame in streamer.stream(MealType.LUNCH)]
-
-    assert [frame["event"] for frame in frames] == ["trace", "trace", "meal"]
-    meal_frame = frames[-1]
-    assert "Courgette ribbon salad" in meal_frame["data"]
-    assert "reasoning_trace" not in meal_frame["data"]  # the card drops the trace
-    assert not session.committed
-
-
-async def test_save_commits_and_emits_a_saved_frame(
+async def test_save_streams_trace_then_meal_then_commits_a_saved_frame(
     _streamer: tuple[ComposerStreamer, _FakeSession],
 ) -> None:
     streamer, session = _streamer
@@ -108,6 +94,9 @@ async def test_save_commits_and_emits_a_saved_frame(
     frames = [frame async for frame in streamer.stream(MealType.LUNCH, persist=persist)]
 
     assert [frame["event"] for frame in frames] == ["trace", "trace", "meal", "saved"]
+    meal_frame = frames[2]
+    assert "Courgette ribbon salad" in meal_frame["data"]
+    assert "reasoning_trace" not in meal_frame["data"]  # the card drops the trace
     assert json.loads(frames[-1]["data"]) == {"id": str(saved_id)}
     assert session.committed
     assert not session.rolled_back

@@ -1,11 +1,12 @@
-"""Admin compose: stream a live composition, optionally saving it, and set the model.
+"""Admin compose: stream a live composition into a pending row, and set the model.
 
-Every route is gated by ``require_admin``. The three streaming routes share one
-process-local lock so a single operator cannot fan out into several concurrent
-multi-call LLM runs. Preview discards the result; curated and daily persist the
-finished, trace-carrying meal and confirm it with a ``saved`` frame. The settings
-routes read and set the operator's composer provider/model, validated through the
-single source of provider truth so a keyless or gated choice can never be saved.
+Every route is gated by ``require_admin``. The two streaming routes share one
+process-local lock so an operator's repeated triggers cannot overlap into several
+concurrent multi-call LLM runs within a worker (per-worker, see ``_compose_lock``).
+Each persists the finished, trace-carrying meal as pending review and confirms it with
+a ``saved`` frame: curated into the pool, daily into a dated slot. The settings routes
+read and set the operator's composer provider/model, validated through the single
+source of provider truth so a keyless or gated choice can never be saved.
 """
 
 import asyncio
@@ -29,7 +30,7 @@ from app.dependencies import (
     get_generation_settings_service,
     require_admin,
 )
-from app.embeddings import get_embedder
+from app.embeddings import Embedder, get_embedder
 from app.enums import ApprovalStatus, MealType
 from app.llm.config import LLMRequestConfig
 from app.llm.errors import LLMError
@@ -113,9 +114,9 @@ def _conflict_detail(
 
 
 def _compose_response(
-    meal_type: MealType, streamer: ComposerStreamer, *, persist: Persist | None
+    meal_type: MealType, streamer: ComposerStreamer, *, persist: Persist
 ) -> EventSourceResponse:
-    """Stream one composition as SSE, optionally saving it, behind the shared lock.
+    """Stream one composition as SSE, saving it as pending, behind the shared lock.
 
     A second trigger while one is in flight gets 409. The stream relays the streamer's
     frames and turns a compose failure into a terminal ``error`` frame, so an already
@@ -151,18 +152,6 @@ def _compose_response(
     return EventSourceResponse(event_source())
 
 
-@router.post("/preview")
-@limiter.limit(llm_rate_limit)
-async def preview(
-    request: Request,
-    payload: ComposeRequest,
-    _admin: User = Depends(require_admin),
-    streamer: ComposerStreamer = Depends(get_composer_streamer),
-) -> EventSourceResponse:
-    """Stream one live composition without saving it (the honest demo)."""
-    return _compose_response(payload.meal_type, streamer, persist=None)
-
-
 @router.post("/curated")
 @limiter.limit(llm_rate_limit)
 async def compose_curated(
@@ -170,9 +159,9 @@ async def compose_curated(
     payload: ComposeRequest,
     _admin: User = Depends(require_admin),
     streamer: ComposerStreamer = Depends(get_composer_streamer),
+    embedder: Embedder = Depends(get_embedder),
 ) -> EventSourceResponse:
     """Stream one composition and save it to the curated pool as pending review."""
-    embedder = get_embedder()
 
     async def persist(meal: ComposedMeal, session: AsyncSession) -> UUID:
         row = await MealService(session, embedder).store_pending(meal)

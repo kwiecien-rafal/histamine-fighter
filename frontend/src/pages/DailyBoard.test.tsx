@@ -5,21 +5,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getDailyBoard,
+  getDailyBoardFor,
   type DailyBoard as DailyBoardData,
   type DailyMealCard,
   type RevealedBoard,
 } from "../api/daily";
-import { hasSeenBoard, markBoardSeen } from "../lib/daily";
 import { DailyBoard } from "./DailyBoard";
 
 vi.mock("../api/daily", async (importActual) => {
   const actual = await importActual<typeof import("../api/daily")>();
-  return { ...actual, getDailyBoard: vi.fn() };
+  return { ...actual, getDailyBoard: vi.fn(), getDailyBoardFor: vi.fn() };
 });
 
 const getMock = vi.mocked(getDailyBoard);
+const getForMock = vi.mocked(getDailyBoardFor);
 
 const DATE = "2026-06-16";
+
+// Today and a day offset in UTC, matching how the page derives its navigation bounds.
+function isoDaysFromToday(days: number): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days))
+    .toISOString()
+    .slice(0, 10);
+}
 
 // The widest a single poll can be scheduled out (LockedView's base + max jitter);
 // advancing by it guarantees the next poll has fired regardless of the jitter.
@@ -33,11 +42,16 @@ function resolved(board: DailyBoardData) {
 function mealCard(): DailyMealCard {
   return {
     meal_type: "breakfast",
+    model: "stub/model",
     name: "Buckwheat porridge",
     description: "warm buckwheat with pear",
     ingredients: [{ name: "buckwheat", category: "grain" }],
     recipe: null,
     tags: [],
+    trace: [
+      { kind: "check", text: "step one", ingredient: null, compatibility: null },
+      { kind: "verify", text: "step two", ingredient: null, compatibility: null },
+    ],
   };
 }
 
@@ -47,11 +61,6 @@ function revealed(): RevealedBoard {
     date: DATE,
     model: "stub/model",
     meals: [mealCard()],
-    trace: [
-      { kind: "check", text: "step one", ingredient: null, compatibility: null },
-      { kind: "check", text: "step two", ingredient: null, compatibility: null },
-      { kind: "verify", text: "step three", ingredient: null, compatibility: null },
-    ],
     usage: { calls: 8, input_tokens: 1600, output_tokens: 240, total_tokens: 1840, steps: [] },
   };
 }
@@ -65,7 +74,6 @@ function renderBoard() {
 }
 
 beforeEach(() => {
-  localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -98,28 +106,27 @@ describe("DailyBoard", () => {
     expect(document.title).toBe("Today's meals · Histamine Fighter");
   });
 
-  it("plays the replay first, then reveals the board on skip", async () => {
+  it("shows the board immediately once revealed, with no forced premiere", async () => {
+    getMock.mockResolvedValue(resolved(revealed()));
+    renderBoard();
+
+    expect(await screen.findByText("Buckwheat porridge")).toBeInTheDocument();
+    expect(screen.getByText("stub/model")).toBeInTheDocument();
+    expect(screen.queryByText("Composing today's board…")).not.toBeInTheDocument();
+  });
+
+  it("opens a per-card replay from the Watch button", async () => {
     getMock.mockResolvedValue(resolved(revealed()));
     const user = userEvent.setup();
     renderBoard();
 
-    expect(await screen.findByText("Composing today's board…")).toBeInTheDocument();
-    expect(screen.queryByText("Buckwheat porridge")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Watch how it was composed" }));
 
-    await user.click(screen.getByRole("button", { name: "Skip" }));
+    expect(await screen.findByText("How it was composed")).toBeInTheDocument();
+    expect(screen.getByText("step one")).toBeInTheDocument();
 
-    expect(await screen.findByText("Buckwheat porridge")).toBeInTheDocument();
-    expect(screen.getByText("stub/model")).toBeInTheDocument();
-    expect(hasSeenBoard(DATE)).toBe(true);
-  });
-
-  it("skips the replay for a repeat visitor who has seen today's board", async () => {
-    markBoardSeen(DATE);
-    getMock.mockResolvedValue(resolved(revealed()));
-    renderBoard();
-
-    expect(await screen.findByText("Buckwheat porridge")).toBeInTheDocument();
-    expect(screen.queryByText("Composing today's board…")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText("How it was composed")).not.toBeInTheDocument();
   });
 
   it("re-polls while past the reveal but still awaiting approval", async () => {
@@ -159,5 +166,45 @@ describe("DailyBoard", () => {
     // The poll failed, but the locked board it already had stays put.
     expect(screen.getByText("Revealing now…")).toBeInTheDocument();
     expect(screen.queryByText(/Couldn't load the board/)).not.toBeInTheDocument();
+  });
+
+  it("disables forward navigation on today", async () => {
+    getMock.mockResolvedValue(resolved(revealed()));
+    renderBoard();
+
+    await screen.findByText("Buckwheat porridge");
+    expect(screen.getByRole("button", { name: /next day/i })).toBeDisabled();
+  });
+
+  it("steps back to a past day's board through the dated route", async () => {
+    const yesterday = isoDaysFromToday(-1);
+    getMock.mockResolvedValue(resolved(revealed()));
+    getForMock.mockResolvedValue(
+      resolved({ ...revealed(), meals: [{ ...mealCard(), name: "Yesterday's stew" }] }),
+    );
+    const user = userEvent.setup();
+    renderBoard();
+
+    await screen.findByText("Buckwheat porridge");
+    await user.click(screen.getByRole("button", { name: /previous day/i }));
+
+    expect(await screen.findByText("Yesterday's stew")).toBeInTheDocument();
+    expect(getForMock).toHaveBeenCalledWith(yesterday);
+  });
+
+  it("shows 'no board published' for a past day with nothing approved", async () => {
+    const yesterday = isoDaysFromToday(-1);
+    getMock.mockResolvedValue(resolved(revealed()));
+    getForMock.mockResolvedValue(
+      resolved({ status: "locked", date: yesterday, reveal_at: "2026-06-15T10:00:00Z" }),
+    );
+    const user = userEvent.setup();
+    renderBoard();
+
+    await screen.findByText("Buckwheat porridge");
+    await user.click(screen.getByRole("button", { name: /previous day/i }));
+
+    expect(await screen.findByText(/No board was published on/)).toBeInTheDocument();
+    expect(screen.queryByText("Buckwheat porridge")).not.toBeInTheDocument();
   });
 });

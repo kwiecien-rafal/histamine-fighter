@@ -3,11 +3,13 @@
 Runs the agentic ComposerAgent once per meal type for a target date and persists
 each result as a daily_suggestions row (approval_status=pending) with its recorded
 trace and a reveal time of ``settings.daily_reveal_hour_utc`` (UTC) on that date. An
-admin approves during the day; the public board unlocks at the reveal time, replaying
-the trace as the premiere. Cron runs nightly as a gap-filler: it covers the next
-``daily_cron_horizon_days`` days starting tomorrow, so a partial day is completed and
-an empty day between two filled days is backfilled. The expensive composition runs
-offline so the board read stays a cheap clock check.
+admin approves during the day; the public board unlocks at the reveal time, where each
+meal offers an on-demand replay of how it was composed. Cron runs nightly as a
+gap-filler: it covers the next ``daily_cron_horizon_days`` days starting tomorrow, so a
+partial day is completed and an empty day between two filled days is backfilled, then
+prunes boards older than the history window so the table stays bounded to what the
+public past-board view can read. The expensive composition runs offline so the board
+read stays a cheap clock check.
 
 Each composed meal is committed on its own, so a failure partway through keeps the
 meals already done and a re-run only fills what is missing. A slot already holding a
@@ -169,7 +171,15 @@ async def generate(targets: Sequence[date], meal_types: Sequence[MealType]) -> N
             )
             raise SystemExit(1) from exc
         stored = await build_boards(session, agent.compose, targets, meal_types=meal_types)
-    log.info("daily.done", dates=[target.isoformat() for target in targets], stored=stored)
+        cutoff = datetime.now(UTC).date() - timedelta(days=settings.daily_history_days)
+        pruned = await DailyService(session).prune_before(cutoff)
+        await session.commit()
+    log.info(
+        "daily.done",
+        dates=[target.isoformat() for target in targets],
+        stored=stored,
+        pruned=pruned,
+    )
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

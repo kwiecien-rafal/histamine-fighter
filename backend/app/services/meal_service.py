@@ -25,10 +25,17 @@ from app.embeddings import Embedder
 from app.enums import ApprovalStatus, MealType
 from app.models import CuratedMeal
 from app.models.curated_meal import meal_embedding_text
-from app.schemas.admin import AdminMealUpdate
+from app.schemas.admin import AdminMealCreate, AdminMealUpdate
 from app.schemas.meal import ComposedMeal
 
 log = structlog.get_logger(__name__)
+
+# The ``model`` value a hand-authored meal carries in place of a producing model, so a
+# manual meal tells itself apart from a composed one without an extra discriminator column
+# (which would mean a migration this rework deliberately avoids). The UI renders it as
+# "Curated by admin"; an empty trace alongside it means no replay. Must stay in sync with
+# MANUAL_MODEL in the frontend (api/domain.ts), which hardcodes the same literal.
+MANUAL_MODEL = "manual"
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +208,50 @@ class MealService:
                 break
         return meals
 
+    async def list_approved(
+        self, *, meal_type: MealType | None = None, limit: int, offset: int = 0
+    ) -> tuple[list[CuratedMeal], int]:
+        """One page of approved meals for the public browse, plus the total that match.
+
+        Ordered newest-composed first (``created_at``); the id breaks ties between rows
+        a batch insert gave one timestamp. The total lets the browse page its way through
+        the pool without guessing where it ends. The embedding column is heavy and unused
+        by a browse card, so it is deferred. Read-only; never commits.
+        """
+        filters = [CuratedMeal.approval_status == ApprovalStatus.APPROVED]
+        if meal_type is not None:
+            filters.append(CuratedMeal.meal_type == meal_type)
+
+        total = await self._session.scalar(
+            select(func.count()).select_from(CuratedMeal).where(*filters)
+        )
+        stmt = (
+            select(CuratedMeal)
+            .where(*filters)
+            .options(defer(CuratedMeal.embedding))
+            .order_by(CuratedMeal.created_at.desc(), CuratedMeal.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = list((await self._session.execute(stmt)).scalars().all())
+        return rows, total or 0
+
+    async def get_approved(self, meal_id: UUID) -> CuratedMeal | None:
+        """One approved meal by id for the public detail, or None when it is not public.
+
+        Folds the approved filter into the lookup so a pending or rejected row reads as
+        absent, which the endpoint turns into a 404, never disclosing an unapproved meal.
+        """
+        stmt = (
+            select(CuratedMeal)
+            .where(
+                CuratedMeal.id == meal_id,
+                CuratedMeal.approval_status == ApprovalStatus.APPROVED,
+            )
+            .options(defer(CuratedMeal.embedding))
+        )
+        return (await self._session.execute(stmt)).scalar_one_or_none()
+
     async def store_pending(self, meal: ComposedMeal) -> CuratedMeal:
         """Shape a composed meal into a pending curated row and add it to the session.
 
@@ -229,6 +280,45 @@ class MealService:
             embedding=vector,
         )
         self._session.add(row)
+        return row
+
+    async def store_manual(
+        self, fields: AdminMealCreate, *, unverified: list[str], actor: str
+    ) -> CuratedMeal:
+        """Build a hand-written meal as a pending curated row, no composer involved.
+
+        The manual counterpart to ``store_pending``: it embeds from the same name/
+        description/tags text, so a manual meal ranks in retrieval exactly like a composed
+        one, and lands pending for the same admin approval. Provenance is what differs: the
+        ``manual`` sentinel model, no token usage, and an empty trace, so no replay offers.
+        ``unverified`` is the index gate's not-indexed list, recorded for the approving
+        admin. ``actor`` is the authoring admin, logged as the only record of who wrote a
+        hand-authored meal (the row keeps no human author, where a composed one keeps its
+        model). The caller commits.
+        """
+        vector = (
+            await self._embedder.embed_documents(
+                [meal_embedding_text(fields.name, fields.description, fields.tags)]
+            )
+        )[0]
+        row = CuratedMeal(
+            name=fields.name,
+            meal_type=fields.meal_type,
+            description=fields.description,
+            ingredients=[ingredient.model_dump() for ingredient in fields.ingredients],
+            recipe=fields.recipe,
+            tags=fields.tags,
+            unverified_ingredients=unverified,
+            model=MANUAL_MODEL,
+            usage=None,
+            reasoning_trace=[],
+            approval_status=ApprovalStatus.PENDING,
+            embedding=vector,
+        )
+        self._session.add(row)
+        log.info(
+            "meal.created_manual", actor=actor, name=fields.name, meal_type=fields.meal_type.value
+        )
         return row
 
     async def get(self, meal_id: UUID) -> CuratedMeal | None:

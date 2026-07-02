@@ -14,6 +14,8 @@ interface MealReviewCardProps {
   busy: boolean;
   onApprove: () => void;
   onReject: () => void;
+  // Hard-deletes the meal (the destructive counterpart to reject).
+  onRemove: () => void;
   // When provided, the card offers an inline edit; onSaveEdit persists, onEdited refreshes.
   onSaveEdit?: (edit: MealEdit) => Promise<void>;
   onEdited?: () => void;
@@ -24,6 +26,7 @@ export function MealReviewCard({
   busy,
   onApprove,
   onReject,
+  onRemove,
   onSaveEdit,
   onEdited,
 }: MealReviewCardProps) {
@@ -84,8 +87,13 @@ export function MealReviewCard({
           onCancel={() => setEditing(false)}
         />
       ) : (
-        <div className="flex items-center justify-between gap-3">
-          <ReviewActions busy={busy} onApprove={onApprove} onReject={onReject} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ReviewActions
+            busy={busy}
+            onApprove={meal.approval_status !== "approved" ? onApprove : undefined}
+            onReject={meal.approval_status !== "rejected" ? onReject : undefined}
+            onRemove={onRemove}
+          />
           {onSaveEdit && (
             <button
               type="button"

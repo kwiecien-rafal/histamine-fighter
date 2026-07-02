@@ -7,12 +7,17 @@ interface ReviewQueueShellProps {
   emptyMessage: string;
   onReload: () => void;
   children: ReactNode;
+  // The noun after the count ("12 approved"); defaults to the pending-review wording.
+  countNoun?: string;
+  // The label shown before the first load lands, in place of the count.
+  idleLabel?: string;
 }
 
 // The shared frame for a review queue: the count and refresh control, an error line,
 // and an empty-state message, wrapping whatever cards the caller maps in. Each
-// concrete queue (curated meals, daily board) differs only in its cards and its empty
-// message, so the frame lives here once. count is null until the first load lands.
+// concrete queue (curated meals, daily board) differs only in its cards, its count
+// wording, and its empty message, so the frame lives here once. count is null until
+// the first load lands.
 export function ReviewQueueShell({
   count,
   loading,
@@ -20,12 +25,14 @@ export function ReviewQueueShell({
   emptyMessage,
   onReload,
   children,
+  countNoun = "waiting for review",
+  idleLabel = "Pending review",
 }: ReviewQueueShellProps) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-stone-600">
-          {count !== null ? `${count} waiting for review` : "Pending review"}
+          {count !== null ? `${count} ${countNoun}` : idleLabel}
         </p>
         <button
           type="button"

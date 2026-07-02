@@ -76,3 +76,18 @@ class MealReviewService:
         meal.approved_by = None
         log.info("meal.rejected", meal_id=str(meal_id))
         return meal
+
+    async def delete(self, meal_id: UUID, *, actor: str) -> bool:
+        """Permanently remove a meal. Returns False when no meal has that id.
+
+        The hard counterpart to ``reject``: reject keeps the row out of the pool but on
+        record, delete drops it entirely (an unwanted generation or experiment). The
+        actor is logged because a hard delete is the one moderation step with nothing
+        left on the row to audit afterwards.
+        """
+        meal = await self._session.get(CuratedMeal, meal_id)
+        if meal is None:
+            return False
+        await self._session.delete(meal)
+        log.info("meal.deleted", meal_id=str(meal_id), actor=actor)
+        return True
