@@ -43,6 +43,8 @@ export function MealEditForm({
   const [tagsText, setTagsText] = useState(initial.tags.join(", "));
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<EditRejectedError["rejection"] | null>(null);
+  // The edit that bounced, kept so "save anyway" can resubmit it with the override set.
+  const [pendingEdit, setPendingEdit] = useState<MealEdit | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function setRow(index: number, patch: Partial<Row>) {
@@ -55,12 +57,28 @@ export function MealEditForm({
   const canSubmit =
     name.trim().length > 0 && description.trim().length > 0 && rows.some((row) => row.name.trim());
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function save(edit: MealEdit) {
     setSaving(true);
     setRejection(null);
+    setPendingEdit(null);
     setError(null);
-    const edit: MealEdit = {
+    try {
+      await onSave(edit);
+    } catch (err) {
+      if (err instanceof EditRejectedError) {
+        setRejection(err.rejection);
+        setPendingEdit(edit);
+      } else {
+        setError(errorMessage(err));
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void save({
       name: name.trim(),
       description: description.trim(),
       ingredients: rows
@@ -71,20 +89,12 @@ export function MealEditForm({
         .split(",")
         .map((tag) => tag.trim())
         .filter(Boolean),
-    };
-    try {
-      await onSave(edit);
-    } catch (err) {
-      if (err instanceof EditRejectedError) setRejection(err.rejection);
-      else setError(errorMessage(err));
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   return (
     <form
-      onSubmit={(e) => void submit(e)}
+      onSubmit={submit}
       className="mt-3 rounded border border-stone-200 bg-stone-50 p-4 space-y-3"
     >
       {mealType && (
@@ -181,8 +191,15 @@ export function MealEditForm({
           {rejection.blockers.length > 0 && (
             <p>Flagged ingredients: {rejection.blockers.join(", ")}.</p>
           )}
-          {rejection.recipe_flags.length > 0 && (
-            <p>Flagged in the recipe: {rejection.recipe_flags.join(", ")}.</p>
+          {rejection.can_confirm && pendingEdit && (
+            <button
+              type="button"
+              onClick={() => void save({ ...pendingEdit, confirm_flagged: true })}
+              disabled={saving}
+              className="mt-1.5 rounded border border-red-700 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 enabled:cursor-pointer"
+            >
+              {submitLabel} anyway
+            </button>
           )}
         </div>
       )}

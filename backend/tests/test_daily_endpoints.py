@@ -374,7 +374,33 @@ async def test_edit_suggestion_rejects_an_introduced_blocker(
     resp = await authenticated_client.patch(f"/admin/daily/{suggestion.id}", json=body)
 
     assert resp.status_code == 422
-    assert any("parmesan" in blocker for blocker in resp.json()["detail"]["blockers"])
+    detail = resp.json()["detail"]
+    assert any("parmesan" in blocker for blocker in detail["blockers"])
+    assert detail["can_confirm"] is True
+
+
+async def test_edit_suggestion_confirm_flagged_saves_and_records(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    await _seed_index(session)
+    suggestion = await _add_suggestion(
+        session,
+        reveal_at=datetime.now(UTC) + timedelta(days=1),
+        approval_status=ApprovalStatus.PENDING,
+    )
+    body = _edit_body(
+        suggestion,
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "parmesan", "category": "aged hard cheese"},
+        ],
+    )
+    body["confirm_flagged"] = True
+
+    resp = await authenticated_client.patch(f"/admin/daily/{suggestion.id}", json=body)
+
+    assert resp.status_code == 200
+    assert resp.json()["content"]["unverified_ingredients"] == ["parmesan (avoid)"]
 
 
 async def test_edit_an_approved_suggestion_is_409(

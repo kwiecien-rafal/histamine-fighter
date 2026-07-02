@@ -44,9 +44,9 @@ async def update_suggestion(
 ) -> DailySuggestion:
     """Edit a pending daily suggestion, re-verifying it against the index before saving.
 
-    Allowed only while pending (409 otherwise). The edit is re-run through the same index
-    check a composition gets, so an introduced risky ingredient or recipe mention is a 422
-    with the offending items, and the not-indexed list is re-derived.
+    Allowed only while pending (409 otherwise). The edit is re-run through the admin
+    index gate, so an introduced flagged ingredient is a 422 the admin can confirm past
+    with ``confirm_flagged``, and the not-indexed list is re-derived.
     """
     suggestion = await service.get(suggestion_id)
     if suggestion is None:
@@ -54,8 +54,8 @@ async def update_suggestion(
     if suggestion.approval_status is not ApprovalStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_PENDING)
     verification = await verify_edit(ingredient_service, payload)
-    ensure_safe(verification)
-    service.apply_edit(suggestion, payload, unverified=verification.unverified)
+    confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
+    service.apply_edit(suggestion, payload, unverified=verification.unverified + confirmed_flags)
     return suggestion
 
 

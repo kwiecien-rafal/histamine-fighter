@@ -63,9 +63,9 @@ describe("NewMealForm", () => {
   it("shows the index blocker and stays open when the create is rejected", async () => {
     createMealMock.mockRejectedValueOnce(
       new EditRejectedError({
-        message: "The edit introduces an ingredient or recipe step the index flags.",
+        message: "The edit introduces an ingredient the index flags.",
         blockers: ["parmesan (avoid)"],
-        recipe_flags: [],
+        can_confirm: true,
       }),
     );
     const onCreated = vi.fn();

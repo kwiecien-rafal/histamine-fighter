@@ -55,19 +55,20 @@ async def create_meal(
     ingredient_service: IngredientService = Depends(get_ingredient_service),
     session: AsyncSession = Depends(get_session),
 ) -> CuratedMeal:
-    """Author a manual (non-LLM) meal, vetted by the same index gate as a composition.
+    """Author a manual (non-LLM) meal, vetted by the admin index gate.
 
-    A hand-written meal is no exception to the safety invariant: it runs the identical
-    ingredient and recipe re-check an edit does, so an introduced risky term is a 422 with
-    the offending items. It lands pending, marked with the ``manual`` model sentinel, for
-    the same admin approval a composed meal needs. ``meal_service`` and ``session`` are the
-    one request-scoped session, so flushing here persists the row the service added and
-    populates its id and timestamp for the response; ``get_session`` commits on success.
+    A hand-written meal runs the same ingredient re-check an edit does: a flagged
+    ingredient is a 422 the admin can confirm past with ``confirm_flagged`` (recorded
+    for the reviewer), an unverifiable one always blocks. It lands pending, marked with
+    the ``manual`` model sentinel, for the same admin approval a composed meal needs.
+    ``meal_service`` and ``session`` are the one request-scoped session, so flushing here
+    persists the row the service added and populates its id and timestamp for the
+    response; ``get_session`` commits on success.
     """
     verification = await verify_edit(ingredient_service, payload)
-    ensure_safe(verification)
+    confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
     row = await meal_service.store_manual(
-        payload, unverified=verification.unverified, actor=admin.email
+        payload, unverified=verification.unverified + confirmed_flags, actor=admin.email
     )
     await session.flush()
     return row
@@ -84,8 +85,8 @@ async def update_meal(
     """Edit a pending curated meal, re-verifying it against the index before saving.
 
     Allowed only while pending (409 otherwise). The edited list is re-run through the
-    same index check a composition gets, so an introduced risky ingredient or recipe
-    mention is a 422 with the offending items, and the not-indexed list is re-derived.
+    admin index gate, so an introduced flagged ingredient is a 422 the admin can confirm
+    past with ``confirm_flagged``, and the not-indexed list is re-derived.
     """
     meal = await meal_service.get(meal_id)
     if meal is None:
@@ -93,8 +94,10 @@ async def update_meal(
     if meal.approval_status is not ApprovalStatus.PENDING:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_PENDING)
     verification = await verify_edit(ingredient_service, payload)
-    ensure_safe(verification)
-    await meal_service.apply_edit(meal, payload, unverified=verification.unverified)
+    confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
+    await meal_service.apply_edit(
+        meal, payload, unverified=verification.unverified + confirmed_flags
+    )
     return meal
 
 

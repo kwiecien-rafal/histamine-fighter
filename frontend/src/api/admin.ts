@@ -237,12 +237,15 @@ export interface SlotConflict {
 }
 
 // The five admin-editable content fields, mirroring AdminMealUpdate / AdminDailyUpdate.
+// confirm_flagged is the request-only override: set on resubmit after the operator
+// confirms a flagged-ingredient warning, never persisted server-side.
 export interface MealEdit {
   name: string;
   description: string;
   ingredients: ProposedIngredient[];
   recipe: string[] | null;
   tags: string[];
+  confirm_flagged?: boolean;
 }
 
 // A hand-authored manual meal, mirroring AdminMealCreate: the editable fields plus the slot
@@ -252,11 +255,12 @@ export interface MealCreate extends MealEdit {
 }
 
 // The offending items a 422 carries when an edit fails the index re-check, so the edit
-// form can show exactly what to fix rather than a bare status.
+// form can show exactly what to fix rather than a bare status. can_confirm is false when
+// a lookup itself failed, in which case the save-anyway override is not offered.
 export interface EditRejection {
   message: string;
   blockers: string[];
-  recipe_flags: string[];
+  can_confirm: boolean;
 }
 
 export class EditRejectedError extends Error {

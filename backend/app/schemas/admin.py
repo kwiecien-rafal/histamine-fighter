@@ -166,6 +166,10 @@ class MealEditFields(BaseModel):
     list and length caps truncate rather than reject, so a value past a cap is normalized
     down instead of 422'd; blank name/description and an empty ingredient list still fail,
     since those are not edits the composer would have made.
+
+    ``confirm_flagged`` is a request-only override read by the gate, never persisted: it
+    lets the admin resubmit past a flagged-ingredient warning. It cannot clear an
+    unverifiable reading.
     """
 
     name: str = Field(min_length=1)
@@ -173,6 +177,7 @@ class MealEditFields(BaseModel):
     ingredients: list[ProposedIngredient] = Field(min_length=1)
     recipe: list[str] | None = None
     tags: list[str] = Field(default_factory=list)
+    confirm_flagged: bool = False
 
     @field_validator("name", mode="before")
     @classmethod

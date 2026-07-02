@@ -43,6 +43,12 @@ async def _seed_index(session: AsyncSession) -> None:
                 compatibility=Compatibility.WELL_TOLERATED,
                 category="vegetable",
             ),
+            HistamineIngredient(
+                name="spinach",
+                sources=["test"],
+                compatibility=Compatibility.MODERATELY_COMPATIBLE,
+                category="vegetable",
+            ),
         ]
     )
     await session.flush()
@@ -324,22 +330,57 @@ async def test_create_manual_meal_rejects_a_blocker(
     resp = await authenticated_client.post("/admin/meals", json=body)
 
     assert resp.status_code == 422
-    assert any("parmesan" in blocker for blocker in resp.json()["detail"]["blockers"])
+    detail = resp.json()["detail"]
+    assert any("parmesan" in blocker for blocker in detail["blockers"])
+    assert detail["can_confirm"] is True
 
 
-async def test_create_manual_meal_rejects_a_risky_recipe_mention(
+async def test_create_manual_meal_allows_moderately_compatible(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    # A depends-level reading warns end users but never blocks a hand-authored meal.
+    await _seed_index(session)
+    body = _create_body(ingredients=[{"name": "spinach", "category": "vegetable"}])
+
+    resp = await authenticated_client.post("/admin/meals", json=body)
+
+    assert resp.status_code == 201
+    assert resp.json()["unverified_ingredients"] == []
+
+
+async def test_create_manual_meal_confirm_flagged_saves_and_records(
     authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
     await _seed_index(session)
     body = _create_body(
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "parmesan", "category": "aged hard cheese"},
+        ]
+    )
+    body["confirm_flagged"] = True
+
+    resp = await authenticated_client.post("/admin/meals", json=body)
+
+    assert resp.status_code == 201
+    # The confirmed flag is surfaced to the approving reviewer alongside the
+    # not-indexed list, so the override is visible, not silent.
+    assert resp.json()["unverified_ingredients"] == ["parmesan (avoid)"]
+
+
+async def test_create_manual_meal_allows_a_risky_recipe_mention(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    # The admin gate does not scan recipe prose, so a note naming a flagged term passes.
+    await _seed_index(session)
+    body = _create_body(
         ingredients=[{"name": "courgette", "category": "vegetable"}],
-        recipe=["Peel into ribbons.", "Top with grated parmesan."],
+        recipe=["Peel into ribbons.", "A little parmesan is fine in moderation."],
     )
 
     resp = await authenticated_client.post("/admin/meals", json=body)
 
-    assert resp.status_code == 422
-    assert "parmesan" in resp.json()["detail"]["recipe_flags"]
+    assert resp.status_code == 201
 
 
 async def test_create_without_a_session_is_401(client: AsyncClient) -> None:
@@ -393,20 +434,41 @@ async def test_edit_rejects_an_introduced_blocker(
     assert resp.status_code == 422
     detail = resp.json()["detail"]
     assert any("parmesan" in blocker for blocker in detail["blockers"])
+    assert detail["can_confirm"] is True
 
 
-async def test_edit_rejects_a_risky_recipe_mention(
+async def test_edit_confirm_flagged_saves_and_records(
     authenticated_client: AsyncClient, session: AsyncSession
 ) -> None:
     await _seed_index(session)
     meal = await _add_meal(session)
-    body = _edit_body(meal, ingredients=[{"name": "courgette", "category": "vegetable"}])
-    body["recipe"] = ["Peel into ribbons.", "Top with grated parmesan."]
+    body = _edit_body(
+        meal,
+        ingredients=[
+            {"name": "courgette", "category": "vegetable"},
+            {"name": "parmesan", "category": "aged hard cheese"},
+        ],
+    )
+    body["confirm_flagged"] = True
 
     resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
 
-    assert resp.status_code == 422
-    assert "parmesan" in resp.json()["detail"]["recipe_flags"]
+    assert resp.status_code == 200
+    assert resp.json()["unverified_ingredients"] == ["parmesan (avoid)"]
+
+
+async def test_edit_allows_a_risky_recipe_mention(
+    authenticated_client: AsyncClient, session: AsyncSession
+) -> None:
+    # The admin gate does not scan recipe prose, so a note naming a flagged term passes.
+    await _seed_index(session)
+    meal = await _add_meal(session)
+    body = _edit_body(meal, ingredients=[{"name": "courgette", "category": "vegetable"}])
+    body["recipe"] = ["Peel into ribbons.", "A little parmesan is fine in moderation."]
+
+    resp = await authenticated_client.patch(f"/admin/meals/{meal.id}", json=body)
+
+    assert resp.status_code == 200
 
 
 async def test_edit_an_approved_meal_is_409(

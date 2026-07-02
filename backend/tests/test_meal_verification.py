@@ -135,3 +135,13 @@ def test_safe_ingredient_in_recipe_does_not_flag() -> None:
     )
 
     assert result.is_safe
+
+
+def test_no_matcher_skips_the_recipe_scan() -> None:
+    # The admin gate passes no matcher, so a flagged term in a step is not scanned.
+    result = verify_meal(
+        [_found("courgette", "well_tolerated")], ["A splash of red wine is fine in moderation."]
+    )
+
+    assert result.is_safe
+    assert result.recipe_flags == []

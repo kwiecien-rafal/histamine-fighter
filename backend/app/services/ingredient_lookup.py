@@ -208,17 +208,18 @@ async def lookup_ingredients(
 async def verify_submission(
     service: IngredientService,
     ingredients: Sequence[ProposedIngredient],
-    recipe: Sequence[str] | None,
+    recipe: Sequence[str] | None = None,
     *,
-    risky_terms: TermMatcher,
+    risky_terms: TermMatcher | None = None,
 ) -> "MealVerification":
     """Re-derive a meal's safety from the index: the shared composer/edit gate.
 
-    Reads every ingredient against the curated index and scans the recipe for an
-    index-flagged term, so a composition and an admin edit are vetted identically and
-    can never produce different verdicts for the same list. ``meal_verification`` is
-    imported inside the function on purpose: it depends on this module's
-    ``LookupResult``, so a module-level import here would cycle.
+    Reads every ingredient against the curated index, so a composition and an admin
+    edit can never produce different ingredient verdicts for the same list. The recipe
+    scan for index-flagged terms only runs when ``risky_terms`` is supplied (the
+    composer path); the admin gate omits it. ``meal_verification`` is imported inside
+    the function on purpose: it depends on this module's ``LookupResult``, so a
+    module-level import here would cycle.
     """
     from app.agents.meal_verification import verify_meal
 
