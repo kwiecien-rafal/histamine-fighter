@@ -99,7 +99,7 @@ export interface DishAlternativesResponse {
   usage: LLMUsage;
 }
 
-function buildLLMHeaders(): Record<string, string> {
+export function buildLLMHeaders(): Record<string, string> {
   const { provider, apiKeys, models, ollamaBaseUrl } =
     useLLMProviderStore.getState();
   const apiKey = (apiKeys[provider] ?? "").trim();

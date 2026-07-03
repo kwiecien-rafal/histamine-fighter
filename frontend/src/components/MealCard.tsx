@@ -24,12 +24,12 @@ export function MealCard({ meal }: MealCardProps) {
       <div className="flex items-start justify-between gap-3 mb-1">
         <h3 className="text-lg font-medium">{meal.name}</h3>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-forest-800 bg-forest-50 border border-forest-200 rounded px-1.5 py-0.5">
             {MEAL_TYPE_LABEL[meal.meal_type]}
           </span>
           {cautionNotes.size === 0 ? (
             <span
-              className="font-mono text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5"
+              className="font-mono text-[10px] uppercase tracking-wide text-forest-800 bg-forest-50 border border-forest-200 rounded px-1.5 py-0.5"
               title="Composed from the curated safe index and approved by a human."
             >
               ✓ Verified
@@ -58,7 +58,7 @@ export function MealCard({ meal }: MealCardProps) {
               className={
                 note
                   ? "rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-sm text-orange-900"
-                  : "rounded border border-stone-200 bg-stone-50 px-2 py-0.5 text-sm"
+                  : "rounded border border-cream-200 bg-cream-50 px-2 py-0.5 text-sm"
               }
               title={note}
             >
@@ -82,7 +82,7 @@ export function MealCard({ meal }: MealCardProps) {
           {meal.tags.map((tag) => (
             <li
               key={tag}
-              className="font-mono text-[10px] uppercase tracking-wide text-stone-500 bg-stone-100 border border-stone-200 rounded px-1.5 py-0.5"
+              className="font-mono text-[10px] uppercase tracking-wide text-stone-500 bg-cream-100 border border-cream-200 rounded px-1.5 py-0.5"
             >
               {tag}
             </li>
@@ -109,7 +109,7 @@ export function MealCard({ meal }: MealCardProps) {
           <button
             type="button"
             onClick={() => setWatching(true)}
-            className="text-sm text-emerald-800 hover:text-emerald-900 underline underline-offset-4 cursor-pointer"
+            className="text-sm text-forest-800 hover:text-forest-900 underline underline-offset-4 cursor-pointer"
           >
             Watch how it was composed
           </button>

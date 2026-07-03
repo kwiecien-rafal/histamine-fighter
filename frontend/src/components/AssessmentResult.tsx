@@ -4,6 +4,7 @@ import { AdaptationList } from "./AdaptationList";
 import { AdvisoryList } from "./AdvisoryList";
 import { IngredientSafetyChip } from "./IngredientSafetyChip";
 import { LLMProviderBadge } from "./LLMProviderBadge";
+import { MedicalNote } from "./MedicalNote";
 import { VerdictBadge } from "./VerdictBadge";
 
 interface AssessmentResultProps {
@@ -22,6 +23,9 @@ export function AssessmentResult({ result, onStartOver }: AssessmentResultProps)
 
       <section className="mb-4">
         <VerdictBadge verdict={result.verdict} />
+        <div className="mt-2">
+          <MedicalNote />
+        </div>
       </section>
 
       <section className="mb-4">

@@ -14,20 +14,32 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-50/80 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-cream-200 bg-cream-50/80 backdrop-blur">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4 px-6 py-3">
           <Link
             to="/"
-            className="font-serif text-lg font-semibold tracking-tight text-emerald-900"
+            className="font-serif text-lg font-semibold tracking-tight text-forest-900"
           >
             Histamine Fighter
           </Link>
-          <nav className="flex items-center gap-5 text-sm">
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
             <NavItem to="/" end>
               Home
             </NavItem>
+            {/* The flagship flow gets the ember accent so it reads as the main action. */}
+            <NavLink
+              to="/lookup"
+              className={({ isActive }) =>
+                isActive
+                  ? "text-ember-800 font-medium"
+                  : "text-ember-700 font-medium hover:text-ember-800"
+              }
+            >
+              Check a dish
+            </NavLink>
             <NavItem to="/daily">Today's meals</NavItem>
             <NavItem to="/meals">Safe meals</NavItem>
+            <NavItem to="/learn">Learn</NavItem>
             <button
               type="button"
               onClick={() => setSettingsOpen(true)}
@@ -37,7 +49,7 @@ export function Navbar() {
             </button>
             <Link
               to="/admin"
-              className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-800 hover:bg-emerald-100"
+              className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100"
             >
               {isAdmin ? "Admin" : "Log in"}
             </Link>

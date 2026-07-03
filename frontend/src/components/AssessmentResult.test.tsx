@@ -59,6 +59,16 @@ const seasoningNoSafeSwap: Adaptation = {
 };
 
 describe("AssessmentResult", () => {
+  it("keeps the medical note next to the verdict", () => {
+    render(
+      <AssessmentResult result={assessment("preserved", [coreSwap])} onStartOver={() => {}} />,
+    );
+
+    expect(
+      screen.getByText(/informational only, not medical advice/i),
+    ).toBeInTheDocument();
+  });
+
   it("shows the dead-end callout when identity is lost", () => {
     render(
       <AssessmentResult

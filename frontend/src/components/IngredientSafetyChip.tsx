@@ -3,7 +3,7 @@ import type { IngredientAssessment, Verdict } from "../api/client";
 // Domain value -> display tone mapping lives at the presentation layer only
 // (CLAUDE.md §19), consistent with VerdictBadge's palette.
 const CHIP_TONES: Record<Verdict, string> = {
-  safe: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  safe: "bg-forest-50 text-forest-800 border-forest-200",
   depends: "bg-amber-50 text-amber-800 border-amber-200",
   avoid: "bg-red-50 text-red-800 border-red-200",
 };

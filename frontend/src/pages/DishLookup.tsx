@@ -4,7 +4,6 @@ import { MAX_DISH_CHARS } from "../api/client";
 import { AlternativesPanel } from "../components/AlternativesPanel";
 import { AssessmentResult } from "../components/AssessmentResult";
 import { IngredientEditor } from "../components/IngredientEditor";
-import { Navbar } from "../components/Navbar";
 import { UsagePanel } from "../components/UsagePanel";
 import { useDishLookupFlow } from "../hooks/useDishLookupFlow";
 import { pivotTone } from "../lib/assessment";
@@ -39,13 +38,11 @@ export function DishLookup() {
 
   return (
     <>
-      <Navbar />
-      <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-10 pb-24">
-        <div className="max-w-xl mx-auto">
-          <h1 className="text-3xl font-semibold mb-1">Is your dish safe?</h1>
-          <p className="text-stone-600 mb-8">
-            Ask whether a dish is safe for histamine intolerance.
-          </p>
+      <div className="max-w-xl mx-auto">
+        <h1 className="font-serif text-3xl font-semibold text-forest-900 mb-1">Is your dish safe?</h1>
+        <p className="text-stone-600 mb-8">
+          Ask whether a dish is safe for histamine intolerance.
+        </p>
 
         {(state.phase === "idle" || proposing) && (
           <>
@@ -57,12 +54,12 @@ export function DishLookup() {
                 placeholder="e.g. Spaghetti Bolognese"
                 maxLength={MAX_DISH_CHARS}
                 disabled={proposing}
-                className="flex-1 rounded border border-stone-300 px-3 py-2 focus:outline-none focus:border-emerald-700 disabled:opacity-50"
+                className="flex-1 rounded border border-stone-300 px-3 py-2 focus:outline-none focus:border-forest-700 disabled:opacity-50"
               />
               <button
                 type="submit"
                 disabled={proposing || !dish.trim()}
-                className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50 enabled:cursor-pointer"
+                className="rounded bg-forest-800 hover:bg-forest-700 text-white px-4 py-2 disabled:opacity-50 enabled:cursor-pointer"
               >
                 {proposing ? "Finding…" : "Find ingredients"}
               </button>
@@ -102,10 +99,9 @@ export function DishLookup() {
             )}
           </>
         )}
-        </div>
+      </div>
 
-        <UsagePanel />
-      </main>
+      <UsagePanel />
     </>
   );
 }

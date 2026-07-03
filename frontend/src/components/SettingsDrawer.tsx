@@ -85,7 +85,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                   <input
                     type="radio"
                     name="llm-provider"
-                    className="mt-1 accent-emerald-800"
+                    className="mt-1 accent-forest-800"
                     checked={selected}
                     disabled={disabled}
                     onChange={() => setProvider(row.id)}
@@ -130,7 +130,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         value={ollamaBaseUrl}
                         onChange={(e) => setOllamaBaseUrl(e.target.value)}
                         placeholder="server default (e.g. http://localhost:11434)"
-                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-forest-700"
                       />
                     </label>
                     <label className="block">
@@ -142,7 +142,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         value={models[row.id] ?? ""}
                         onChange={(e) => setModel(row.id, e.target.value)}
                         placeholder="server default (e.g. gpt-oss:20b)"
-                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-forest-700"
                       />
                     </label>
                     <p className="text-xs text-stone-500">
@@ -171,7 +171,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                           placeholder="sk-…"
                           autoComplete="off"
                           spellCheck={false}
-                          className="flex-1 rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                          className="flex-1 rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-forest-700"
                         />
                         <button
                           type="button"
@@ -197,7 +197,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                               ? `provider default (e.g. ${row.defaultModel})`
                               : "provider default"
                         }
-                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                        className="mt-1 w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-forest-700"
                       />
                     </label>
                     {row.requiresModel && (

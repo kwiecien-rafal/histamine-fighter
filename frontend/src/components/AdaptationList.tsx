@@ -57,7 +57,7 @@ export function AdaptationList({ adaptations }: AdaptationListProps) {
                 {entry.action === "swap" ? (
                   <>
                     <span className="text-stone-400">→</span>
-                    <span className="font-medium text-emerald-800">
+                    <span className="font-medium text-forest-800">
                       {entry.swap}
                     </span>
                   </>

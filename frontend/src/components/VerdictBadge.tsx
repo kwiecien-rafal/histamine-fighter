@@ -10,7 +10,7 @@ const VERDICT_STYLES: Record<Verdict, VerdictStyle> = {
   safe: {
     label: "Safe",
     icon: "✅",
-    className: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    className: "bg-forest-50 text-forest-800 border-forest-200",
   },
   depends: {
     label: "Depends",

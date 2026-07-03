@@ -65,7 +65,7 @@ export function IngredientEditor({
                 onChange={(e) => onRename(item.id, e.target.value)}
                 aria-label={`Ingredient ${index + 1}`}
                 maxLength={MAX_INGREDIENT_CHARS}
-                className="flex-1 rounded border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+                className="flex-1 rounded border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:border-forest-700"
               />
               {item.category && (
                 <span className="hidden sm:inline text-xs text-stone-500">
@@ -93,7 +93,7 @@ export function IngredientEditor({
             aria-label="New ingredient"
             maxLength={MAX_INGREDIENT_CHARS}
             disabled={atCap}
-            className="flex-1 rounded border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-700 disabled:opacity-50"
+            className="flex-1 rounded border border-stone-300 px-3 py-1.5 text-sm focus:outline-none focus:border-forest-700 disabled:opacity-50"
           />
           <button
             type="submit"
@@ -111,7 +111,7 @@ export function IngredientEditor({
             type="button"
             onClick={onConfirm}
             disabled={!hasAny || busy}
-            className="rounded bg-emerald-800 text-white px-4 py-2 disabled:opacity-50 enabled:cursor-pointer"
+            className="rounded bg-forest-800 hover:bg-forest-700 text-white px-4 py-2 disabled:opacity-50 enabled:cursor-pointer"
           >
             {busy ? "Checking…" : "Check safety"}
           </button>

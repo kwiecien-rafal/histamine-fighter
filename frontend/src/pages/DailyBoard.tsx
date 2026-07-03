@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { RevealedBoard } from "../api/daily";
 import { ComposeCost } from "../components/ComposeCost";
 import { MealCard } from "../components/MealCard";
-import { Navbar } from "../components/Navbar";
+import { MedicalNote } from "../components/MedicalNote";
 import { useDailyBoard } from "../hooks/useDailyBoard";
 import {
   PAST_BOARD_WINDOW_DAYS,
@@ -35,59 +35,57 @@ export function DailyBoard() {
   }, []);
 
   return (
-    <>
-      <Navbar />
-      <main className="min-h-screen bg-stone-50 text-stone-900 px-6 pt-10 pb-24">
-        <div className="max-w-2xl mx-auto">
-          <header className="mb-6">
-            <h1 className="text-3xl font-semibold">
-              {isToday ? "Today's meals" : formatBoardDate(date)}
-            </h1>
-            {isToday && (
-              <p className="text-stone-600 mt-1">
-                Four histamine-safe meals our agent composes fresh each day.
-              </p>
-            )}
-          </header>
-
-          <DayNav date={date} today={today} onChange={setDate} />
-
-        {/* The error only replaces the page when the first load failed; a failed
-            background reload keeps the board it already has. */}
-        {board === null && loading && (
-          <p className="text-stone-600" aria-live="polite">
-            Loading the board…
+    <div className="max-w-2xl mx-auto">
+      <header className="mb-6">
+        <h1 className="font-serif text-3xl font-semibold text-forest-900">
+          {isToday ? "Today's meals" : formatBoardDate(date)}
+        </h1>
+        {isToday && (
+          <p className="text-stone-600 mt-1">
+            Four histamine-safe meals our agent composes fresh each day.
           </p>
         )}
-
-        {board === null && error && (
-          <div role="alert" className="text-sm text-red-700">
-            <span className="font-medium">Couldn't load the board —</span> {error}{" "}
-            <button
-              type="button"
-              onClick={refresh}
-              className="underline underline-offset-4 cursor-pointer"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {board?.status === "locked" &&
-          (isToday ? (
-            <LockedView
-              revealAt={board.reveal_at}
-              serverOffsetMs={serverOffsetMs}
-              onReady={refresh}
-            />
-          ) : (
-            <NoBoardView date={board.date} />
-          ))}
-
-        {board?.status === "revealed" && <RevealedView board={board} />}
+        <div className="mt-1">
+          <MedicalNote />
         </div>
-      </main>
-    </>
+      </header>
+
+      <DayNav date={date} today={today} onChange={setDate} />
+
+      {/* The error only replaces the page when the first load failed; a failed
+          background reload keeps the board it already has. */}
+      {board === null && loading && (
+        <p className="text-stone-600" aria-live="polite">
+          Loading the board…
+        </p>
+      )}
+
+      {board === null && error && (
+        <div role="alert" className="text-sm text-red-700">
+          <span className="font-medium">Couldn't load the board —</span> {error}{" "}
+          <button
+            type="button"
+            onClick={refresh}
+            className="underline underline-offset-4 cursor-pointer"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {board?.status === "locked" &&
+        (isToday ? (
+          <LockedView
+            revealAt={board.reveal_at}
+            serverOffsetMs={serverOffsetMs}
+            onReady={refresh}
+          />
+        ) : (
+          <NoBoardView date={board.date} />
+        ))}
+
+      {board?.status === "revealed" && <RevealedView board={board} />}
+    </div>
   );
 }
 

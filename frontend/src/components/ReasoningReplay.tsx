@@ -73,7 +73,7 @@ export function ReasoningReplay({
         ))}
         {live && pending && (
           <li className="flex items-center gap-2 text-sm text-stone-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" aria-hidden />
+            <span className="h-1.5 w-1.5 rounded-full bg-forest-600 animate-pulse" aria-hidden />
             Thinking…
           </li>
         )}

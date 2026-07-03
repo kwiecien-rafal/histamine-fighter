@@ -11,7 +11,7 @@ export function LLMProviderBadge({ model }: LLMProviderBadgeProps) {
   const { label, title } = modelAttribution(model);
   return (
     <span
-      className="font-mono text-[10px] uppercase tracking-wide text-stone-500 bg-stone-100 border border-stone-200 rounded px-1.5 py-0.5"
+      className="font-mono text-[10px] uppercase tracking-wide text-stone-500 bg-cream-100 border border-cream-200 rounded px-1.5 py-0.5"
       title={title}
     >
       {label}

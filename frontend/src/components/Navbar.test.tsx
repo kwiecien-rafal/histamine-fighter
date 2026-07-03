@@ -34,6 +34,23 @@ function renderNavbar() {
 }
 
 describe("Navbar", () => {
+  it("links the flagship dish check", () => {
+    useAdminSessionMock.mockReturnValue(sessionWith(null));
+    renderNavbar();
+
+    expect(screen.getByRole("link", { name: "Check a dish" })).toHaveAttribute(
+      "href",
+      "/lookup",
+    );
+  });
+
+  it("links the Learn hub", () => {
+    useAdminSessionMock.mockReturnValue(sessionWith(null));
+    renderNavbar();
+
+    expect(screen.getByRole("link", { name: "Learn" })).toHaveAttribute("href", "/learn");
+  });
+
   it("offers Log in when no admin is signed in", () => {
     useAdminSessionMock.mockReturnValue(sessionWith(null));
     renderNavbar();
