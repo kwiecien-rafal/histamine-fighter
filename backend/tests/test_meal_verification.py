@@ -7,10 +7,11 @@ hand-built lookups and term matchers, not a seeded Postgres.
 
 from app.agents.meal_verification import verify_meal
 from app.core.term_match import TermMatcher
+from app.schemas.meal import CautionedIngredient
 from app.services.ingredient_lookup import LookupCandidate, LookupResult
 
 
-def _found(ingredient: str, compatibility: str) -> LookupResult:
+def _found(ingredient: str, compatibility: str, notes: str | None = None) -> LookupResult:
     return LookupResult(
         ingredient=ingredient,
         found=True,
@@ -23,9 +24,20 @@ def _found(ingredient: str, compatibility: str) -> LookupResult:
                 compatibility=compatibility,
                 mechanisms=(),
                 category=None,
-                notes=None,
+                notes=notes,
             )
         ],
+    )
+
+
+def _mixed(ingredient: str, candidates: list[LookupCandidate]) -> LookupResult:
+    return LookupResult(
+        ingredient=ingredient,
+        found=True,
+        ambiguous=True,
+        matched_on="ingredient",
+        error=None,
+        candidates=candidates,
     )
 
 
@@ -69,10 +81,59 @@ def test_incompatible_ingredient_blocks() -> None:
     assert result.blockers == [("parmesan", "avoid")]
 
 
-def test_moderately_compatible_blocks_as_depends() -> None:
+def test_moderately_compatible_is_cautioned_with_index_note() -> None:
+    result = verify_meal(
+        [_found("spinach", "moderately_compatible", notes="Small portions, fresh only.")],
+        [],
+        _NO_TERMS,
+    )
+
+    assert result.is_safe
+    assert result.blockers == []
+    assert result.cautioned == [
+        CautionedIngredient(name="spinach", note="Small portions, fresh only.")
+    ]
+
+
+def test_moderately_compatible_without_note_gets_the_default() -> None:
     result = verify_meal([_found("spinach", "moderately_compatible")], [], _NO_TERMS)
 
-    assert result.blockers == [("spinach", "depends")]
+    assert result.cautioned == [CautionedIngredient(name="spinach", note="use in moderation")]
+
+
+def test_mixed_safe_and_risky_rows_are_cautioned_with_the_risky_note() -> None:
+    # Egg yolk safe, egg white a liberator: the depends verdict comes from mixed
+    # rows, so the informative note is the risky row's, not a generic default.
+    result = verify_meal(
+        [
+            _mixed(
+                "egg",
+                [
+                    LookupCandidate(
+                        name="egg yolk",
+                        compatibility="well_tolerated",
+                        mechanisms=(),
+                        category=None,
+                        notes="Yolk is well tolerated.",
+                    ),
+                    LookupCandidate(
+                        name="egg white",
+                        compatibility="incompatible",
+                        mechanisms=(),
+                        category=None,
+                        notes="Raw egg white is a liberator.",
+                    ),
+                ],
+            )
+        ],
+        [],
+        _NO_TERMS,
+    )
+
+    assert result.is_safe
+    assert result.cautioned == [
+        CautionedIngredient(name="egg", note="Raw egg white is a liberator.")
+    ]
 
 
 def test_errored_lookup_blocks_as_unverifiable() -> None:

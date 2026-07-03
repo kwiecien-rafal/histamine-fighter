@@ -14,6 +14,7 @@ export const MEAL_TYPE_LABEL: Record<MealType, string> = {
 export const MEAL_TYPES: MealType[] = ["breakfast", "lunch", "dinner", "snack"];
 
 export const TRACE_KIND_LABEL: Record<TraceEvent["kind"], string> = {
+  inspiration: "Inspiration",
   draft: "Draft",
   check: "Check",
   search: "Search",
@@ -21,6 +22,7 @@ export const TRACE_KIND_LABEL: Record<TraceEvent["kind"], string> = {
   reject: "Reject",
   submit: "Submit",
   verify: "Verify",
+  judge: "Judge",
 };
 
 // A reject is the agent dropping an unsafe idea — the line worth highlighting when

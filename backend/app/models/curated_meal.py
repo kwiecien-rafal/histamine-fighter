@@ -61,6 +61,12 @@ class CuratedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     unverified_ingredients: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'")
     )
+    # Moderately compatible ingredients the composer kept within its cap, each a
+    # {name, note} pair carrying the index's moderation guidance for the reviewer
+    # and the public card.
+    cautioned_ingredients: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'")
+    )
     # The producing model, surfaced on the transparency badge.
     model: Mapped[str]
     # Token usage of the composition (an LLMUsage blob), for the cost the badge

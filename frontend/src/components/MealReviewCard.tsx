@@ -6,6 +6,7 @@ import { ComposeCost } from "./ComposeCost";
 import { LLMProviderBadge } from "./LLMProviderBadge";
 import { MealEditForm } from "./MealEditForm";
 import { ReviewActions } from "./ReviewActions";
+import { CautionedNote } from "./CautionedNote";
 import { TraceDetails } from "./TraceDetails";
 import { UnverifiedNote } from "./UnverifiedNote";
 
@@ -67,6 +68,7 @@ export function MealReviewCard({
       </ul>
 
       <UnverifiedNote ingredients={meal.unverified_ingredients} />
+      <CautionedNote ingredients={meal.cautioned_ingredients} />
 
       <TraceDetails trace={meal.reasoning_trace} />
 

@@ -68,6 +68,25 @@ class Settings(BaseSettings):
     # to run; safety never rides on the sampler, it is gated in code against the index.
     compose_temperature: float = 0.4
 
+    # How many days of recent board names the composer is told not to repeat.
+    # 0 disables the do-not-repeat list entirely.
+    daily_variety_window_days: int = Field(default=14, ge=0, le=90)
+
+    # How many moderately compatible ingredients a composed meal may keep. Safety
+    # posture, not code structure: 0 restores the strict all-well-tolerated gate for
+    # deployments serving highly sensitive users. Incompatible and poorly tolerated
+    # ingredients always block regardless.
+    composer_max_moderate_ingredients: int = Field(default=2, ge=0, le=5)
+
+    # Whether a composed meal is quality-reviewed by an LLM judge before it is
+    # accepted. One extra structured call per accepted meal; disable on forks where
+    # the extra call is not worth it. Quality only, never safety: the index gate
+    # runs regardless.
+    composer_judge_enabled: bool = True
+
+    # How many of the judge's five yes/no criteria must pass.
+    composer_judge_threshold: int = Field(default=4, ge=1, le=5)
+
     # Fixed for the whole corpus: stored and query vectors must share one model.
     embedding_backend: str = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"

@@ -17,19 +17,28 @@ export const MANUAL_MODEL = "manual";
 export type TraceReading = "safe" | "depends" | "avoid" | "unverifiable" | "not_indexed";
 
 export type TraceKind =
+  | "inspiration"
   | "draft"
   | "check"
   | "search"
   | "options"
   | "reject"
   | "submit"
-  | "verify";
+  | "verify"
+  | "judge";
 
 export interface TraceEvent {
   kind: TraceKind;
   text: string;
   ingredient: string | null;
   compatibility: TraceReading | null;
+}
+
+// A moderately compatible ingredient kept in a meal. The note is the curated
+// index's own guidance ("fresh only", "small amounts"), never model-written.
+export interface CautionedIngredient {
+  name: string;
+  note: string;
 }
 
 // The full public view of a composed meal, shared by the daily board card and the
@@ -44,6 +53,9 @@ export interface PublicMeal {
   ingredients: ProposedIngredient[];
   recipe: string[] | null;
   tags: string[];
+  // Non-empty marks the dish as "enjoy in moderation"; the card derives its badge
+  // from this rather than a stored verdict.
+  cautioned_ingredients: CautionedIngredient[];
   // This meal's own code-authored reasoning, for the per-card "watch how it was
   // composed" replay.
   trace: TraceEvent[];

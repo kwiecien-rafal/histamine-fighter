@@ -12,6 +12,7 @@ from app.schemas.daily import DailyMealContent
 from app.schemas.meal import (
     MAX_DESCRIPTION_CHARS,
     MAX_DISH_CHARS,
+    CautionedIngredient,
     ProposedIngredient,
     TraceEvent,
     normalize_dish_text,
@@ -107,6 +108,7 @@ class AdminMealRead(BaseModel):
     recipe: list[str] | None
     tags: list[str]
     unverified_ingredients: list[str]
+    cautioned_ingredients: list[CautionedIngredient]
     model: str = Field(description="Which model composed the meal.")
     usage: LLMUsage | None = Field(description="Token usage of the composition, if recorded.")
     reasoning_trace: list[TraceEvent]

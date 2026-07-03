@@ -289,3 +289,45 @@ async def test_prune_before_removes_nothing_when_all_within_window(session: Asyn
     removed = await DailyService(session).prune_before(date(2026, 6, 14))
 
     assert removed == 0
+
+
+# --- recent_meal_names: the composer's do-not-repeat list ---------------------------
+
+
+async def test_recent_meal_names_reads_the_window_newest_first(session: AsyncSession) -> None:
+    await _add(session, meal_type=MealType.LUNCH, on=_DAY, name="Fennel traybake")
+    await _add(
+        session,
+        meal_type=MealType.DINNER,
+        on=_DAY - timedelta(days=3),
+        name="Millet porridge",
+        approval_status=ApprovalStatus.PENDING,
+    )
+    await _add(
+        session,
+        meal_type=MealType.SNACK,
+        on=_DAY - timedelta(days=20),
+        name="Ancient snack",
+    )
+
+    names = await DailyService(session).recent_meal_names(before=_DAY, days=14)
+
+    # The target date itself is included; the row past the window is not.
+    assert names == ["Fennel traybake", "Millet porridge"]
+
+
+async def test_recent_meal_names_dedupes_case_insensitively(session: AsyncSession) -> None:
+    await _add(session, meal_type=MealType.LUNCH, on=_DAY, name="Fennel Traybake")
+    await _add(
+        session, meal_type=MealType.DINNER, on=_DAY - timedelta(days=1), name="fennel traybake"
+    )
+
+    names = await DailyService(session).recent_meal_names(before=_DAY, days=14)
+
+    assert names == ["Fennel Traybake"]
+
+
+async def test_recent_meal_names_zero_days_disables_the_list(session: AsyncSession) -> None:
+    await _add(session, meal_type=MealType.LUNCH, on=_DAY, name="Fennel traybake")
+
+    assert await DailyService(session).recent_meal_names(before=_DAY, days=0) == []

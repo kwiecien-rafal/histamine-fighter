@@ -21,6 +21,8 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.composer import ComposerAgent, ComposerExhausted
+from app.agents.inspiration import sample_brief
+from app.agents.meal_judge import MealJudgeAgent
 from app.config import settings
 from app.core.logging import configure_logging
 from app.db.engine import SessionLocal
@@ -52,19 +54,33 @@ def _build_agent(
         chat=chat,
         ingredient_service=IngredientService(session),
         meal_service=MealService(session, embedder),
+        judge=MealJudgeAgent(chat) if settings.composer_judge_enabled else None,
     )
 
 
-async def _compose_one(agent: ComposerAgent, meal_type: MealType) -> ComposedMeal | None:
-    """Compose one meal, or None when the composer cannot finish a safe one."""
-    try:
-        return await agent.compose(meal_type)
-    except ComposerExhausted:
-        log.warning("compose.exhausted", meal_type=meal_type.value)
-        return None
-    except LLMError as exc:
-        log.warning("compose.failed", meal_type=meal_type.value, error=str(exc))
-        return None
+# One resample after an exhausted run: a fresh direction often converges where the
+# first draw could not, and a second failure means the slot is skipped anyway.
+_SLOT_ATTEMPTS = 2
+
+
+async def _compose_one(
+    agent: ComposerAgent, meal_type: MealType, hero_pool: list[str]
+) -> ComposedMeal | None:
+    """Compose one meal to a freshly drawn brief, or None when no safe one finishes.
+
+    The curated pool has no dated board to steer away from, so the brief carries no
+    do-not-repeat list; the agent's own SearchCuratedMeals tool covers duplicates.
+    """
+    for attempt in range(_SLOT_ATTEMPTS):
+        brief = sample_brief(meal_type, hero_pool=hero_pool)
+        try:
+            return await agent.compose(meal_type, inspiration=brief)
+        except ComposerExhausted:
+            log.warning("compose.exhausted", meal_type=meal_type.value, attempt=attempt)
+        except LLMError as exc:
+            log.warning("compose.failed", meal_type=meal_type.value, error=str(exc))
+            return None
+    return None
 
 
 async def compose_all() -> None:
@@ -86,8 +102,9 @@ async def compose_all() -> None:
             )
             raise SystemExit(1) from exc
         meal_service = MealService(session, embedder)
+        hero_pool = await IngredientService(session).well_tolerated_pool()
         for meal_type in MealType:
-            meal = await _compose_one(agent, meal_type)
+            meal = await _compose_one(agent, meal_type, hero_pool)
             if meal is not None:
                 row = await meal_service.store_pending(meal)
                 stored += 1

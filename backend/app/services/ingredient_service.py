@@ -209,16 +209,32 @@ class IngredientService:
         )
         return list((await self._session.scalars(stmt)).all())
 
-    # The rated levels the dish verdict treats as risky; an unrated row is not
-    # evidence of safety but it does not flag a recipe either, so it is excluded.
-    _RISKY_COMPATIBILITIES = (
-        Compatibility.MODERATELY_COMPATIBLE,
+    async def well_tolerated_pool(self) -> list[str]:
+        """Names of every well-tolerated, non-umbrella row: the inspiration hero pool.
+
+        The composer's brief draws its hero ingredient from here, so an inspiration
+        is verifiable by construction and never sends the model chasing a dead end.
+        """
+        stmt = (
+            select(HistamineIngredient.name)
+            .where(
+                HistamineIngredient.compatibility == Compatibility.WELL_TOLERATED,
+                HistamineIngredient.is_category.is_(False),
+            )
+            .order_by(HistamineIngredient.name)
+        )
+        return list((await self._session.scalars(stmt)).all())
+
+    # The rated levels a composed dish can never carry. Moderately compatible is
+    # excluded on purpose: a cautioned ingredient may legitimately appear in the
+    # steps, so scanning for it would reject the very dishes the cap allows.
+    _AVOID_COMPATIBILITIES = (
         Compatibility.INCOMPATIBLE,
         Compatibility.POORLY_TOLERATED,
     )
 
-    async def risky_terms(self) -> list[str]:
-        """Normalized names and aliases of every index row rated worse than safe.
+    async def avoid_terms(self) -> list[str]:
+        """Normalized names and aliases of every index row rated avoid.
 
         The composer scans a submitted recipe against these so a high-histamine
         ingredient written into the steps (never added to the verified list) is
@@ -226,7 +242,7 @@ class IngredientService:
         """
         stmt = select(
             HistamineIngredient.normalized_name, HistamineIngredient.normalized_aliases
-        ).where(HistamineIngredient.compatibility.in_(self._RISKY_COMPATIBILITIES))
+        ).where(HistamineIngredient.compatibility.in_(self._AVOID_COMPATIBILITIES))
         terms: list[str] = []
         for name, aliases in (await self._session.execute(stmt)).all():
             terms.append(name)

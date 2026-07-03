@@ -11,7 +11,9 @@ hard-coded generate-check loop could not make.
 Safety stays out of the model's hands. ``SubmitMeal`` is not trusted: code re-runs
 the whole submitted list through the curated index and the same ``_grounded_verdict``
 the dish lookup owns, and also scans the recipe prose for an index-flagged ingredient
-written into the steps but kept off the list. Nothing the index flags can survive.
+written into the steps but kept off the list. Nothing the index flags as avoid can
+survive. A moderately compatible ingredient may stay, capped in number and carried
+with the index's own moderation note, so dishes are not stripped bare turn after turn.
 What code cannot decide it does not hide: an ingredient absent from the index is
 unknown, not safe, so it passes the automated gate but is recorded as unverified for
 the admin to clear (the safety invariant). The composer is honest where a "verify the
@@ -38,8 +40,12 @@ from pydantic import ValidationError
 
 from app.agents.base import BaseAgent
 from app.agents.dish_lookup import _grounded_verdict
+from app.agents.inspiration import InspirationBrief
+from app.agents.meal_judge import MealJudgeAgent
+from app.agents.meal_quality import check_structure
 from app.agents.meal_verification import MealVerification
-from app.agents.prompting import load_prompt, render_prompt
+from app.agents.prompting import load_prompt, render_prompt, strip_region_tags
+from app.config import settings
 from app.core.term_match import TermMatcher
 from app.enums import MealType, TraceReading
 from app.llm.errors import LLMError, LLMInvocationError
@@ -78,6 +84,10 @@ _MAX_TRACE_TEXT = 280
 # A hard budget on the agentic loop. Low-histamine cooking is restrictive, so a run
 # may iterate; this bounds the cost and the abandon point.
 _DEFAULT_MAX_ITERATIONS = 12
+# How many failing judge verdicts a run may spend. After the last one the next safe
+# submission is accepted with the judge's concerns left in the trace: quality is
+# advisory, and burning the loop budget over taste would lose the slot entirely.
+_MAX_JUDGE_ROUNDS = 2
 
 _NUDGE = "Use the tools to verify ingredients, then call SubmitMeal with the finished meal."
 _INVOCATION_ERROR = "The language model failed while composing a meal."
@@ -108,24 +118,46 @@ class ComposerAgent(BaseAgent):
         meal_service: MealService,
         *,
         max_iterations: int = _DEFAULT_MAX_ITERATIONS,
+        max_moderate_ingredients: int | None = None,
+        judge: MealJudgeAgent | None = None,
     ) -> None:
         super().__init__(chat)
         self._ingredient_service = ingredient_service
         self._meal_service = meal_service
         self._max_iterations = max_iterations
+        self._judge = judge
+        self._judge_threshold = settings.composer_judge_threshold
+        self._judge_rounds = 0
+        # Resolved here, not as a parameter default, so a settings override in a
+        # test or a fork is read at construction time rather than import time.
+        self._max_moderate = (
+            settings.composer_max_moderate_ingredients
+            if max_moderate_ingredients is None
+            else max_moderate_ingredients
+        )
         self._system_prompt = render_prompt(
-            load_prompt("composer/system"), "composer/system", input_tag="<brief>"
+            load_prompt("composer/system"),
+            "composer/system",
+            input_tag="<brief>",
+            moderate_cap=str(self._max_moderate),
         )
         self._compose_user_template = load_prompt("composer/compose_user")
 
-    async def compose(self, meal_type: MealType) -> ComposedMeal:
+    async def compose(
+        self, meal_type: MealType, inspiration: InspirationBrief | None = None
+    ) -> ComposedMeal:
         """Compose one verified-safe meal for the meal type, or raise on no result.
+
+        Args:
+            meal_type: The slot to compose.
+            inspiration: A code-drawn direction the model starts from, so runs vary
+                by construction rather than by sampling luck. ``None`` composes free.
 
         Raises:
             ComposerExhausted: the loop hit its budget without a safe submission.
             LLMInvocationError: the model failed or cannot call tools.
         """
-        async for item in self.events(meal_type):
+        async for item in self.events(meal_type, inspiration):
             if isinstance(item, ComposedMeal):
                 log.info(
                     "composer.done",
@@ -140,7 +172,9 @@ class ComposerAgent(BaseAgent):
         # events raises ComposerExhausted rather than finishing without a meal.
         raise ComposerExhausted(f"Composer produced no meal for {meal_type.value}.")
 
-    async def stream(self, meal_type: MealType) -> AsyncIterator[str]:
+    async def stream(
+        self, meal_type: MealType, inspiration: InspirationBrief | None = None
+    ) -> AsyncIterator[str]:
         """Stream the run as discriminated JSON lines: trace steps, then the meal.
 
         The ``BaseAgent`` streaming contract, implemented so it cannot be silently
@@ -151,13 +185,15 @@ class ComposerAgent(BaseAgent):
         meal omits the trace (the client assembled it from the steps), so a consumer
         switches on ``type`` instead of sniffing the payload shape.
         """
-        async for item in self.events(meal_type):
+        async for item in self.events(meal_type, inspiration):
             if isinstance(item, ComposedMeal):
                 yield MealStreamItem.of(item).model_dump_json()
             else:
                 yield TraceStreamItem(event=item).model_dump_json()
 
-    async def events(self, meal_type: MealType) -> AsyncIterator[TraceEvent | ComposedMeal]:
+    async def events(
+        self, meal_type: MealType, inspiration: InspirationBrief | None = None
+    ) -> AsyncIterator[TraceEvent | ComposedMeal]:
         """Drive the tool-calling loop, yielding each authored step then the meal.
 
         The rich core: ``compose`` and ``stream`` consume it, and so does the live
@@ -166,6 +202,7 @@ class ComposerAgent(BaseAgent):
         new event is yielded as it is appended.
         """
         self._begin_usage()
+        self._judge_rounds = 0
         try:
             model = self._chat.model.bind_tools(
                 [LookupIngredientSafety, FindSafeIngredients, SearchCuratedMeals, SubmitMeal]
@@ -173,6 +210,11 @@ class ComposerAgent(BaseAgent):
         except NotImplementedError as exc:
             raise LLMInvocationError(_TOOLS_UNSUPPORTED) from exc
 
+        # Brief values include prior model output (recent dish names), so region-tag
+        # forgeries are stripped before the text enters the <brief> data region.
+        brief_lines = (
+            strip_region_tags(inspiration.prompt_lines(), ("brief",)) if inspiration else ""
+        )
         messages: list[BaseMessage] = [
             SystemMessage(self._system_prompt),
             HumanMessage(
@@ -180,13 +222,23 @@ class ComposerAgent(BaseAgent):
                     self._compose_user_template,
                     "composer/compose_user",
                     meal_type=meal_type.value,
+                    inspiration=brief_lines,
                 )
             ),
         ]
         trace: list[TraceEvent] = []
-        # Loaded once: the index's worse-than-safe terms, scanned against any
-        # submitted recipe so a risky ingredient written into the steps is caught.
-        risky_terms = TermMatcher.from_terms(await self._ingredient_service.risky_terms())
+        if inspiration is not None:
+            drawn = TraceEvent(
+                kind="inspiration",
+                text=f"Drew a direction: {inspiration.summary()}."[:_MAX_TRACE_TEXT],
+            )
+            trace.append(drawn)
+            yield drawn
+        # Loaded once: the index's avoid-level terms, scanned against any submitted
+        # recipe so a flagged ingredient written into the steps is caught. Cautioned
+        # (moderately compatible) terms are not scanned: a kept one may appear in
+        # the steps by design.
+        risky_terms = TermMatcher.from_terms(await self._ingredient_service.avoid_terms())
 
         for iteration in range(self._max_iterations):
             try:
@@ -276,11 +328,82 @@ class ComposerAgent(BaseAgent):
             trace.append(self._reject_event(submission.name, verification))
             return None, self._reject_feedback(verification)
 
+        cautioned_names = ", ".join(item.name for item in verification.cautioned)
+        if len(verification.cautioned) > self._max_moderate:
+            trace.append(
+                TraceEvent(
+                    kind="reject",
+                    text=f"Rejected '{submission.name}': {len(verification.cautioned)} "
+                    f"moderately compatible ingredients ({cautioned_names}), "
+                    f"at most {self._max_moderate} may stay.",
+                )
+            )
+            return None, (
+                f"The dish keeps {len(verification.cautioned)} moderately compatible "
+                f"ingredients: {cautioned_names}. At most {self._max_moderate} may stay. "
+                "Swap the rest for well-tolerated alternatives, then resubmit."
+            )
+
+        # Quality gates run only after safety passes, so safety feedback always
+        # outranks quality feedback and a revision never trades one for the other.
+        thin_reasons = check_structure(meal_type, ingredients, recipe)
+        if thin_reasons:
+            listed = "; ".join(thin_reasons)
+            trace.append(
+                TraceEvent(
+                    kind="reject",
+                    text=f"Rejected '{submission.name}' as too thin: {listed}.",
+                )
+            )
+            return None, (
+                f"The dish is safe but too thin: {listed}. Enrich it rather than "
+                "trimming: add well-tolerated ingredients and fuller steps, then resubmit."
+            )
+
+        # The judge runs last and is bounded: after its rounds are spent, a safe
+        # submission is accepted with the concerns already in the trace for the admin.
+        if self._judge is not None and self._judge_rounds < _MAX_JUDGE_ROUNDS:
+            judgement, judge_steps = await self._judge.review(
+                meal_type,
+                name=submission.name,
+                description=submission.description,
+                ingredients=ingredients,
+                recipe=recipe,
+                tags=normalize_tags(submission.tags),
+            )
+            self._calls.extend(judge_steps)
+            score = judgement.score()
+            if score < self._judge_threshold:
+                self._judge_rounds += 1
+                failed = ", ".join(judgement.failed_criteria())
+                trace.append(
+                    TraceEvent(
+                        kind="judge",
+                        text=f"Quality review scored '{submission.name}' {score}/5 "
+                        f"(failed: {failed})."[:_MAX_TRACE_TEXT],
+                    )
+                )
+                notes = " ".join(judgement.reasons)
+                return None, (
+                    f"A quality review scored the dish {score}/5. Failed criteria: "
+                    f"{failed}. {notes} Improve it along these lines, keep every "
+                    "ingredient index-safe, then resubmit."
+                )
+            trace.append(
+                TraceEvent(
+                    kind="judge",
+                    text=f"Quality review passed '{submission.name}' ({score}/5).",
+                )
+            )
+
+        kept_in_moderation = (
+            f" Kept in moderation: {cautioned_names}." if verification.cautioned else ""
+        )
         trace.append(
             TraceEvent(
                 kind="verify",
                 text=f"Verified all {len(ingredients)} ingredients against the index. "
-                f"'{submission.name}' is safe.",
+                f"'{submission.name}' is safe.{kept_in_moderation}",
             )
         )
         return (
@@ -294,6 +417,7 @@ class ComposerAgent(BaseAgent):
                 recipe=recipe,
                 tags=normalize_tags(submission.tags),
                 unverified_ingredients=verification.unverified,
+                cautioned_ingredients=verification.cautioned,
                 reasoning_trace=list(trace),
                 model=self.model_name,
                 usage=self._collect_usage(),
@@ -428,6 +552,13 @@ class ComposerAgent(BaseAgent):
                 "for human review."
             )
         rows = "; ".join(self._row_summary(candidate) for candidate in result.candidates)
+        if reading is TraceReading.DEPENDS:
+            return (
+                f"{ingredient}: depends ({rows}). You may keep it in moderation, at most "
+                f"{self._max_moderate} such ingredients per dish and never as the dish's "
+                "core; reflect the index note in the recipe or description, or swap it "
+                "for a well-tolerated option."
+            )
         return f"{ingredient}: {reading.value} ({rows})."
 
     @staticmethod

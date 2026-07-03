@@ -21,6 +21,9 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
+      # The composer reads culinary_anchors.json at runtime; mounting it keeps
+      # the anchor pools editable without a rebuild, like the app source.
+      - ./backend/seed_data:/app/seed_data
       # Persist the downloaded embedding model so it is fetched once, not on
       # every container recreate (see FASTEMBED_CACHE_PATH below).
       - fastembed_cache:/app/.cache/fastembed

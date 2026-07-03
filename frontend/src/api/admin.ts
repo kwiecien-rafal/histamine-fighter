@@ -1,11 +1,17 @@
 import type { LLMUsage, ProposedIngredient } from "./client";
-import type { MealType, TraceEvent } from "./domain";
+import type { CautionedIngredient, MealType, TraceEvent } from "./domain";
 import { errorDetail } from "./errors";
 
 export { errorDetail, errorMessage } from "./errors";
 // The neutral domain types live in ./domain; re-exported so existing admin imports
 // keep working while the public clients depend on ./domain directly.
-export type { MealType, TraceEvent, TraceKind, TraceReading } from "./domain";
+export type {
+  CautionedIngredient,
+  MealType,
+  TraceEvent,
+  TraceKind,
+  TraceReading,
+} from "./domain";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 export type Role = "user" | "admin";
@@ -26,6 +32,9 @@ export interface AdminMeal {
   // Ingredients the index could not vouch for, surfaced so the reviewer checks
   // them before approving.
   unverified_ingredients: string[];
+  // Moderately compatible ingredients kept within the composer's cap, each with
+  // the index's moderation note.
+  cautioned_ingredients: CautionedIngredient[];
   model: string;
   // Token usage of the composition; null for meals composed before it was recorded.
   usage: LLMUsage | null;
@@ -47,12 +56,14 @@ export interface ComposedMeal {
   recipe: string[] | null;
   tags: string[];
   unverified_ingredients: string[];
+  cautioned_ingredients: CautionedIngredient[];
   model: string;
   usage: LLMUsage;
 }
 
 // A composed meal as stored in a daily suggestion. Mirrors DailyMealContent; carries
-// unverified_ingredients for the reviewer, which the public board drops.
+// unverified_ingredients for the reviewer, which the public board drops, while
+// cautioned_ingredients reaches the public card.
 export interface DailyMealContent {
   name: string;
   description: string;
@@ -60,6 +71,7 @@ export interface DailyMealContent {
   recipe: string[] | null;
   tags: string[];
   unverified_ingredients: string[];
+  cautioned_ingredients: CautionedIngredient[];
 }
 
 // One daily-board suggestion as the review queue shows it. Mirrors AdminDailyRead:

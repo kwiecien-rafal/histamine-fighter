@@ -44,7 +44,9 @@ class _FakeAgent:
     def __init__(self, **_: object) -> None:
         pass
 
-    async def events(self, meal_type: MealType) -> AsyncIterator[TraceEvent | ComposedMeal]:
+    async def events(
+        self, meal_type: MealType, inspiration: object = None
+    ) -> AsyncIterator[TraceEvent | ComposedMeal]:
         yield TraceEvent(kind="check", text="Checked courgette: well tolerated.")
         yield TraceEvent(kind="verify", text="Courgette cleared the index.")
         yield _composed_meal(meal_type)
@@ -70,12 +72,20 @@ class _FakeSession:
         self.rolled_back = True
 
 
+async def _no_brief(*_args: object, **_kwargs: object) -> None:
+    return None
+
+
 @pytest.fixture
 def _streamer(monkeypatch: pytest.MonkeyPatch) -> tuple[ComposerStreamer, _FakeSession]:
     """The real streamer wired to a scripted agent and a fake, commit-recording session."""
     session = _FakeSession()
     monkeypatch.setattr(composer_streamer, "ComposerAgent", _FakeAgent)
     monkeypatch.setattr(composer_streamer, "SessionLocal", lambda: session)
+    monkeypatch.setattr(composer_streamer.settings, "composer_judge_enabled", False)
+    # The brief draw queries the index and the daily table; these tests fake the
+    # session, so it is stubbed out and the inspiration path is covered elsewhere.
+    monkeypatch.setattr(ComposerStreamer, "_draw_brief", staticmethod(_no_brief))
     streamer = ComposerStreamer(
         chat=cast(ChatModel, object()), embedder=cast(Embedder, FakeEmbedder())
     )

@@ -8,6 +8,7 @@ from app.dependencies import build_dish_lookup_agent, get_meal_service
 from app.enums import MealType
 from app.models import CuratedMeal
 from app.schemas.meal import (
+    CautionedIngredient,
     DishAlternativesRequest,
     DishAlternativesResponse,
     DishAssessmentRequest,
@@ -61,6 +62,9 @@ def _to_detail(row: CuratedMeal) -> PublicMealDetail:
         ingredients=[ProposedIngredient.model_validate(item) for item in row.ingredients],
         recipe=row.recipe,
         tags=list(row.tags),
+        cautioned_ingredients=[
+            CautionedIngredient.model_validate(item) for item in row.cautioned_ingredients
+        ],
         trace=_public_events(row),
     )
 

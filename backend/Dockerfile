@@ -9,6 +9,9 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY app ./app
+# The composer reads culinary_anchors.json at runtime, so the image must carry
+# seed_data, not just the package.
+COPY seed_data ./seed_data
 RUN uv pip install --system .
 
 EXPOSE 8000

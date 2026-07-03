@@ -402,7 +402,9 @@ class DishAlternativesResponse(BaseModel):
 # --- Composer: the agentic meal-composition loop --------------------------------
 
 
-TraceKind = Literal["draft", "check", "search", "options", "reject", "submit", "verify"]
+TraceKind = Literal[
+    "inspiration", "draft", "check", "search", "options", "reject", "submit", "verify", "judge"
+]
 
 # ``draft`` is the model's own prose; it stays in the stored trace and the admin
 # views but is filtered out of the public board, where only code-authored steps show.
@@ -434,6 +436,19 @@ def public_trace(events: Iterable[TraceEvent]) -> list[TraceEvent]:
     return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]
 
 
+class CautionedIngredient(BaseModel):
+    """A moderately compatible ingredient kept in a meal, with the index's guidance.
+
+    The note is the curated index's own wording ("fresh only", "small amounts"),
+    never model-written: the model may keep the ingredient, but only the index says
+    how. A stable domain value pair (CLAUDE section 19); the frontend derives its
+    caution styling from the field's presence.
+    """
+
+    name: str
+    note: str
+
+
 class PublicMealView(BaseModel):
     """The full public view of a composed meal, shared by every surface that shows one.
 
@@ -441,7 +456,8 @@ class PublicMealView(BaseModel):
     share this base rather than drifting apart. The ``trace`` is filtered to
     code-authored steps (the model's prose never reaches a visitor); ``model`` is
     per-card so attribution stays truthful when a board mixes models. No verdict
-    travels: membership in the approved pool is the safety signal.
+    field travels: membership in the approved pool is the safety signal, and the
+    client derives its dish badge from ``cautioned_ingredients`` being non-empty.
     """
 
     meal_type: MealType
@@ -451,6 +467,11 @@ class PublicMealView(BaseModel):
     ingredients: list[ProposedIngredient]
     recipe: list[str] | None
     tags: list[str]
+    cautioned_ingredients: list[CautionedIngredient] = Field(
+        default_factory=list,
+        description="Moderately compatible ingredients kept in the meal, with the "
+        "index's moderation note for each.",
+    )
     trace: list[TraceEvent]
 
 
@@ -489,11 +510,13 @@ class PublicMealPage(BaseModel):
 class ComposedMealCard(BaseModel):
     """A composed meal without its trace: the public card and the streamed result.
 
-    No per-meal verdict travels here: nothing the index flags survived (or the
-    meal was never returned), so safety is carried by construction plus admin
+    No per-meal verdict travels here: nothing the index flags as avoid survived (or
+    the meal was never returned), so safety is carried by construction plus admin
     approval, not a field. ``unverified_ingredients`` are the ones absent from the
     index, accepted by the automated gate but surfaced so the reviewing admin
     closes that gap with eyes open rather than the gate hiding it.
+    ``cautioned_ingredients`` are the moderately compatible ones the composer kept
+    within its cap, each carrying the index's moderation note.
     """
 
     name: str
@@ -503,6 +526,7 @@ class ComposedMealCard(BaseModel):
     recipe: list[str] | None
     tags: list[str]
     unverified_ingredients: list[str] = Field(default_factory=list)
+    cautioned_ingredients: list[CautionedIngredient] = Field(default_factory=list)
     model: str
     usage: LLMUsage = Field(
         default_factory=LLMUsage,
@@ -599,6 +623,46 @@ class SearchCuratedMeals(BaseModel):
     meal_type: MealType | None = Field(
         default=None, description="Optionally restrict the search to one meal type."
     )
+
+
+class MealJudgement(BaseModel):
+    """The quality judge's structured verdict: five binary criteria, reasons on a no.
+
+    Booleans, not a score the model invents: each criterion is answered on its own
+    and code derives the score, so the threshold lives in configuration rather than
+    in prompt wording.
+    """
+
+    substantial: bool = Field(description="Is the meal substantial enough for its meal type?")
+    coherent: bool = Field(
+        description="Does it read as one coherent dish rather than a pile of ingredients?"
+    )
+    flavors_plausible: bool = Field(description="Do the flavours plausibly work together?")
+    recipe_uses_ingredients: bool = Field(
+        description="Does the recipe use the listed ingredients sensibly?"
+    )
+    appealing: bool = Field(description="Would a person browsing a food site choose to eat this?")
+    reasons: list[str] = Field(
+        default_factory=list,
+        description="One short reason per criterion answered no; empty when all pass.",
+    )
+
+    def score(self) -> int:
+        """How many criteria passed, out of five."""
+        return sum(self._criteria().values())
+
+    def failed_criteria(self) -> list[str]:
+        """The names of the criteria answered no, in declaration order."""
+        return [name for name, passed in self._criteria().items() if not passed]
+
+    def _criteria(self) -> dict[str, bool]:
+        return {
+            "substantial": self.substantial,
+            "coherent": self.coherent,
+            "flavors_plausible": self.flavors_plausible,
+            "recipe_uses_ingredients": self.recipe_uses_ingredients,
+            "appealing": self.appealing,
+        }
 
 
 class SubmitMeal(BaseModel):

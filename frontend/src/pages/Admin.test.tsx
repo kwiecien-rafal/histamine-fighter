@@ -64,6 +64,7 @@ function meal(): AdminMeal {
     recipe: ["Peel into ribbons."],
     tags: ["fresh"],
     unverified_ingredients: [],
+    cautioned_ingredients: [],
     model: "stub/model",
     usage: { calls: 4, input_tokens: 800, output_tokens: 120, total_tokens: 920, steps: [] },
     reasoning_trace: [

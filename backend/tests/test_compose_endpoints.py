@@ -74,7 +74,7 @@ class _ScriptedStreamer:
         self._session = session
 
     async def stream(
-        self, meal_type: MealType, *, persist: Any = None
+        self, meal_type: MealType, *, persist: Any = None, inspiration_date: date | None = None
     ) -> AsyncIterator[dict[str, str]]:
         for event in self._meal.reasoning_trace:
             yield {"event": "trace", "data": event.model_dump_json()}
@@ -97,7 +97,7 @@ class _BoardStreamer:
         self._failing = failing
 
     async def stream(
-        self, meal_type: MealType, *, persist: Any = None
+        self, meal_type: MealType, *, persist: Any = None, inspiration_date: date | None = None
     ) -> AsyncIterator[dict[str, str]]:
         if meal_type in self._failing:
             raise ComposerExhausted("the loop spent its budget")
@@ -121,7 +121,7 @@ class _RaisingStreamer:
         self._error = error
 
     async def stream(
-        self, meal_type: MealType, *, persist: Any = None
+        self, meal_type: MealType, *, persist: Any = None, inspiration_date: date | None = None
     ) -> AsyncIterator[dict[str, str]]:
         yield {
             "event": "trace",

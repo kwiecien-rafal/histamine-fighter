@@ -384,7 +384,7 @@ async def test_apply_edit_reembeds_when_text_changes(
     before = list(meal.embedding)
 
     await MealService(session, fake_embedder).apply_edit(
-        meal, _update(meal, name="A brand new name"), unverified=[]
+        meal, _update(meal, name="A brand new name"), unverified=[], cautioned=[]
     )
 
     assert meal.name == "A brand new name"
@@ -403,6 +403,7 @@ async def test_apply_edit_skips_reembed_when_only_ingredients_change(
         meal,
         _update(meal, ingredients=[{"name": "buckwheat", "category": "grain"}]),
         unverified=["buckwheat"],
+        cautioned=[],
     )
 
     assert [item["name"] for item in meal.ingredients] == ["buckwheat"]

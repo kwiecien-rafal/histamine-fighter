@@ -55,7 +55,12 @@ async def update_suggestion(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_PENDING)
     verification = await verify_edit(ingredient_service, payload)
     confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
-    service.apply_edit(suggestion, payload, unverified=verification.unverified + confirmed_flags)
+    service.apply_edit(
+        suggestion,
+        payload,
+        unverified=verification.unverified + confirmed_flags,
+        cautioned=verification.cautioned,
+    )
     return suggestion
 
 

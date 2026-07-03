@@ -46,7 +46,7 @@ def _meal(meal_type: MealType, *, name: str | None = None) -> ComposedMeal:
 def _compose_from(results: dict[MealType, ComposedMeal | Exception]) -> ComposeFn:
     """A fake composer: returns the mapped meal, or raises the mapped error."""
 
-    async def compose(meal_type: MealType) -> ComposedMeal:
+    async def compose(meal_type: MealType, _target: date) -> ComposedMeal:
         outcome = results[meal_type]
         if isinstance(outcome, Exception):
             raise outcome

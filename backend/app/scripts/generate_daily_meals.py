@@ -30,6 +30,7 @@ Run it (database up, migrations applied, a tool-calling model configured):
 
 import argparse
 import asyncio
+import random
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from datetime import UTC, date, datetime, timedelta
 
@@ -37,6 +38,8 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.composer import ComposerAgent, ComposerExhausted
+from app.agents.inspiration import sample_brief
+from app.agents.meal_judge import MealJudgeAgent
 from app.config import settings
 from app.core.logging import configure_logging
 from app.db.engine import SessionLocal
@@ -54,10 +57,14 @@ from app.services.meal_service import MealService
 
 log = structlog.get_logger()
 
-# Composes one meal for a slot, raising ComposerExhausted or LLMError on failure.
-ComposeFn = Callable[[MealType], Awaitable[ComposedMeal]]
+# Composes one meal for a dated slot, raising ComposerExhausted or LLMError on failure.
+ComposeFn = Callable[[MealType, date], Awaitable[ComposedMeal]]
 # The durability boundary: commit per meal in production, flush under test isolation.
 Checkpoint = Callable[[], Awaitable[None]]
+
+# One resample after an exhausted run: a fresh direction often converges where the
+# first draw could not, and a second failure means the slot is skipped anyway.
+_SLOT_ATTEMPTS = 2
 
 
 def _build_agent(
@@ -74,13 +81,25 @@ def _build_agent(
         chat=chat,
         ingredient_service=IngredientService(session),
         meal_service=MealService(session, embedder),
+        judge=MealJudgeAgent(chat) if settings.composer_judge_enabled else None,
     )
 
 
-async def _compose_one(compose: ComposeFn, meal_type: MealType) -> ComposedMeal | None:
+def _slot_rng(target: date, meal_type: MealType, attempt: int) -> random.Random:
+    """A reproducible entropy source per (date, slot, attempt).
+
+    Re-running the same day redraws the same brief, so a failed cron run can be
+    replayed and debugged; the attempt varies the draw on a resample.
+    """
+    return random.Random(f"{target.isoformat()}:{meal_type.value}:{attempt}")
+
+
+async def _compose_one(
+    compose: ComposeFn, meal_type: MealType, target: date
+) -> ComposedMeal | None:
     """Compose one meal, or None when the composer cannot finish a safe one."""
     try:
-        return await compose(meal_type)
+        return await compose(meal_type, target)
     except ComposerExhausted:
         log.warning("daily.exhausted", meal_type=meal_type.value)
         return None
@@ -113,7 +132,7 @@ async def build_board(
         if existing is not None and existing.approval_status is not ApprovalStatus.REJECTED:
             log.info("daily.skip_existing", date=target.isoformat(), meal_type=meal_type.value)
             continue
-        meal = await _compose_one(compose, meal_type)
+        meal = await _compose_one(compose, meal_type, target)
         if meal is None:
             continue
         await daily.store_pending(meal, target, now=moment)
@@ -153,6 +172,44 @@ async def build_boards(
     return stored
 
 
+def _inspired_compose(agent: ComposerAgent, session: AsyncSession) -> ComposeFn:
+    """Wrap the agent with a per-slot drawn brief, resampling once on exhaustion.
+
+    The brief carries the variety: a hero drawn from the index's well-tolerated
+    rows, a code-sampled direction, and the recent boards as a do-not-repeat list.
+    An exhausted run gets one fresh draw before the slot is given up, since a new
+    direction often converges where the first could not.
+    """
+    daily = DailyService(session)
+    ingredients = IngredientService(session)
+
+    async def compose(meal_type: MealType, target: date) -> ComposedMeal:
+        hero_pool = await ingredients.well_tolerated_pool()
+        avoid = await daily.recent_meal_names(
+            before=target, days=settings.daily_variety_window_days
+        )
+        for attempt in range(_SLOT_ATTEMPTS - 1):
+            brief = sample_brief(
+                meal_type,
+                hero_pool=hero_pool,
+                avoid_names=avoid,
+                rng=_slot_rng(target, meal_type, attempt),
+            )
+            try:
+                return await agent.compose(meal_type, inspiration=brief)
+            except ComposerExhausted:
+                log.warning("daily.resample", meal_type=meal_type.value, date=target.isoformat())
+        brief = sample_brief(
+            meal_type,
+            hero_pool=hero_pool,
+            avoid_names=avoid,
+            rng=_slot_rng(target, meal_type, _SLOT_ATTEMPTS - 1),
+        )
+        return await agent.compose(meal_type, inspiration=brief)
+
+    return compose
+
+
 async def generate(targets: Sequence[date], meal_types: Sequence[MealType]) -> None:
     """Compose each target date's board and store the successes as pending rows."""
     embedder = get_embedder()
@@ -170,7 +227,9 @@ async def generate(targets: Sequence[date], meal_types: Sequence[MealType]) -> N
                 error=str(exc),
             )
             raise SystemExit(1) from exc
-        stored = await build_boards(session, agent.compose, targets, meal_types=meal_types)
+        stored = await build_boards(
+            session, _inspired_compose(agent, session), targets, meal_types=meal_types
+        )
         cutoff = datetime.now(UTC).date() - timedelta(days=settings.daily_history_days)
         pruned = await DailyService(session).prune_before(cutoff)
         await session.commit()

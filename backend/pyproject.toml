@@ -25,6 +25,11 @@ dependencies = [
     "sse-starlette>=3.4.4",
 ]
 
+# seed_data sits next to app in the Docker build context, so automatic
+# discovery would see two top-level packages and abort the build.
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

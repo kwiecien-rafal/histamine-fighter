@@ -274,3 +274,50 @@ def test_is_ambiguous_treats_unrated_as_a_distinct_verdict() -> None:
 def test_is_not_ambiguous_when_verdicts_agree() -> None:
     matches = [_match(Compatibility.INCOMPATIBLE), _match(Compatibility.INCOMPATIBLE)]
     assert not is_ambiguous(matches)
+
+
+async def test_avoid_terms_exclude_moderately_compatible_rows(session: AsyncSession) -> None:
+    # The recipe scan must not flag a cautioned (moderately compatible) ingredient
+    # the composer legitimately kept, so only avoid-level rows contribute terms.
+    session.add_all(
+        [
+            _ingredient("Parmesan", compatibility=Compatibility.INCOMPATIBLE),
+            _ingredient(
+                "Red Wine", compatibility=Compatibility.POORLY_TOLERATED, aliases=["vino tinto"]
+            ),
+            _ingredient("Spinach", compatibility=Compatibility.MODERATELY_COMPATIBLE),
+            _ingredient("Courgette", compatibility=Compatibility.WELL_TOLERATED),
+        ]
+    )
+    await session.flush()
+
+    terms = await IngredientService(session).avoid_terms()
+
+    assert "parmesan" in terms
+    assert "red wine" in terms
+    assert "vino tinto" in terms
+    assert "spinach" not in terms
+    assert "courgette" not in terms
+
+
+async def test_well_tolerated_pool_lists_only_rated_non_umbrella_rows(
+    session: AsyncSession,
+) -> None:
+    session.add_all(
+        [
+            _ingredient("Courgette", compatibility=Compatibility.WELL_TOLERATED),
+            _ingredient("Fennel", compatibility=Compatibility.WELL_TOLERATED),
+            _ingredient(
+                "Fresh Vegetables",
+                compatibility=Compatibility.WELL_TOLERATED,
+                is_category=True,
+            ),
+            _ingredient("Spinach", compatibility=Compatibility.MODERATELY_COMPATIBLE),
+            _ingredient("Mystery Herb"),
+        ]
+    )
+    await session.flush()
+
+    pool = await IngredientService(session).well_tolerated_pool()
+
+    assert pool == ["Courgette", "Fennel"]

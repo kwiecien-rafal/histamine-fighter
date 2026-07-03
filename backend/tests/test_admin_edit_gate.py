@@ -11,18 +11,26 @@ from fastapi import HTTPException
 from app.agents.meal_verification import MealVerification
 from app.api.admin.edits import ensure_safe
 from app.enums import TraceReading
+from app.schemas.meal import CautionedIngredient
 
 
 def _verification(blockers: list[tuple[str, TraceReading]]) -> MealVerification:
-    return MealVerification(blockers=blockers, unverified=[], recipe_flags=[])
+    return MealVerification(blockers=blockers, cautioned=[], unverified=[], recipe_flags=[])
 
 
 def test_no_blockers_passes_and_records_nothing() -> None:
     assert ensure_safe(_verification([]), confirmed=False) == []
 
 
-def test_depends_never_blocks_and_is_not_recorded() -> None:
-    verification = _verification([("spinach", TraceReading.DEPENDS)])
+def test_cautioned_never_blocks() -> None:
+    # A depends reading lands in cautioned now, never in blockers, so the gate
+    # passes it through untouched for the caller to record.
+    verification = MealVerification(
+        blockers=[],
+        cautioned=[CautionedIngredient(name="spinach", note="use in moderation")],
+        unverified=[],
+        recipe_flags=[],
+    )
 
     assert ensure_safe(verification, confirmed=False) == []
 

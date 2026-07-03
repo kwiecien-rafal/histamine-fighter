@@ -21,7 +21,7 @@ from app.enums import ApprovalStatus, MealType
 from app.models import DailySuggestion
 from app.schemas.admin import AdminDailyRead, AdminDailyUpdate, QueuedDay
 from app.schemas.daily import DailyMealCard, DailyMealContent, LockedBoard, RevealedBoard
-from app.schemas.meal import ComposedMeal, TraceEvent, public_trace
+from app.schemas.meal import CautionedIngredient, ComposedMeal, TraceEvent, public_trace
 from app.schemas.usage import LLMUsage
 
 log = structlog.get_logger(__name__)
@@ -188,13 +188,18 @@ class DailyService:
         return await self._session.get(DailySuggestion, suggestion_id)
 
     def apply_edit(
-        self, suggestion: DailySuggestion, payload: AdminDailyUpdate, *, unverified: list[str]
+        self,
+        suggestion: DailySuggestion,
+        payload: AdminDailyUpdate,
+        *,
+        unverified: list[str],
+        cautioned: list[CautionedIngredient],
     ) -> None:
         """Rewrite a suggestion's content blob from a verified edit (no embedding).
 
         Daily rows are read by date, not by similarity, so there is no vector to keep in
-        step; only the JSONB content changes. ``unverified`` is the re-derived not-indexed
-        list. The caller commits.
+        step; only the JSONB content changes. ``unverified`` and ``cautioned`` are the
+        re-derived index lists. The caller commits.
         """
         content = DailyMealContent(
             name=payload.name,
@@ -203,6 +208,7 @@ class DailyService:
             recipe=payload.recipe,
             tags=payload.tags,
             unverified_ingredients=unverified,
+            cautioned_ingredients=cautioned,
         )
         suggestion.content = content.model_dump()
 
@@ -227,6 +233,7 @@ class DailyService:
             recipe=meal.recipe,
             tags=meal.tags,
             unverified_ingredients=meal.unverified_ingredients,
+            cautioned_ingredients=meal.cautioned_ingredients,
         )
         row.suggestion_date = target
         row.meal_type = meal.meal_type
@@ -241,6 +248,32 @@ class DailyService:
         if is_new:
             self._session.add(row)
         return row
+
+    async def recent_meal_names(self, *, before: date, days: int) -> list[str]:
+        """Dish names on boards up to and including ``before``, newest first.
+
+        The composer's do-not-repeat list. The target date itself is included so a
+        rejected slot is not recomposed into the very dish that was rejected, and
+        the day's other slots are steered apart. ``days <= 0`` disables the list.
+        """
+        if days <= 0:
+            return []
+        stmt = (
+            select(DailySuggestion.content)
+            .where(
+                DailySuggestion.suggestion_date >= before - timedelta(days=days),
+                DailySuggestion.suggestion_date <= before,
+            )
+            .order_by(DailySuggestion.suggestion_date.desc())
+        )
+        names: list[str] = []
+        seen: set[str] = set()
+        for content in (await self._session.scalars(stmt)).all():
+            name = DailyMealContent.model_validate(content).name
+            if name.casefold() not in seen:
+                seen.add(name.casefold())
+                names.append(name)
+        return names
 
     async def prune_before(self, cutoff: date) -> int:
         """Delete suggestions dated before ``cutoff``, returning how many were removed.
@@ -263,9 +296,11 @@ class DailyService:
 def _to_card(row: DailySuggestion) -> DailyMealCard:
     content = DailyMealContent.model_validate(row.content)
     events = [TraceEvent.model_validate(raw) for raw in row.reasoning_trace]
-    # unverified_ingredients is review-queue context, not a public card field; the trace
-    # is filtered to the code-authored steps the public board may show. The model rides on
-    # the card, not the board: an operator can regenerate one slot with a different model.
+    # unverified_ingredients is review-queue context, not a public card field, while
+    # cautioned_ingredients rides through: which ingredients to moderate is visitor
+    # guidance. The trace is filtered to the code-authored steps the public board may
+    # show. The model rides on the card, not the board: an operator can regenerate one
+    # slot with a different model.
     return DailyMealCard(
         meal_type=row.meal_type,
         model=row.model,

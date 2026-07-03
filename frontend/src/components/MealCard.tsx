@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { PublicMeal } from "../api/domain";
 import { MEAL_TYPE_LABEL } from "../lib/meal";
+import { CautionedNote } from "./CautionedNote";
 import { MealAttribution } from "./MealAttribution";
 import { ReplayDialog } from "./ReplayDialog";
 
@@ -10,11 +11,14 @@ interface MealCardProps {
 }
 
 // The full view of an approved meal, shared by the daily board and the browse detail.
-// Every meal here cleared the curated index and an admin approved it, so the verified
-// badge is a constant signal, not a per-row claim. The model badge is per-card: a board
-// can mix models when an admin regenerates a single slot.
+// Every meal here cleared the curated index and an admin approved it; the badge is
+// derived from the card's data, not stored: fully well-tolerated reads verified,
+// kept moderately-compatible ingredients read as "in moderation" with the index's
+// note per ingredient. The model badge is per-card: a board can mix models when an
+// admin regenerates a single slot.
 export function MealCard({ meal }: MealCardProps) {
   const [watching, setWatching] = useState(false);
+  const cautionNotes = new Map(meal.cautioned_ingredients.map((item) => [item.name, item.note]));
   return (
     <article className="rounded border border-stone-200 bg-white p-5">
       <div className="flex items-start justify-between gap-3 mb-1">
@@ -23,12 +27,21 @@ export function MealCard({ meal }: MealCardProps) {
           <span className="font-mono text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
             {MEAL_TYPE_LABEL[meal.meal_type]}
           </span>
-          <span
-            className="font-mono text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5"
-            title="Composed from the curated safe index and approved by a human."
-          >
-            ✓ Verified
-          </span>
+          {cautionNotes.size === 0 ? (
+            <span
+              className="font-mono text-[10px] uppercase tracking-wide text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5"
+              title="Composed from the curated safe index and approved by a human."
+            >
+              ✓ Verified
+            </span>
+          ) : (
+            <span
+              className="font-mono text-[10px] uppercase tracking-wide text-orange-800 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5"
+              title="Verified against the curated index and approved by a human; some ingredients are best enjoyed in moderation."
+            >
+              ⚠ In moderation
+            </span>
+          )}
         </div>
       </div>
       <p className="text-sm text-stone-600 mb-4">{meal.description}</p>
@@ -37,18 +50,32 @@ export function MealCard({ meal }: MealCardProps) {
         Ingredients
       </h4>
       <ul className="flex flex-wrap gap-1.5 mb-4">
-        {meal.ingredients.map((ingredient) => (
-          <li
-            key={ingredient.name}
-            className="rounded border border-stone-200 bg-stone-50 px-2 py-0.5 text-sm"
-          >
-            {ingredient.name}
-            {ingredient.category && (
-              <span className="text-stone-400"> · {ingredient.category}</span>
-            )}
-          </li>
-        ))}
+        {meal.ingredients.map((ingredient) => {
+          const note = cautionNotes.get(ingredient.name);
+          return (
+            <li
+              key={ingredient.name}
+              className={
+                note
+                  ? "rounded border border-orange-300 bg-orange-50 px-2 py-0.5 text-sm text-orange-900"
+                  : "rounded border border-stone-200 bg-stone-50 px-2 py-0.5 text-sm"
+              }
+              title={note}
+            >
+              {note && <span aria-hidden>⚠ </span>}
+              {ingredient.name}
+              {ingredient.category && (
+                <span className={note ? "text-orange-400" : "text-stone-400"}>
+                  {" "}
+                  · {ingredient.category}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
+
+      <CautionedNote ingredients={meal.cautioned_ingredients} />
 
       {meal.tags.length > 0 && (
         <ul className="flex flex-wrap gap-1.5 mb-4">

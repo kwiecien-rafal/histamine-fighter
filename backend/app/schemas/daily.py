@@ -3,8 +3,9 @@
 A board is either ``locked`` (before its reveal time, or not yet approved) or
 ``revealed`` (the meal cards, each carrying its own model and replayable trace). The
 two share the ``status`` discriminator so the frontend can switch on one field.
-No verdict travels on a card: a daily meal is safe by construction (it cleared
-the index when composed) and approved by an admin, so membership is the signal.
+No verdict field travels on a card: a daily meal cleared the index when composed
+and was approved by an admin, so membership is the signal; the client derives its
+badge from the card's ``cautioned_ingredients``.
 """
 
 import datetime as dt
@@ -12,7 +13,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.meal import ProposedIngredient, PublicMealView
+from app.schemas.meal import CautionedIngredient, ProposedIngredient, PublicMealView
 from app.schemas.usage import LLMUsage
 
 
@@ -21,6 +22,9 @@ class DailyMealContent(BaseModel):
 
     ``unverified_ingredients`` rides along for the admin review queue; it is
     dropped from the public card, which only ever shows approved meals.
+    ``cautioned_ingredients`` reaches the card: which ingredients to moderate is
+    guidance the visitor needs, not review-queue context. Both default empty so
+    rows stored before the fields existed still validate.
     """
 
     name: str
@@ -29,6 +33,7 @@ class DailyMealContent(BaseModel):
     recipe: list[str] | None
     tags: list[str]
     unverified_ingredients: list[str] = Field(default_factory=list)
+    cautioned_ingredients: list[CautionedIngredient] = Field(default_factory=list)
 
 
 class DailyMealCard(PublicMealView):

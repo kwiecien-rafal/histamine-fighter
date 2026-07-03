@@ -68,7 +68,10 @@ async def create_meal(
     verification = await verify_edit(ingredient_service, payload)
     confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
     row = await meal_service.store_manual(
-        payload, unverified=verification.unverified + confirmed_flags, actor=admin.email
+        payload,
+        unverified=verification.unverified + confirmed_flags,
+        cautioned=verification.cautioned,
+        actor=admin.email,
     )
     await session.flush()
     return row
@@ -96,7 +99,10 @@ async def update_meal(
     verification = await verify_edit(ingredient_service, payload)
     confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
     await meal_service.apply_edit(
-        meal, payload, unverified=verification.unverified + confirmed_flags
+        meal,
+        payload,
+        unverified=verification.unverified + confirmed_flags,
+        cautioned=verification.cautioned,
     )
     return meal
 

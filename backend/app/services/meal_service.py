@@ -26,7 +26,7 @@ from app.enums import ApprovalStatus, MealType
 from app.models import CuratedMeal
 from app.models.curated_meal import meal_embedding_text
 from app.schemas.admin import AdminMealCreate, AdminMealUpdate
-from app.schemas.meal import ComposedMeal
+from app.schemas.meal import CautionedIngredient, ComposedMeal
 
 log = structlog.get_logger(__name__)
 
@@ -273,6 +273,7 @@ class MealService:
             recipe=meal.recipe,
             tags=meal.tags,
             unverified_ingredients=meal.unverified_ingredients,
+            cautioned_ingredients=[item.model_dump() for item in meal.cautioned_ingredients],
             model=meal.model,
             usage=meal.usage.model_dump(),
             reasoning_trace=[event.model_dump() for event in meal.reasoning_trace],
@@ -283,7 +284,12 @@ class MealService:
         return row
 
     async def store_manual(
-        self, fields: AdminMealCreate, *, unverified: list[str], actor: str
+        self,
+        fields: AdminMealCreate,
+        *,
+        unverified: list[str],
+        cautioned: list[CautionedIngredient],
+        actor: str,
     ) -> CuratedMeal:
         """Build a hand-written meal as a pending curated row, no composer involved.
 
@@ -291,7 +297,8 @@ class MealService:
         description/tags text, so a manual meal ranks in retrieval exactly like a composed
         one, and lands pending for the same admin approval. Provenance is what differs: the
         ``manual`` sentinel model, no token usage, and an empty trace, so no replay offers.
-        ``unverified`` is the index gate's not-indexed list, recorded for the approving
+        ``unverified`` is the index gate's not-indexed list and ``cautioned`` its
+        moderately-compatible list, both recorded for the approving
         admin. ``actor`` is the authoring admin, logged as the only record of who wrote a
         hand-authored meal (the row keeps no human author, where a composed one keeps its
         model). The caller commits.
@@ -309,6 +316,7 @@ class MealService:
             recipe=fields.recipe,
             tags=fields.tags,
             unverified_ingredients=unverified,
+            cautioned_ingredients=[item.model_dump() for item in cautioned],
             model=MANUAL_MODEL,
             usage=None,
             reasoning_trace=[],
@@ -326,13 +334,19 @@ class MealService:
         return await self._session.get(CuratedMeal, meal_id)
 
     async def apply_edit(
-        self, meal: CuratedMeal, payload: AdminMealUpdate, *, unverified: list[str]
+        self,
+        meal: CuratedMeal,
+        payload: AdminMealUpdate,
+        *,
+        unverified: list[str],
+        cautioned: list[CautionedIngredient],
     ) -> None:
         """Apply a verified edit to a curated row, re-embedding only when text changed.
 
         The embedding is recomputed only when the retrieval text (name, description, or
         tags) actually changed, so an ingredient or recipe edit does not pay for an embed.
-        ``unverified`` is the re-derived not-indexed list. The caller commits.
+        ``unverified`` and ``cautioned`` are the re-derived index lists. The caller
+        commits.
         """
         reembed = (meal.name, meal.description, list(meal.tags)) != (
             payload.name,
@@ -345,6 +359,7 @@ class MealService:
         meal.recipe = payload.recipe
         meal.tags = payload.tags
         meal.unverified_ingredients = unverified
+        meal.cautioned_ingredients = [item.model_dump() for item in cautioned]
         if reembed:
             meal.embedding = (
                 await self._embedder.embed_documents(

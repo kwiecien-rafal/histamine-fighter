@@ -3,7 +3,8 @@
 Both edit routes re-run an edited meal through the same ingredient index check a
 composition gets, but the policy at this boundary is deliberately looser than the
 composer's: a human is in the loop. A ``depends`` reading (moderately compatible)
-never blocks, an ``avoid`` reading blocks once and can then be confirmed past via
+never blocks and is recorded as cautioned with the index's note, uncapped where the
+composer caps it, an ``avoid`` reading blocks once and can then be confirmed past via
 ``confirm_flagged``, and the recipe prose is not scanned at all so an admin note
 like "fine in moderation" is not rejected for naming a flagged term. Only an
 unverifiable reading (the lookup itself failed) blocks unconditionally, since

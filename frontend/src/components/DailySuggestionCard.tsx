@@ -6,6 +6,7 @@ import { ComposeCost } from "./ComposeCost";
 import { LLMProviderBadge } from "./LLMProviderBadge";
 import { MealEditForm } from "./MealEditForm";
 import { ReviewActions } from "./ReviewActions";
+import { CautionedNote } from "./CautionedNote";
 import { TraceDetails } from "./TraceDetails";
 import { UnverifiedNote } from "./UnverifiedNote";
 
@@ -71,6 +72,7 @@ export function DailySuggestionCard({
       </ul>
 
       <UnverifiedNote ingredients={content.unverified_ingredients} />
+      <CautionedNote ingredients={content.cautioned_ingredients} />
 
       <TraceDetails trace={suggestion.reasoning_trace} />
 

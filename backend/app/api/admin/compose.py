@@ -121,7 +121,12 @@ def _failure_frame(event: str, detail: str, meal_type: MealType) -> dict[str, st
 
 
 async def _slot_frames(
-    meal_type: MealType, streamer: ComposerStreamer, persist: Persist, *, error_event: str
+    meal_type: MealType,
+    streamer: ComposerStreamer,
+    persist: Persist,
+    *,
+    error_event: str,
+    inspiration_date: date | None = None,
 ) -> AsyncIterator[dict[str, str]]:
     """Relay one composition's frames, closing its failures as ``error_event``.
 
@@ -131,7 +136,9 @@ async def _slot_frames(
     remaining slots. An unexpected exception propagates to the caller's backstop.
     """
     try:
-        async for frame in streamer.stream(meal_type, persist=persist):
+        async for frame in streamer.stream(
+            meal_type, persist=persist, inspiration_date=inspiration_date
+        ):
             if frame["event"] == "error":
                 frame = {"event": error_event, "data": frame["data"]}
             yield frame
@@ -172,10 +179,16 @@ def _locked_sse(frames: AsyncIterator[dict[str, str]], *, run: str) -> EventSour
 
 
 def _compose_response(
-    meal_type: MealType, streamer: ComposerStreamer, *, persist: Persist
+    meal_type: MealType,
+    streamer: ComposerStreamer,
+    *,
+    persist: Persist,
+    inspiration_date: date | None = None,
 ) -> EventSourceResponse:
     """Stream one composition as SSE, saving it as pending, behind the shared lock."""
-    frames = _slot_frames(meal_type, streamer, persist, error_event="error")
+    frames = _slot_frames(
+        meal_type, streamer, persist, error_event="error", inspiration_date=inspiration_date
+    )
     return _locked_sse(frames, run=meal_type.value)
 
 
@@ -233,7 +246,9 @@ async def compose_daily(
         await session.flush()
         return row.id
 
-    return _compose_response(payload.meal_type, streamer, persist=persist)
+    return _compose_response(
+        payload.meal_type, streamer, persist=persist, inspiration_date=payload.date
+    )
 
 
 async def _board_frames(
@@ -261,7 +276,9 @@ async def _board_frames(
         start = SlotStartEvent(meal_type=meal_type, index=index, total=len(open_types))
         yield {"event": "slot", "data": start.model_dump_json()}
         saved = False
-        async for frame in _slot_frames(meal_type, streamer, persist, error_event="slot_error"):
+        async for frame in _slot_frames(
+            meal_type, streamer, persist, error_event="slot_error", inspiration_date=target
+        ):
             yield frame
             saved = saved or frame["event"] == "saved"
         (composed if saved else failed).append(meal_type)

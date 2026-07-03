@@ -20,6 +20,7 @@ function detail(overrides: Partial<PublicMealDetail> = {}): PublicMealDetail {
     ingredients: [{ name: "buckwheat", category: "grain" }],
     recipe: ["Simmer the buckwheat.", "Top with pear."],
     tags: ["warm"],
+    cautioned_ingredients: [],
     trace: [{ kind: "verify", text: "All cleared.", ingredient: null, compatibility: null }],
     ...overrides,
   };

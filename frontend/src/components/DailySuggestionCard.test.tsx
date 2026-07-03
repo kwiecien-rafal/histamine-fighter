@@ -17,6 +17,7 @@ function suggestion(overrides: Partial<AdminDailySuggestion> = {}): AdminDailySu
       recipe: null,
       tags: [],
       unverified_ingredients: ["pear"],
+      cautioned_ingredients: [{ name: "oats", note: "Fine when freshly cooked." }],
     },
     model: "stub/model",
     usage: null,
@@ -50,6 +51,8 @@ describe("DailySuggestionCard", () => {
     expect(screen.getByText("Breakfast", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText(/Reveals/)).toBeInTheDocument();
     expect(screen.getByText(/check before approving/i)).toBeInTheDocument();
+    expect(screen.getByText(/Enjoy in moderation/)).toBeInTheDocument();
+    expect(screen.getByText(/Fine when freshly cooked./)).toBeInTheDocument();
   });
 
   it("fires the decision callbacks", async () => {

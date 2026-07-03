@@ -48,6 +48,7 @@ function mealCard(): DailyMealCard {
     ingredients: [{ name: "buckwheat", category: "grain" }],
     recipe: null,
     tags: [],
+    cautioned_ingredients: [],
     trace: [
       { kind: "check", text: "step one", ingredient: null, compatibility: null },
       { kind: "verify", text: "step two", ingredient: null, compatibility: null },

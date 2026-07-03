@@ -6,7 +6,7 @@ import type { DailyMealCard } from "../api/daily";
 import { MANUAL_MODEL } from "../api/domain";
 import { MealCard } from "./MealCard";
 
-function meal(): DailyMealCard {
+function meal(overrides: Partial<DailyMealCard> = {}): DailyMealCard {
   return {
     meal_type: "breakfast",
     model: "stub/model",
@@ -15,9 +15,11 @@ function meal(): DailyMealCard {
     ingredients: [{ name: "buckwheat", category: "grain" }],
     recipe: ["Simmer the buckwheat.", "Top with pear."],
     tags: ["warm"],
+    cautioned_ingredients: [],
     trace: [
       { kind: "verify", text: "All ingredients cleared.", ingredient: null, compatibility: null },
     ],
+    ...overrides,
   };
 }
 
@@ -47,6 +49,25 @@ describe("MealCard", () => {
 
     expect(screen.getByText("How it was composed")).toBeInTheDocument();
     expect(screen.getByText("All ingredients cleared.")).toBeInTheDocument();
+  });
+
+  it("marks a cautioned meal and its ingredients with the index note", () => {
+    render(
+      <MealCard
+        meal={meal({
+          ingredients: [
+            { name: "buckwheat", category: "grain" },
+            { name: "spinach", category: "vegetable" },
+          ],
+          cautioned_ingredients: [{ name: "spinach", note: "Fresh only, small portions." }],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("⚠ In moderation")).toBeInTheDocument();
+    expect(screen.queryByText("✓ Verified")).not.toBeInTheDocument();
+    expect(screen.getByText("Enjoy in moderation:")).toBeInTheDocument();
+    expect(screen.getByText(/Fresh only, small portions./)).toBeInTheDocument();
   });
 
   it("hides the replay for a hand-authored meal with no recorded trace", () => {

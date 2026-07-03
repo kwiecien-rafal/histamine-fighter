@@ -1,0 +1,68 @@
+{
+  "cuisines": [
+    "Mediterranean-inspired",
+    "Nordic",
+    "Levantine-inspired",
+    "Persian-inspired",
+    "Japanese-inspired",
+    "French countryside",
+    "Alpine",
+    "coastal Italian (tomato-free)",
+    "British garden kitchen",
+    "Moroccan-inspired"
+  ],
+  "techniques": [
+    "roasted",
+    "steamed",
+    "pan-seared",
+    "baked",
+    "grilled",
+    "simmered as a soup or stew",
+    "raw and assembled",
+    "braised"
+  ],
+  "flavor_profiles": [
+    "herby and green",
+    "bright and zesty",
+    "gently spiced and warming",
+    "creamy and mild",
+    "earthy and roasted",
+    "sweet and fragrant",
+    "peppery and crisp",
+    "garlicky and savoury"
+  ],
+  "formats": {
+    "breakfast": [
+      "a warm porridge or grain bowl",
+      "an egg-based plate",
+      "a skillet or hash",
+      "something baked to slice",
+      "a smoothie bowl",
+      "pancakes or fritters"
+    ],
+    "lunch": [
+      "a hearty salad",
+      "a grain bowl",
+      "a soup with a side",
+      "a wrap or flatbread",
+      "a warm traybake",
+      "a quick skillet dish"
+    ],
+    "dinner": [
+      "a traybake",
+      "a one-pot stew",
+      "a curry-style simmer",
+      "a roast with sides",
+      "a pasta or noodle dish",
+      "a risotto-style grain dish"
+    ],
+    "snack": [
+      "an energy bite or bar",
+      "a dip with crunchy vegetables",
+      "a small baked good",
+      "a fruit-based plate",
+      "a savoury trail mix",
+      "a mini flatbread"
+    ]
+  }
+}
