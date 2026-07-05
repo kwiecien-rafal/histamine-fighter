@@ -66,3 +66,15 @@ def test_cookie_is_secure_only_on_a_public_deployment() -> None:
 def test_session_cookie_max_age_tracks_the_token_lifetime() -> None:
     settings = Settings(_env_file=None, access_token_expire_minutes=30)
     assert settings.session_cookie_max_age == 30 * 60
+
+
+def test_frontend_base_url_drops_the_trailing_slash() -> None:
+    # The value is concatenated into the magic-link URL and OAuth redirect URIs;
+    # a trailing slash would break the provider's exact-match redirect check.
+    settings = Settings(_env_file=None, frontend_base_url="https://histaminefighter.com/")
+    assert settings.frontend_base_url == "https://histaminefighter.com"
+
+
+def test_frontend_base_url_requires_an_http_scheme() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, frontend_base_url="histaminefighter.com")

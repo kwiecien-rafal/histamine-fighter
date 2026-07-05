@@ -2,15 +2,18 @@
 
 The access token rides in an httpOnly cookie set on login, never in the response
 body, so JavaScript cannot read it and XSS cannot exfiltrate it. The SPA cannot
-read the cookie either, so ``/me`` is how it bootstraps session state on load. When
-real public users land, this router moves to a neutral ``/api/v1/auth`` prefix while
-``require_admin`` stays the gate. Deferred to avoid churn now.
+read the cookie either, so ``/me`` is how it bootstraps session state on load.
+Password login stays admin-only: public users sign in passwordless at
+``/api/v1/auth`` (magic link, OAuth), sharing the same session cookie and
+``get_current_user``, with ``require_admin`` as the admin gate.
 """
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from app.api.cookies import clear_session_cookie, set_session_cookie
 from app.config import settings
+from app.core.client_ip import client_ip
 from app.core.ratelimit import auth_rate_limit, limiter
 from app.core.security import create_access_token
 from app.dependencies import get_current_user, get_user_service
@@ -21,38 +24,6 @@ from app.services.user_service import UserService
 log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/admin/auth", tags=["admin"])
-
-
-def _set_session_cookie(response: Response, token: str) -> None:
-    """Plant the session token in an httpOnly cookie.
-
-    httpOnly keeps it unreadable from JavaScript. Secure is on in production and off
-    in dev so it still sets over http on localhost. SameSite=Lax blunts CSRF on
-    cross-site requests.
-    """
-    response.set_cookie(
-        key=settings.session_cookie_name,
-        value=token,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="lax",
-        path="/",
-        max_age=settings.session_cookie_max_age,
-    )
-
-
-def _clear_session_cookie(response: Response) -> None:
-    """Expire the session cookie, mirroring the attributes it was set with.
-
-    Browsers match a deletion on name, path, and domain, so the path and the
-    Secure/SameSite flags are repeated here to keep the overwrite reliable.
-    """
-    response.delete_cookie(
-        key=settings.session_cookie_name,
-        path="/",
-        secure=settings.cookie_secure,
-        samesite="lax",
-    )
 
 
 def _invalid_credentials() -> HTTPException:
@@ -80,7 +51,7 @@ async def login(
     A wrong email and a wrong password give the same 401, so the response never
     reveals which accounts exist. The token rides in the cookie, never the body.
     """
-    client = request.client.host if request.client else None
+    client = client_ip(request)
     user = await user_service.authenticate(payload.email, payload.password)
     if user is None:
         # Log the attempted email and source IP so brute force is visible. The
@@ -95,7 +66,7 @@ async def login(
         raise _invalid_credentials()
     log.info("admin.login.success", email=user.email, client=client)
     token = create_access_token(str(user.id), token_version=user.token_version)
-    _set_session_cookie(response, token)
+    set_session_cookie(response, token, max_age=settings.session_cookie_max_age)
     # The login response opens the session, so keep it out of any shared cache.
     response.headers["Cache-Control"] = "no-store"
     return AuthUser.model_validate(user)
@@ -109,7 +80,7 @@ async def logout(response: Response) -> None:
     server-side, so one captured before logout stays valid until it expires. A
     password reset, which bumps token_version, is the revoke-all.
     """
-    _clear_session_cookie(response)
+    clear_session_cookie(response)
 
 
 @router.get("/me")

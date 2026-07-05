@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The .env lives at the repo root, but scripts run with the working directory set
@@ -30,6 +30,53 @@ class Settings(BaseSettings):
     # Browser session cookie carrying the admin JWT. Set httpOnly by the route so
     # XSS cannot read it. The Secure/SameSite flags and lifetime come from below.
     session_cookie_name: str = "hf_session"
+
+    # Public user sessions live much longer than the admin's 60 minutes: signing in
+    # again via email or OAuth is friction, and a stolen public token only spends
+    # the shared-tier quota. Admins keep the short TTL regardless of login method.
+    user_session_expire_days: int = Field(default=30, ge=1, le=365)
+
+    # Where the SPA lives, for links the backend hands to browsers: the magic-link
+    # URL in emails and the post-OAuth redirect. In dev this is the Vite server.
+    frontend_base_url: str = "http://localhost:5173"
+
+    # Magic-link login. Links and their 6-digit codes expire together; the attempt
+    # cap bounds online guessing of a code (10^6 space needs far more tries).
+    magic_link_ttl_minutes: int = Field(default=15, ge=1, le=120)
+    magic_link_max_attempts: int = Field(default=5, ge=1, le=20)
+
+    # Resend transactional email. Unset means dev/self-hosted mode: the magic link
+    # is logged instead of sent, so login works with zero external services.
+    resend_api_key: str | None = None
+    email_from: str = "Histamine Fighter <login@mail.histaminefighter.com>"
+
+    # Cloudflare Turnstile on the magic-link request form. Unset skips verification
+    # (dev and self-hosted). The site key is the frontend's (VITE_TURNSTILE_SITE_KEY).
+    turnstile_secret_key: str | None = None
+
+    # OAuth sign-in. A provider with either value unset is disabled (501 at /start),
+    # so self-hosters can run without registering OAuth apps.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+
+    # Shared LLM tier: signed-in users ride the operator's OpenAI key, hard-pinned
+    # to this model server-side. Client model/key headers are ignored on this tier.
+    shared_model: str = "gpt-5.4-mini"
+
+    # Daily ceilings for the shared tier, counted in LLM-backed requests per UTC
+    # day. Effective per-user limit is min(user, ip); the global cap bounds total
+    # spend however many accounts exist. The signup cap slows account farming.
+    shared_user_daily_limit: int = Field(default=20, ge=1)
+    shared_ip_daily_limit: int = Field(default=40, ge=1)
+    shared_global_daily_limit: int = Field(default=500, ge=1)
+    signup_ip_daily_limit: int = Field(default=3, ge=1)
+
+    # Magic-link emails one IP may trigger per UTC day. Bounds inbox bombing and
+    # Resend spend when Turnstile is not configured; a hit answers the same uniform
+    # 200, silently not sending.
+    magic_send_ip_daily_limit: int = Field(default=20, ge=1)
 
     # Per-IP ceiling for the LLM-backed endpoints (the ones that cost money).
     rate_limit_per_minute: int = 10
@@ -99,6 +146,43 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     openrouter_api_key: str | None = None
 
+    @field_validator(
+        "resend_api_key",
+        "turnstile_secret_key",
+        "google_client_id",
+        "google_client_secret",
+        "github_client_id",
+        "github_client_secret",
+        "openai_api_key",
+        "anthropic_api_key",
+        "gemini_api_key",
+        "openrouter_api_key",
+        mode="before",
+    )
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        """Treat a blank optional secret as unset. Compose forwards absent vars as
+        empty strings (``VAR=${VAR:-}``), and an empty secret must disable its
+        feature, not half-enable it, matching the blank-SECRET_KEY handling below.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("frontend_base_url")
+    @classmethod
+    def _normalize_frontend_base_url(cls, value: str) -> str:
+        """Fail fast on a malformed SPA origin and drop any trailing slash.
+
+        The value is concatenated into the magic-link URL and both OAuth redirect
+        URIs; a trailing slash would produce ``https://site//api/...`` and break
+        the exact-match check registered at the OAuth provider.
+        """
+        value = value.strip().rstrip("/")
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("FRONTEND_BASE_URL must start with http:// or https://")
+        return value
+
     @property
     def is_production(self) -> bool:
         """Whether this runs as a production deployment.
@@ -126,6 +210,11 @@ class Settings(BaseSettings):
         """Session cookie lifetime in seconds, matched to the JWT it carries so the
         two expire together."""
         return self.access_token_expire_minutes * 60
+
+    @property
+    def user_session_cookie_max_age(self) -> int:
+        """Public-user session cookie lifetime in seconds, matched to its JWT."""
+        return self.user_session_expire_days * 86400
 
     @model_validator(mode="after")
     def _validate_secret(self) -> "Settings":

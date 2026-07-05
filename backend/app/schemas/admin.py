@@ -6,8 +6,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.enums import ApprovalStatus, MealType, Role
+from app.enums import ApprovalStatus, MealType
 from app.llm.providers import Provider
+
+# Redundant aliases mark deliberate re-exports: AuthUser and the email bound moved
+# to schemas/auth.py when public login landed, but admin importers keep working.
+from app.schemas.auth import MAX_EMAIL_CHARS as MAX_EMAIL_CHARS
+from app.schemas.auth import AuthUser as AuthUser
 from app.schemas.daily import DailyMealContent
 from app.schemas.meal import (
     MAX_DESCRIPTION_CHARS,
@@ -22,10 +27,9 @@ from app.schemas.meal import (
 )
 from app.schemas.usage import LLMUsage
 
-# Generous bounds: just enough to reject absurd payloads. A password over bcrypt's
+# Generous bound: just enough to reject an absurd payload. A password over bcrypt's
 # 72-byte limit is allowed through and simply fails verification, never matching a
 # stored hash, so login stays a clean 401 rather than a 500.
-MAX_EMAIL_CHARS = 320
 MAX_PASSWORD_CHARS = 128
 
 
@@ -80,15 +84,6 @@ class ComposeSettingsRead(BaseModel):
     provider: str | None
     model: str | None
     available_providers: list[Provider]
-
-
-class AuthUser(BaseModel):
-    """The signed-in user as the SPA sees it: enough to gate the UI, no token."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    email: str
-    role: Role
 
 
 class AdminMealRead(BaseModel):

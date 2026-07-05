@@ -65,6 +65,19 @@ def test_missing_api_key_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
         build_chat_model(LLMRequestConfig(provider="openai"))
 
 
+def test_server_key_fallback_is_gated_by_allow_server_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Admin/cron may ride the operator's key; a public request may not, so a
+    # keyless "openai" resolves for the former and is rejected for the latter.
+    monkeypatch.setattr(settings, "openai_api_key", "sk-server")
+    keyless = LLMRequestConfig(provider="openai")
+
+    assert build_chat_model(keyless).model_name == "openai/gpt-5.4-mini"
+    with pytest.raises(LLMConfigError):
+        build_chat_model(keyless, allow_server_key=False)
+
+
 def test_ollama_is_built_when_self_hosted(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "public_deployment", False)
     result = build_chat_model(LLMRequestConfig(provider="ollama"))

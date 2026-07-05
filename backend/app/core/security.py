@@ -93,3 +93,35 @@ def decode_access_token(token: str) -> TokenClaims:
     if not isinstance(version, int) or isinstance(version, bool):
         raise TokenError("Token carries no version.")
     return TokenClaims(subject=subject, token_version=version)
+
+
+def create_purpose_token(purpose: str, *, jti: str, ttl: timedelta) -> str:
+    """Issue a short-lived signed token for a single non-session purpose.
+
+    Used for magic-link tokens and OAuth state, where the signature proves the
+    value left this server unmodified. The payload deliberately carries no ``ver``
+    claim, so ``decode_access_token`` rejects a purpose token outright, and
+    ``decode_purpose_token`` requires the ``purpose`` claim, so a session token can
+    never be replayed as a magic link or OAuth state.
+    """
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {"purpose": purpose, "jti": jti, "iat": now, "exp": now + ttl}
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_purpose_token(token: str, *, expected_purpose: str) -> str:
+    """Return the ``jti`` of a purpose token, verifying signature, TTL, and purpose.
+
+    Raises:
+        TokenError: the token is expired, tampered with, or for another purpose.
+    """
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    except jwt.InvalidTokenError as exc:
+        raise TokenError("Invalid or expired token.") from exc
+    if payload.get("purpose") != expected_purpose:
+        raise TokenError("Token was issued for another purpose.")
+    jti = payload.get("jti")
+    if not isinstance(jti, str) or not jti:
+        raise TokenError("Token carries no id.")
+    return jti

@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 
-import { useAdminSession } from "../hooks/useAdminSession";
+import { useSessionStore } from "../store/session";
 import { SettingsDrawer } from "./SettingsDrawer";
 
 // The shared public top bar. It lifts the LLM settings drawer in, so settings are
-// reachable from every public page, and reads the admin session for the account slot.
-// The admin page keeps its own section nav and does not render this.
+// reachable from every public page, and reads the shared session store for the
+// account slot. The admin page keeps its own section nav and does not render this.
 export function Navbar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { user } = useAdminSession();
+  const user = useSessionStore((s) => s.user);
   const isAdmin = user?.role === "admin";
 
   return (
@@ -47,12 +47,31 @@ export function Navbar() {
             >
               Settings
             </button>
-            <Link
-              to="/admin"
-              className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100"
-            >
-              {isAdmin ? "Admin" : "Log in"}
-            </Link>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100"
+              >
+                Admin
+              </Link>
+            )}
+            {user ? (
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                title={user.email}
+                className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100 cursor-pointer max-w-40 truncate"
+              >
+                {user.email}
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100"
+              >
+                Log in
+              </Link>
+            )}
           </nav>
         </div>
       </header>

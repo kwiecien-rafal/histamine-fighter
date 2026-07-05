@@ -47,10 +47,14 @@ class ChatModel:
     model_name: str
 
 
-def build_chat_model(cfg: LLMRequestConfig, *, temperature: float = 0.0) -> ChatModel:
+def build_chat_model(
+    cfg: LLMRequestConfig, *, temperature: float = 0.0, allow_server_key: bool = True
+) -> ChatModel:
     """Resolve a tool-capable chat model for a request, with its badge name.
 
-    Precedence and errors come from :func:`app.llm.providers.resolve_llm_config`.
+    Precedence and errors come from :func:`app.llm.providers.resolve_llm_config`;
+    ``allow_server_key`` is forwarded there so a public request cannot fall back
+    to the operator's key (see that function).
 
     This is the gateway to the agentic tool-calling loop, so the model must
     support tool calls. The hosted providers here do; a small local Ollama model
@@ -66,7 +70,7 @@ def build_chat_model(cfg: LLMRequestConfig, *, temperature: float = 0.0) -> Chat
     computed in code from the index, never sampled. Creative agents (recipe, learn)
     can pass a higher value.
     """
-    resolved = resolve_llm_config(cfg)
+    resolved = resolve_llm_config(cfg, allow_server_key=allow_server_key)
     log.debug("llm.chat_model", provider=resolved.provider.value, model=resolved.model)
     return ChatModel(model=_construct(resolved, temperature), model_name=resolved.model_name)
 

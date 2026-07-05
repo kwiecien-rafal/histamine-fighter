@@ -10,6 +10,7 @@ import {
   type DishAlternative,
   type DishAssessmentResponse,
 } from "../api/client";
+import { QuotaError, quotaErrorCopy } from "../api/errors";
 import { shouldOfferAlternatives } from "../lib/assessment";
 import { useUsageStore } from "../store/usage";
 
@@ -89,12 +90,14 @@ export type FlowState =
 
 // A fetch that never reached the server rejects with a TypeError ("Failed to
 // fetch"), so map that to friendly copy. Backend errors arrive as an Error
-// whose message is the already-readable `detail` string, so they pass through.
+// whose message is the already-readable `detail` string, so they pass through;
+// a daily-quota 429 gets its scope-aware copy (reset time, network/site caps).
 const NETWORK_ERROR_MESSAGE =
   "Couldn't reach the server — check your connection and try again.";
 
 function errorMessage(err: unknown): string {
   if (err instanceof TypeError) return NETWORK_ERROR_MESSAGE;
+  if (err instanceof QuotaError) return quotaErrorCopy(err);
   return err instanceof Error ? err.message : "Unknown error";
 }
 

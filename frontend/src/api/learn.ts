@@ -1,5 +1,7 @@
+import { useLLMProviderStore } from "../store/llmProvider";
+import { notifySessionExpired } from "./auth";
 import { buildLLMHeaders } from "./client";
-import { errorDetail } from "./errors";
+import { QuotaError, errorDetail, errorFromResponse } from "./errors";
 
 // Mirrors MAX_QUESTION_LENGTH in app/schemas/learn.py.
 export const MAX_QUESTION_CHARS = 500;
@@ -32,14 +34,23 @@ export async function askLearn(question: string): Promise<LearnResponse> {
     method: "POST",
     headers: { "Content-Type": "application/json", ...buildLLMHeaders() },
     body: JSON.stringify({ question }),
+    credentials: "include",
   });
-  if (response.status === 429) {
-    throw new Error(
-      "You're asking faster than the free tier allows. Catch your breath and try again in a minute.",
-    );
-  }
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    // A 401 on the shared tier means the session cookie died mid-session; flip
+    // the UI to signed-out now instead of letting the navbar lie until reload.
+    if (response.status === 401 && useLLMProviderStore.getState().provider === "shared") {
+      notifySessionExpired();
+    }
+    const error = await errorFromResponse(response);
+    // A daily-quota 429 carries its own copy and reset time; only the plain
+    // burst limit gets the friendlier per-minute wording.
+    if (response.status === 429 && !(error instanceof QuotaError)) {
+      throw new Error(
+        "You're asking faster than the free tier allows. Catch your breath and try again in a minute.",
+      );
+    }
+    throw error;
   }
   return (await response.json()) as LearnResponse;
 }

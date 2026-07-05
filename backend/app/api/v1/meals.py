@@ -4,7 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from app.agents.dish_lookup import DishLookupAgent
 from app.core.ratelimit import limiter, llm_rate_limit
-from app.dependencies import build_dish_lookup_agent, get_meal_service
+from app.dependencies import (
+    RequestLLM,
+    build_dish_lookup_agent,
+    get_meal_service,
+    get_request_llm_config,
+)
 from app.enums import MealType
 from app.models import CuratedMeal
 from app.schemas.meal import (
@@ -113,7 +118,11 @@ async def propose_ingredients(
     request: Request,
     payload: DishLookupRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
+    resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> IngredientProposalResponse:
+    # The same instance the agent was built from (FastAPI caches the dependency
+    # per request); charging here, at the model-call boundary, is the contract.
+    await resolved.charge()
     return await agent.propose(dish=payload.dish)
 
 
@@ -123,7 +132,9 @@ async def assess_dish(
     request: Request,
     payload: DishAssessmentRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
+    resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> DishAssessmentResponse:
+    await resolved.charge()
     return await agent.assess(dish=payload.dish, ingredients=payload.ingredients)
 
 
@@ -133,7 +144,9 @@ async def suggest_alternatives(
     request: Request,
     payload: DishAlternativesRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
+    resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> DishAlternativesResponse:
+    await resolved.charge()
     # Both ingredient lists are client-asserted: they only steer the suggestion
     # prompt, and every picked suggestion is fully re-vetted via propose/assess.
     return await agent.alternatives(

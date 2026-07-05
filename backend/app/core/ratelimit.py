@@ -10,12 +10,19 @@ the proxy to set the forwarding headers and uvicorn's ``--proxy-headers``.
 Edge rate limiting (Cloudflare) is a separate, additional layer.
 """
 
+from fastapi import Request
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.core.client_ip import client_ip, ip_bucket
 
-limiter = Limiter(key_func=get_remote_address)
+
+def _rate_limit_key(request: Request) -> str:
+    """Key limits on the same /64-bucketed identity the daily quotas use."""
+    return ip_bucket(client_ip(request))
+
+
+limiter = Limiter(key_func=_rate_limit_key)
 
 
 def llm_rate_limit() -> str:

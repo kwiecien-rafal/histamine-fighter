@@ -29,7 +29,15 @@ export function Footer() {
             className="underline hover:text-stone-700"
           >
             GitHub
-          </a>
+          </a>{" "}
+          ·{" "}
+          <Link to="/privacy" className="underline hover:text-stone-700">
+            Privacy
+          </Link>{" "}
+          ·{" "}
+          <Link to="/terms" className="underline hover:text-stone-700">
+            Terms
+          </Link>
         </p>
       </div>
     </footer>

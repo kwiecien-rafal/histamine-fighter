@@ -1,5 +1,6 @@
 import { useLLMProviderStore } from "../store/llmProvider";
-import { errorDetail } from "./errors";
+import { notifySessionExpired } from "./auth";
+import { errorFromResponse } from "./errors";
 
 export type Verdict = "safe" | "depends" | "avoid";
 
@@ -102,6 +103,12 @@ export interface DishAlternativesResponse {
 export function buildLLMHeaders(): Record<string, string> {
   const { provider, apiKeys, models, ollamaBaseUrl } =
     useLLMProviderStore.getState();
+  // The shared tier is server-configured: the backend pins the model and its own
+  // key, so only the provider header travels — no client input can steer what
+  // the operator pays for.
+  if (provider === "shared") {
+    return { "X-LLM-Provider": provider };
+  }
   const apiKey = (apiKeys[provider] ?? "").trim();
   const model = (models[provider] ?? "").trim();
   const headers: Record<string, string> = { "X-LLM-Provider": provider };
@@ -114,13 +121,21 @@ export function buildLLMHeaders(): Record<string, string> {
 }
 
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
+  // credentials: the shared tier authenticates by session cookie; on BYO-key and
+  // Ollama calls the cookie rides along unused.
   const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...buildLLMHeaders() },
     body: JSON.stringify(body),
+    credentials: "include",
   });
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    // A 401 on the shared tier means the session cookie died mid-session; flip
+    // the UI to signed-out now instead of letting the navbar lie until reload.
+    if (response.status === 401 && useLLMProviderStore.getState().provider === "shared") {
+      notifySessionExpired();
+    }
+    throw await errorFromResponse(response);
   }
   return (await response.json()) as T;
 }

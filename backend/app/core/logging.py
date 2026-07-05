@@ -13,6 +13,19 @@ from structlog.typing import Processor
 from app.config import settings
 
 
+def mask_email(email: str) -> str:
+    """Redact an email for log lines: ``gerald@example.com`` -> ``g***@example.com``.
+
+    Accounts identify as ``user_id`` in logs; the masked form is for events with
+    no account yet (or abuse warnings, where the domain is the useful part).
+    Emails are personal data, and logs outlive the account-deletion promise.
+    """
+    local, _, domain = email.partition("@")
+    if not domain:
+        return "***"
+    return f"{local[:1]}***@{domain}"
+
+
 def configure_logging() -> None:
     """Configure structlog for the current process."""
     shared_processors: list[Processor] = [

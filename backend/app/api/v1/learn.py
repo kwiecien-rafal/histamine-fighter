@@ -3,9 +3,11 @@ from fastapi import APIRouter, Depends, Request
 from app.agents.learn import LearnAgent
 from app.core.ratelimit import limiter, llm_rate_limit
 from app.dependencies import (
+    RequestLLM,
     build_learn_agent,
     get_knowledge_service,
     get_learn_cache_service,
+    get_request_llm_config,
 )
 from app.schemas.learn import ArticleListResponse, LearnQuery, LearnResponse
 from app.services.knowledge_service import KnowledgeService
@@ -21,6 +23,7 @@ async def query_knowledge(
     payload: LearnQuery,
     agent: LearnAgent = Depends(build_learn_agent),
     cache: LearnCacheService = Depends(get_learn_cache_service),
+    resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> LearnResponse:
     """Answer a histamine question from the curated knowledge base, with citations.
 
@@ -29,7 +32,15 @@ async def query_knowledge(
     """
     cached = await cache.get(payload.question, agent.model_name)
     if cached is not None:
+        # No model call happens on a hit, so release the shared-tier charge
+        # rather than leave it pending: an unspent charge on a sub-400 response
+        # is exactly what the leak backstop bills, which would make cached Learn
+        # answers cost a quota unit and log a false charge-leak error.
+        resolved.waive()
         return cached
+    # Charge the shared tier only now the cache has missed and a model call is
+    # certain, so a cached answer never spends the caller's daily allowance.
+    await resolved.charge()
     response = await agent.run(question=payload.question)
     await cache.put(payload.question, response)
     return response

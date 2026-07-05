@@ -1,7 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
+import { deleteAccount, getQuota, type QuotaStatus } from "../api/auth";
+import { errorMessage } from "../api/errors";
+import { formatResetTime } from "../lib/format";
 import { useDismissableOverlay } from "../hooks/useDismissableOverlay";
 import { useLLMProviderStore, type Provider } from "../store/llmProvider";
+import { useSessionStore } from "../store/session";
 
 const PUBLIC_DEPLOYMENT = import.meta.env.VITE_PUBLIC_DEPLOYMENT === "true";
 
@@ -18,9 +23,9 @@ interface ProviderRow {
 }
 
 const PROVIDERS: ProviderRow[] = [
+  { id: "shared", label: "Free tier (sign in)", note: "Our server-side model, free, with a daily limit. No key needed.", ready: true, needsKey: false },
   { id: "ollama", label: "Local Ollama", note: "Self-hosted, free, no API key.", ready: true, needsKey: false },
   { id: "openai", label: "OpenAI", note: "Use your own OpenAI API key.", ready: true, needsKey: true, defaultModel: "gpt-5.4-mini" },
-  { id: "modal", label: "Modal (hosted default)", note: "Coming in a later release.", ready: false, needsKey: false },
   { id: "anthropic", label: "Anthropic", note: "Use your own Anthropic API key.", ready: true, needsKey: true, defaultModel: "claude-sonnet-4-6" },
   { id: "gemini", label: "Google Gemini", note: "Use your own Gemini API key.", ready: true, needsKey: true, defaultModel: "gemini-2.5-flash" },
   { id: "openrouter", label: "OpenRouter", note: "Use your own OpenRouter key.", ready: true, needsKey: true, requiresModel: true },
@@ -42,6 +47,15 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
   const setOllamaBaseUrl = useLLMProviderStore((s) => s.setOllamaBaseUrl);
   const [showKey, setShowKey] = useState(false);
   const drawerRef = useDismissableOverlay<HTMLElement>(open, onClose);
+  const sessionStatus = useSessionStore((s) => s.status);
+  const signedIn = sessionStatus === "authed";
+
+  // Re-mask on a provider switch: showKey is drawer-wide, so a key revealed for one
+  // provider must not stay in the clear when a different provider's field appears.
+  function selectProvider(id: Provider) {
+    setProvider(id);
+    setShowKey(false);
+  }
 
   if (!open) return null;
 
@@ -72,7 +86,8 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
         <ul className="divide-y divide-stone-100">
           {PROVIDERS.map((row) => {
             const isOllamaOnPublic = row.id === "ollama" && PUBLIC_DEPLOYMENT;
-            const disabled = !row.ready || isOllamaOnPublic;
+            const isSharedSignedOut = row.id === "shared" && !signedIn;
+            const disabled = !row.ready || isOllamaOnPublic || isSharedSignedOut;
             const selected = provider === row.id;
             const expanded = selected && !disabled;
 
@@ -88,7 +103,7 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                     className="mt-1 accent-forest-800"
                     checked={selected}
                     disabled={disabled}
-                    onChange={() => setProvider(row.id)}
+                    onChange={() => selectProvider(row.id)}
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-1.5">
@@ -104,7 +119,16 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                         ? "Available only when you run the stack on your own machine."
                         : row.note}
                     </p>
-                    {disabled && (
+                    {isSharedSignedOut && (
+                      <p className="text-xs text-stone-500 mt-1">
+                        *{" "}
+                        <Link to="/login" onClick={onClose} className="underline hover:text-stone-900">
+                          Sign in
+                        </Link>{" "}
+                        to unlock the free tier.
+                      </p>
+                    )}
+                    {disabled && !isSharedSignedOut && (
                       <p className="text-xs text-stone-500 mt-1">
                         *{" "}
                         <a
@@ -118,6 +142,12 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
                     )}
                   </div>
                 </label>
+
+                {expanded && row.id === "shared" && (
+                  <div className="mt-3 pl-7">
+                    <SharedQuota />
+                  </div>
+                )}
 
                 {expanded && row.id === "ollama" && (
                   <div className="mt-3 pl-7 space-y-3">
@@ -224,7 +254,155 @@ export function SettingsDrawer({ open, onClose }: SettingsDrawerProps) {
             );
           })}
         </ul>
+
+        <AccountSection onClose={onClose} />
       </aside>
     </div>
+  );
+}
+
+// Today's free-tier allowance, fetched when the shared provider panel expands
+// (which implies a signed-in session).
+function SharedQuota() {
+  const [quota, setQuota] = useState<QuotaStatus | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getQuota()
+      .then((status) => {
+        if (active) setQuota(status);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (failed) return null;
+  if (quota === null) {
+    return <p className="text-xs text-stone-500">Checking today's allowance…</p>;
+  }
+  const exhausted = quota.used >= quota.limit;
+  return (
+    <p className={`text-xs ${exhausted ? "text-amber-700" : "text-stone-500"}`}>
+      {quota.used} of {quota.limit} free requests used today
+      {exhausted && <> — resets at {formatResetTime(quota.resets_at)}</>}. Site-wide limits may
+      also apply.
+    </p>
+  );
+}
+
+// The signed-in account controls: sign out (this device or everywhere) and GDPR
+// self-serve deletion. Lives in the drawer so account management is reachable
+// from every public page. Deletion is public-users-only: admin accounts are
+// operator-managed via the CLI, and the backend answers 403 regardless.
+function AccountSection({ onClose }: { onClose: () => void }) {
+  const user = useSessionStore((s) => s.user);
+  const status = useSessionStore((s) => s.status);
+  const logout = useSessionStore((s) => s.logout);
+  const logoutEverywhere = useSessionStore((s) => s.logoutEverywhere);
+  const clear = useSessionStore((s) => s.clear);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteAccount();
+      clear();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <section className="border-t border-stone-200 px-5 py-4">
+      <h3 className="text-sm font-semibold text-stone-900 mb-2">Account</h3>
+      {user === null ? (
+        <p className="text-sm text-stone-600">
+          {status === "loading" ? (
+            "Checking session…"
+          ) : (
+            <>
+              Not signed in.{" "}
+              <Link to="/login" onClick={onClose} className="underline hover:text-stone-900">
+                Sign in
+              </Link>{" "}
+              to unlock the free AI tier.
+            </>
+          )}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3 text-sm">
+          <p className="text-stone-600">
+            Signed in as <span className="font-medium text-stone-900">{user.email}</span>
+          </p>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="text-stone-600 underline hover:text-stone-900 cursor-pointer"
+            >
+              Sign out
+            </button>
+            <button
+              type="button"
+              onClick={() => void logoutEverywhere()}
+              title="Also signs out every other device and browser."
+              className="text-stone-600 underline hover:text-stone-900 cursor-pointer"
+            >
+              Sign out everywhere
+            </button>
+            {!confirming && user.role === "user" && (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="text-red-700 underline hover:text-red-800 cursor-pointer"
+              >
+                Delete account…
+              </button>
+            )}
+          </div>
+          {confirming && (
+            <div className="rounded border border-red-200 bg-red-50 p-3 flex flex-col gap-2">
+              <p className="text-red-800">
+                This permanently removes your account, email, and usage history. There is no
+                undo.
+              </p>
+              {error && (
+                <p role="alert" className="text-red-700">
+                  <span className="font-medium">Couldn't delete —</span> {error}
+                </p>
+              )}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handleDelete()}
+                  disabled={deleting}
+                  className="rounded bg-red-700 hover:bg-red-800 text-white px-3 py-1.5 disabled:opacity-50 enabled:cursor-pointer"
+                >
+                  {deleting ? "Deleting…" : "Delete my account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="text-stone-600 underline hover:text-stone-900 cursor-pointer"
+                >
+                  Keep it
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

@@ -65,8 +65,19 @@ class ResolvedLLMConfig(NamedTuple):
         return self.api_key
 
 
-def resolve_llm_config(cfg: LLMRequestConfig) -> ResolvedLLMConfig:
+def resolve_llm_config(
+    cfg: LLMRequestConfig, *, allow_server_key: bool = True
+) -> ResolvedLLMConfig:
     """Resolve a request's LLM config: header overrides win, else server defaults.
+
+    ``allow_server_key`` decides whether a cloud provider may fall back to the
+    operator's configured key. The admin composer and cron run on the operator's
+    keys and leave it ``True``. Public request paths pass ``False`` on a public
+    deployment, where the server key is reserved for the metered shared tier (a
+    keyless BYO request is then a clean 400, not a silent charge to the operator);
+    self-hosted, they leave it ``True`` so the configured provider stays the free
+    default. The shared tier itself is unaffected either way: it passes its key in
+    ``cfg`` explicitly.
 
     Raises:
         ProviderNotAvailableError: the provider is reserved for a later phase.
@@ -88,7 +99,8 @@ def resolve_llm_config(cfg: LLMRequestConfig) -> ResolvedLLMConfig:
     # Resolve the key before the model so a request missing both (OpenRouter needs
     # both) always fails with the same deterministic error — the missing-key one —
     # rather than one that depends on evaluation order.
-    api_key = _require_api_key(provider, cfg.api_key, _settings_api_key(provider))
+    settings_key = _settings_api_key(provider) if allow_server_key else None
+    api_key = _require_api_key(provider, cfg.api_key, settings_key)
     model = cfg.model or DEFAULT_MODELS.get(provider)
     if model is None:
         raise LLMConfigError(
