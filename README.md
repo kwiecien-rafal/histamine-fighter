@@ -41,6 +41,30 @@ Using: Python 3.12, FastAPI, SQLAlchemy (async), Alembic, LangChain, pgvector, f
 
 Requires Docker, [uv](https://docs.astral.sh/uv/), and Node 20+.
 
+### Quick start
+
+Install [`just`](https://github.com/casey/just), a small cross-platform command runner (`winget install Casey.Just`, `brew install just`, or `cargo install just`). Then, from a fresh clone:
+
+```bash
+just bootstrap
+```
+
+That copies `.env`, starts Postgres and waits for it to be healthy, applies migrations, seeds the factual data, then builds and starts the backend and frontend. Open http://localhost:5173.
+
+Run `just` to list every task. The common ones:
+
+```bash
+just admin you@example.com   # create an admin account (optional; prompts for a password)
+just test                    # backend test suite
+just reset                   # wipe the database volume and rebuild from scratch
+```
+
+On Windows the recipes run through PowerShell, so no extra shell is needed.
+
+### Manual setup
+
+Prefer not to install just, or want to run each step yourself:
+
 ```bash
 cp .env.example .env
 
