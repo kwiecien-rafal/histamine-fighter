@@ -3,6 +3,7 @@ import { useState } from "react";
 import { EditRejectedError, errorMessage, type MealEdit, type MealType } from "../api/admin";
 import { MAX_DISH_CHARS, MAX_INGREDIENT_CHARS, MAX_INGREDIENTS } from "../api/client";
 import { MEAL_TYPE_LABEL, MEAL_TYPES } from "../lib/meal";
+import { TagPicker } from "./TagPicker";
 
 interface MealEditFormProps {
   initial: MealEdit;
@@ -14,6 +15,9 @@ interface MealEditFormProps {
   // its create call; the edit callers omit it (an existing meal's slot is fixed).
   mealType?: { value: MealType; onChange: (value: MealType) => void };
   submitLabel?: string;
+  // "free": the admin's comma-separated text input (default). "picker": the closed
+  // saved-meal vocabulary as toggle buttons, used by the profile edit view.
+  tagsMode?: "free" | "picker";
 }
 
 interface Row {
@@ -31,6 +35,7 @@ export function MealEditForm({
   onCancel,
   mealType,
   submitLabel = "Save changes",
+  tagsMode = "free",
 }: MealEditFormProps) {
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -41,6 +46,7 @@ export function MealEditForm({
   );
   const [recipeText, setRecipeText] = useState((initial.recipe ?? []).join("\n"));
   const [tagsText, setTagsText] = useState(initial.tags.join(", "));
+  const [pickedTags, setPickedTags] = useState(initial.tags);
   const [saving, setSaving] = useState(false);
   const [rejection, setRejection] = useState<EditRejectedError["rejection"] | null>(null);
   // The edit that bounced, kept so "save anyway" can resubmit it with the override set.
@@ -85,10 +91,13 @@ export function MealEditForm({
         .map((row) => ({ name: row.name.trim(), category: row.category.trim() || null }))
         .filter((i) => i.name),
       recipe: lines(recipeText),
-      tags: tagsText
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
+      tags:
+        tagsMode === "picker"
+          ? pickedTags
+          : tagsText
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean),
     });
   }
 
@@ -177,13 +186,19 @@ export function MealEditForm({
           className="w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
         />
       </Field>
-      <Field label="Tags (comma separated)">
-        <input
-          value={tagsText}
-          onChange={(e) => setTagsText(e.target.value)}
-          className="w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
-        />
-      </Field>
+      {tagsMode === "picker" ? (
+        <Field label="Tags">
+          <TagPicker value={pickedTags} onChange={setPickedTags} />
+        </Field>
+      ) : (
+        <Field label="Tags (comma separated)">
+          <input
+            value={tagsText}
+            onChange={(e) => setTagsText(e.target.value)}
+            className="w-full rounded border border-stone-300 px-2.5 py-1.5 text-sm focus:outline-none focus:border-emerald-700"
+          />
+        </Field>
+      )}
 
       {rejection && (
         <div role="alert" className="text-sm text-red-700">

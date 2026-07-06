@@ -6,6 +6,7 @@ import { HomeMealCard } from "./HomeMealCard";
 
 function meal(): DailyMealCard {
   return {
+    id: "sug-1",
     meal_type: "breakfast",
     model: "stub/model",
     name: "Buckwheat porridge",

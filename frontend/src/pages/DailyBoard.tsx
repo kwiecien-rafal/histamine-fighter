@@ -225,7 +225,11 @@ function RevealedView({ board }: { board: RevealedBoard }) {
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {board.meals.map((meal) => (
-          <MealCard key={meal.meal_type} meal={meal} />
+          <MealCard
+            key={meal.meal_type}
+            meal={meal}
+            save={{ source: "daily", sourceId: meal.id }}
+          />
         ))}
       </div>
     </section>

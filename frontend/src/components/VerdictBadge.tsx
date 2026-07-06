@@ -1,41 +1,18 @@
 import type { Verdict } from "../api/client";
-
-interface VerdictStyle {
-  label: string;
-  icon: string;
-  className: string;
-}
-
-const VERDICT_STYLES: Record<Verdict, VerdictStyle> = {
-  safe: {
-    label: "Safe",
-    icon: "✅",
-    className: "bg-forest-50 text-forest-800 border-forest-200",
-  },
-  depends: {
-    label: "Depends",
-    icon: "⚠️",
-    className: "bg-amber-50 text-amber-800 border-amber-200",
-  },
-  avoid: {
-    label: "Avoid",
-    icon: "🚫",
-    className: "bg-red-50 text-red-800 border-red-200",
-  },
-};
+import { VERDICT_DISPLAY } from "../lib/verdict";
 
 interface VerdictBadgeProps {
   verdict: Verdict;
 }
 
 export function VerdictBadge({ verdict }: VerdictBadgeProps) {
-  const style = VERDICT_STYLES[verdict];
+  const { label, icon, toneClassName } = VERDICT_DISPLAY[verdict];
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium ${style.className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium ${toneClassName}`}
     >
-      <span aria-hidden>{style.icon}</span>
-      {style.label}
+      <span aria-hidden>{icon}</span>
+      {label}
     </span>
   );
 }

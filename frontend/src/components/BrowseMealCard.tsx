@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import type { PublicMealCard } from "../api/meals";
 import { MEAL_TYPE_LABEL } from "../lib/meal";
+import { SaveButton } from "./SaveButton";
 import { MealAttribution } from "./MealAttribution";
 
 interface BrowseMealCardProps {
@@ -12,13 +13,19 @@ interface BrowseMealCardProps {
 // recipe and the composition replay load; the list itself ships neither, only flags that
 // they exist. Every meal here cleared the index and an admin approved it, so the verified
 // badge is a constant signal, not a per-row claim.
+//
+// The whole card navigates via a stretched overlay link rather than wrapping the content
+// in an anchor: the save button is interactive, and an anchor may not contain interactive
+// content. The button is lifted onto its own layer so it stays clickable above the overlay.
 export function BrowseMealCard({ meal }: BrowseMealCardProps) {
   const hints = [meal.has_recipe && "Recipe", meal.has_trace && "Replay"].filter(Boolean);
   return (
-    <Link
-      to={`/meals/${meal.id}`}
-      className="block rounded border border-stone-200 bg-white p-5 hover:border-forest-300 transition-colors"
-    >
+    <article className="relative rounded border border-stone-200 bg-white p-5 hover:border-forest-300 transition-colors">
+      <Link
+        to={`/meals/${meal.id}`}
+        aria-label={meal.name}
+        className="absolute inset-0 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-forest-400"
+      />
       <div className="flex items-start justify-between gap-3 mb-1">
         <h3 className="text-lg font-medium">{meal.name}</h3>
         <div className="flex items-center gap-2 shrink-0">
@@ -30,6 +37,9 @@ export function BrowseMealCard({ meal }: BrowseMealCardProps) {
             title="Composed from the curated safe index and approved by a human."
           >
             ✓ Verified
+          </span>
+          <span className="relative z-10">
+            <SaveButton target={{ source: "curated", sourceId: meal.id }} labelHidden />
           </span>
         </div>
       </div>
@@ -54,6 +64,6 @@ export function BrowseMealCard({ meal }: BrowseMealCardProps) {
           {hints.length > 0 ? `${hints.join(" · ")} →` : "View →"}
         </span>
       </div>
-    </Link>
+    </article>
   );
 }

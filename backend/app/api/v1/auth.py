@@ -40,6 +40,7 @@ from app.dependencies import (
 )
 from app.enums import Role
 from app.models.magic_link_token import MagicLinkToken
+from app.models.saved_meal import SavedMeal
 from app.models.usage_counter import UsageCounter
 from app.models.user import User
 from app.schemas.auth import AuthUser, MagicLinkRequest, MagicLinkVerify, QuotaRead
@@ -431,11 +432,12 @@ async def delete_me(
     user_service: UserService = Depends(get_user_service),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    """Erase the account (GDPR): the user row, its quota counters, its magic-link
-    rows, then the cookie.
+    """Erase the account (GDPR): the user row, its saved meals, its quota counters,
+    its magic-link rows, then the cookie.
 
-    Hard delete, not deactivation: nothing else references users, and the point
-    is that no personal data remains.
+    Hard delete, not deactivation: the point is that no personal data remains.
+    Saved meals also cascade at the database level; the explicit delete keeps the
+    erasure visible here alongside the other purges.
     """
     if user.role is not Role.USER:
         # Admin accounts are operator-managed (manage_admin CLI). Self-serve
@@ -444,6 +446,7 @@ async def delete_me(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin accounts are managed via the CLI, not self-serve deletion.",
         )
+    await session.execute(delete(SavedMeal).where(SavedMeal.user_id == user.id))
     await session.execute(
         delete(UsageCounter).where(UsageCounter.scope == "user", UsageCounter.key == str(user.id))
     )

@@ -33,3 +33,8 @@ def llm_rate_limit() -> str:
 def auth_rate_limit() -> str:
     """A tight per-IP limit on credential checks, to blunt password brute force."""
     return f"{settings.auth_rate_limit_per_minute}/minute"
+
+
+def save_rate_limit() -> str:
+    """The per-IP limit on saved-meal writes, roomy enough for a board of save taps."""
+    return f"{settings.save_rate_limit_per_minute}/minute"

@@ -45,7 +45,7 @@ export function Navbar() {
               onClick={() => setSettingsOpen(true)}
               className="text-stone-600 hover:text-stone-900 cursor-pointer"
             >
-              Settings
+              AI settings
             </button>
             {isAdmin && (
               <Link
@@ -56,14 +56,13 @@ export function Navbar() {
               </Link>
             )}
             {user ? (
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(true)}
+              <Link
+                to="/profile"
                 title={user.email}
-                className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100 cursor-pointer max-w-40 truncate"
+                className="rounded border border-forest-200 bg-forest-50 px-3 py-1 text-forest-800 hover:bg-forest-100 max-w-40 truncate"
               >
                 {user.email}
-              </button>
+              </Link>
             ) : (
               <Link
                 to="/login"

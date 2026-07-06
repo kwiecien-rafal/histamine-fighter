@@ -69,12 +69,12 @@ export function quotaErrorCopy(error: QuotaError): string {
     case "ip":
       return (
         "This network's free-tier allowance is used up for today. " +
-        "Bring your own key in Settings, or come back tomorrow."
+        "Bring your own key in AI settings, or come back tomorrow."
       );
     case "global":
       return (
         "The free tier is fully used up site-wide for today. " +
-        "Bring your own key in Settings, or come back tomorrow."
+        "Bring your own key in AI settings, or come back tomorrow."
       );
     default:
       return `${error.message} Your limit resets at ${formatResetTime(error.quota.resets_at)}.`;

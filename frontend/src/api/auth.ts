@@ -33,7 +33,9 @@ export interface QuotaStatus {
   resets_at: string;
 }
 
-async function sessionRequest(path: string, init: RequestInit = {}): Promise<Response> {
+// Shared by every cookie-authed API module (auth here, saves in ./saves), so a
+// dead session surfaces the same way everywhere.
+export async function sessionRequest(path: string, init: RequestInit = {}): Promise<Response> {
   const response = await fetch(path, { ...init, credentials: "include" });
   if (response.status === 401) {
     notifySessionExpired();

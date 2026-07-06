@@ -10,7 +10,6 @@ import { SettingsDrawer } from "./SettingsDrawer";
 vi.mock("../api/auth", async (importActual) => ({
   ...(await importActual<typeof import("../api/auth")>()),
   getQuota: vi.fn(),
-  deleteAccount: vi.fn(),
 }));
 
 const getQuotaMock = vi.mocked(getQuota);
@@ -34,10 +33,7 @@ describe("SettingsDrawer shared tier", () => {
     renderDrawer();
 
     expect(screen.getByRole("radio", { name: /free tier/i })).toBeDisabled();
-    // Two hints (the row and the account section), both to the login page.
-    for (const link of screen.getAllByRole("link", { name: "Sign in" })) {
-      expect(link).toHaveAttribute("href", "/login");
-    }
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
   });
 
   it("enables the shared row and shows the quota when signed in", async () => {
@@ -57,24 +53,12 @@ describe("SettingsDrawer shared tier", () => {
     });
   });
 
-  it("shows the signed-in account with sign out and delete controls", () => {
+  it("carries no account controls; those live on the profile page", () => {
     useSessionStore.setState({ user: { email: "u@e.com", role: "user" }, status: "authed" });
 
     renderDrawer();
 
-    expect(screen.getByText("u@e.com")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign out everywhere" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete account/i })).toBeInTheDocument();
-  });
-
-  it("offers no self-serve deletion for an admin account", () => {
-    // Admins are operator-managed via the CLI; the backend answers 403 anyway.
-    useSessionStore.setState({ user: { email: "a@e.com", role: "admin" }, status: "authed" });
-
-    renderDrawer();
-
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete account/i })).not.toBeInTheDocument();
   });
 });

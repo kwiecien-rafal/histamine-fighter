@@ -16,7 +16,7 @@ from app.api.admin import auth as admin_auth
 from app.api.admin import compose as admin_compose
 from app.api.admin import daily as admin_daily
 from app.api.admin import meals as admin_meals
-from app.api.v1 import auth, daily, histamine, learn, meals
+from app.api.v1 import auth, daily, histamine, learn, meals, saved_meals
 from app.config import settings
 from app.core.client_ip import warn_if_unproxied
 from app.core.disposable_domains import warm_blocklist
@@ -263,6 +263,7 @@ def create_app() -> FastAPI:
     app.include_router(meals.router)
     app.include_router(learn.router)
     app.include_router(daily.router)
+    app.include_router(saved_meals.router)
     app.include_router(auth.router)
     app.include_router(admin_auth.router)
     app.include_router(admin_meals.router)

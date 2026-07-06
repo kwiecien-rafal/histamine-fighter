@@ -1,13 +1,17 @@
 import { useState } from "react";
 
 import type { PublicMeal } from "../api/domain";
+import type { SaveTarget } from "../api/saves";
 import { MEAL_TYPE_LABEL } from "../lib/meal";
 import { CautionedNote } from "./CautionedNote";
+import { SaveButton } from "./SaveButton";
 import { MealAttribution } from "./MealAttribution";
 import { ReplayDialog } from "./ReplayDialog";
 
 interface MealCardProps {
   meal: PublicMeal;
+  // When set, the card is likeable and the header grows a heart.
+  save?: SaveTarget;
 }
 
 // The full view of an approved meal, shared by the daily board and the browse detail.
@@ -16,7 +20,7 @@ interface MealCardProps {
 // kept moderately-compatible ingredients read as "in moderation" with the index's
 // note per ingredient. The model badge is per-card: a board can mix models when an
 // admin regenerates a single slot.
-export function MealCard({ meal }: MealCardProps) {
+export function MealCard({ meal, save }: MealCardProps) {
   const [watching, setWatching] = useState(false);
   const cautionNotes = new Map(meal.cautioned_ingredients.map((item) => [item.name, item.note]));
   return (
@@ -42,6 +46,7 @@ export function MealCard({ meal }: MealCardProps) {
               ⚠ In moderation
             </span>
           )}
+          {save && <SaveButton target={save} />}
         </div>
       </div>
       <p className="text-sm text-stone-600 mb-4">{meal.description}</p>

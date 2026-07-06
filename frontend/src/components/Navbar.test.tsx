@@ -49,11 +49,14 @@ describe("Navbar", () => {
     expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
   });
 
-  it("shows the account email for a signed-in user, without the admin link", () => {
+  it("links the account email to the profile page, without the admin link", () => {
     setSession({ email: "user@example.com", role: "user" });
     renderNavbar();
 
-    expect(screen.getByRole("button", { name: "user@example.com" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "user@example.com" })).toHaveAttribute(
+      "href",
+      "/profile",
+    );
     expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
   });

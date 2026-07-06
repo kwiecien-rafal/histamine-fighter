@@ -302,6 +302,7 @@ def _to_card(row: DailySuggestion) -> DailyMealCard:
     # show. The model rides on the card, not the board: an operator can regenerate one
     # slot with a different model.
     return DailyMealCard(
+        id=row.id,
         meal_type=row.meal_type,
         model=row.model,
         trace=public_trace(events),

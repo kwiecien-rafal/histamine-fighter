@@ -1,18 +1,34 @@
 import type { DishAssessmentResponse } from "../api/client";
+import type { SaveTarget } from "../api/saves";
 import { pivotTone } from "../lib/assessment";
 import { AdaptationList } from "./AdaptationList";
 import { AdvisoryList } from "./AdvisoryList";
 import { IngredientSafetyChip } from "./IngredientSafetyChip";
+import { SaveButton } from "./SaveButton";
 import { LLMProviderBadge } from "./LLMProviderBadge";
 import { MedicalNote } from "./MedicalNote";
 import { VerdictBadge } from "./VerdictBadge";
 
 interface AssessmentResultProps {
   result: DishAssessmentResponse;
-  onStartOver: () => void;
 }
 
-export function AssessmentResult({ result, onStartOver }: AssessmentResultProps) {
+// The final assessed dish is the lookup flow's "final form", so the save target is
+// built here: the snapshot the server stores is exactly what this card shows.
+function saveTarget(result: DishAssessmentResponse): SaveTarget {
+  return {
+    source: "lookup",
+    payload: {
+      dish: result.dish,
+      verdict: result.verdict,
+      description: result.explanation,
+      ingredients: result.ingredients.map((item) => ({ name: item.name, category: null })),
+      model: result.model,
+    },
+  };
+}
+
+export function AssessmentResult({ result }: AssessmentResultProps) {
   const tone = pivotTone(result);
   return (
     <article className="rounded border border-stone-200 bg-white p-5">
@@ -85,14 +101,8 @@ export function AssessmentResult({ result, onStartOver }: AssessmentResultProps)
         )
       )}
 
-      <footer>
-        <button
-          type="button"
-          onClick={onStartOver}
-          className="text-sm text-stone-600 hover:text-stone-900 underline underline-offset-4 cursor-pointer"
-        >
-          Start over
-        </button>
+      <footer className="mt-4 flex justify-end">
+        <SaveButton target={saveTarget(result)} />
       </footer>
     </article>
   );

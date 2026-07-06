@@ -5,9 +5,9 @@ import { errorDetail } from "./errors";
 // The public daily board. A plain GET, no auth and no LLM headers: the meals were
 // composed offline and approved, so the page only reads pre-generated rows.
 
-// A revealed board card is exactly the shared public meal view; the browse detail uses
-// the same shape, so they share one type rather than drifting apart.
-export type DailyMealCard = PublicMeal;
+// A revealed board card is the shared public meal view plus the suggestion id,
+// which is what a signed-in visitor's like references.
+export type DailyMealCard = PublicMeal & { id: string };
 
 export interface LockedBoard {
   status: "locked";

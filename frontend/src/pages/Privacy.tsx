@@ -53,7 +53,7 @@ export function Privacy() {
       </Section>
 
       <Section title="Your rights and deletion">
-        You can delete your account at any time from the settings drawer; that removes your email,
+        You can delete your account at any time from your profile page; that removes your email,
         account, and usage counters immediately. For anything else (GDPR access, correction,
         complaints), open an issue on GitHub or email privacy@histaminefighter.com.
       </Section>

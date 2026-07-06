@@ -31,6 +31,7 @@ from app.services.magic_link_service import MagicLinkService
 from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
 from app.services.quota_service import QuotaService
+from app.services.saved_meal_service import SavedMealService
 from app.services.user_service import UserService
 
 # auto_error=False so a missing cookie reaches get_current_user as None and is
@@ -71,6 +72,12 @@ def get_user_service(
     session: AsyncSession = Depends(get_session),
 ) -> UserService:
     return UserService(session)
+
+
+def get_saved_meal_service(
+    session: AsyncSession = Depends(get_session),
+) -> SavedMealService:
+    return SavedMealService(session)
 
 
 def get_meal_review_service(

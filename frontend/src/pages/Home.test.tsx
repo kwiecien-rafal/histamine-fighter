@@ -24,6 +24,7 @@ const browseMock = vi.mocked(browseMeals);
 
 function mealCard(name: string): DailyMealCard {
   return {
+    id: `sug-${name}`,
     meal_type: "breakfast",
     model: "stub/model",
     name,

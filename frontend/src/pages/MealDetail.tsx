@@ -72,7 +72,7 @@ export function MealDetail() {
 
         {meal && (
           <>
-            <MealCard meal={meal} />
+            <MealCard meal={meal} save={{ source: "curated", sourceId: meal.id }} />
             <div className="mt-3">
               <MedicalNote />
             </div>

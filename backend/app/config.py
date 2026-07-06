@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     # Tighter per-IP ceiling on admin credential checks, to blunt brute force.
     auth_rate_limit_per_minute: int = 5
 
+    # Per-IP ceiling on saved-meal writes. Roomier than the auth limit: a burst of
+    # save taps across a board is normal use, not an attack.
+    save_rate_limit_per_minute: int = 30
+
+    # Most saved meals one account may hold; an abuse bound on storage, not a
+    # product limit a real user should ever meet.
+    saved_meals_cap: int = Field(default=200, ge=1)
+
     # How long a cached Learn answer stays valid. Re-seeding the knowledge
     # corpus clears the cache regardless.
     learn_cache_ttl_days: int = 7

@@ -12,6 +12,8 @@ import { LoginComplete, LoginVerify } from "./pages/LoginVerify";
 import { MealDetail } from "./pages/MealDetail";
 import { MealsBrowse } from "./pages/MealsBrowse";
 import { Privacy } from "./pages/Privacy";
+import { Profile } from "./pages/Profile";
+import { ProfileMealEdit } from "./pages/ProfileMealEdit";
 import { Terms } from "./pages/Terms";
 import { useSessionStore } from "./store/session";
 
@@ -36,6 +38,8 @@ export function App() {
         <Route path="/meals" element={<MealsBrowse />} />
         <Route path="/meals/:id" element={<MealDetail />} />
         <Route path="/learn" element={<Learn />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/profile/meals/:id" element={<ProfileMealEdit />} />
         <Route path="/login" element={<Login />} />
         <Route path="/login/verify" element={<LoginVerify />} />
         <Route path="/login/complete" element={<LoginComplete />} />

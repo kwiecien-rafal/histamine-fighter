@@ -91,6 +91,26 @@ describe("MealEditForm", () => {
     );
   });
 
+  it("swaps the free-text tags input for the vocabulary picker in picker mode", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(
+      <MealEditForm
+        initial={{ ...initial(), tags: ["lunch"] }}
+        tagsMode="picker"
+        onSave={onSave}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByLabelText(/comma separated/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Blue" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ tags: ["lunch", "blue"] }));
+  });
+
   it("shows a meal-type selector and the create label in create mode", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();

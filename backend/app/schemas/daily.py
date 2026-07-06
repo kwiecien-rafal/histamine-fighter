@@ -10,6 +10,7 @@ badge from the card's ``cautioned_ingredients``.
 
 import datetime as dt
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -37,11 +38,14 @@ class DailyMealContent(BaseModel):
 
 
 class DailyMealCard(PublicMealView):
-    """One revealed meal on the board: exactly the shared public view, nothing board-only.
+    """One revealed meal on the board: the shared public view plus the suggestion id.
 
     The board offers a per-card "watch how it was composed" replay off the inherited
-    ``trace`` instead of one premiere up front.
+    ``trace`` instead of one premiere up front. The ``id`` is what a signed-in
+    visitor's save references; it only ever surfaces here once the board is revealed.
     """
+
+    id: UUID
 
 
 class LockedBoard(BaseModel):

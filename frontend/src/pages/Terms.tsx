@@ -27,7 +27,7 @@ export function Terms() {
 
       <Section title="Your account">
         One account per person, created by proving control of an email address. You can delete it
-        at any time from the settings drawer. We may terminate accounts that break these terms.
+        at any time from your profile page. We may terminate accounts that break these terms.
       </Section>
 
       <Section title="No warranty">

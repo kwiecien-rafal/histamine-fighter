@@ -28,8 +28,10 @@ let bootstrapStarted = false;
 // attaches automatically and JS cannot read, so the store holds only the public
 // user shape and recovers it from /me once on app load. A store, not a hook:
 // several components read it at once and must share one truth. The selected LLM
-// provider is deliberately untouched on sign-out: it is the user's choice, and a
-// signed-out "shared" selection already reads as a clear sign-in prompt.
+// provider is deliberately untouched on sign-out (it is the user's choice, and a
+// signed-out "shared" selection already reads as a clear sign-in prompt); sign-in
+// defaults a never-chosen provider to the shared tier via the llmProvider store's
+// own subscription.
 export const useSessionStore = create<SessionState>()((set, get) => ({
   user: null,
   status: "loading",

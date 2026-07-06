@@ -2,11 +2,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { buildLLMHeaders } from "../api/client";
 import { useLLMProviderStore } from "./llmProvider";
+import { useSessionStore } from "./session";
 
 describe("llmProvider store", () => {
   beforeEach(() => {
+    useSessionStore.setState({ user: null, status: "anon" });
     useLLMProviderStore.setState({
       provider: "ollama",
+      providerChosen: false,
       apiKeys: {},
       models: {},
       ollamaBaseUrl: "",
@@ -60,5 +63,51 @@ describe("llmProvider store", () => {
     ) as { provider: string };
 
     expect(migrated.provider).toBe("anthropic");
+  });
+
+  it("marks a persisted non-default v2 provider as an explicit choice", () => {
+    const migrate = useLLMProviderStore.persist.getOptions().migrate;
+
+    const migrated = migrate!(
+      { provider: "anthropic", apiKeys: {}, models: {}, ollamaBaseUrl: "" },
+      2,
+    ) as { providerChosen: boolean };
+
+    expect(migrated.providerChosen).toBe(true);
+  });
+
+  it("treats a persisted default v2 provider as never chosen", () => {
+    const migrate = useLLMProviderStore.persist.getOptions().migrate;
+
+    const migrated = migrate!(
+      // VITE_PUBLIC_DEPLOYMENT is unset in tests, so ollama is the default.
+      { provider: "ollama", apiKeys: {}, models: {}, ollamaBaseUrl: "" },
+      2,
+    ) as { providerChosen: boolean };
+
+    expect(migrated.providerChosen).toBe(false);
+  });
+
+  it("defaults a never-chosen provider to shared on sign-in", () => {
+    useSessionStore.setState({ user: { email: "u@e.com", role: "user" }, status: "authed" });
+
+    const state = useLLMProviderStore.getState();
+    expect(state.provider).toBe("shared");
+    // Still a default, not a choice: a later sign-in may re-apply it.
+    expect(state.providerChosen).toBe(false);
+  });
+
+  it("leaves an explicitly chosen provider alone on sign-in", () => {
+    useLLMProviderStore.getState().setProvider("anthropic");
+
+    useSessionStore.setState({ user: { email: "u@e.com", role: "user" }, status: "authed" });
+
+    expect(useLLMProviderStore.getState().provider).toBe("anthropic");
+  });
+
+  it("records an explicit choice through setProvider", () => {
+    useLLMProviderStore.getState().setProvider("openai");
+
+    expect(useLLMProviderStore.getState().providerChosen).toBe(true);
   });
 });

@@ -60,9 +60,7 @@ const seasoningNoSafeSwap: Adaptation = {
 
 describe("AssessmentResult", () => {
   it("keeps the medical note next to the verdict", () => {
-    render(
-      <AssessmentResult result={assessment("preserved", [coreSwap])} onStartOver={() => {}} />,
-    );
+    render(<AssessmentResult result={assessment("preserved", [coreSwap])} />);
 
     expect(
       screen.getByText(/informational only, not medical advice/i),
@@ -71,10 +69,7 @@ describe("AssessmentResult", () => {
 
   it("shows the dead-end callout when identity is lost", () => {
     render(
-      <AssessmentResult
-        result={assessment("lost", [coreNoSafeSwap])}
-        onStartOver={() => {}}
-      />,
+      <AssessmentResult result={assessment("lost", [coreNoSafeSwap])} />,
     );
 
     expect(screen.getByText(/a different dish may serve you better/)).toBeInTheDocument();
@@ -82,10 +77,7 @@ describe("AssessmentResult", () => {
 
   it("shows the softer callout when a core ingredient is altered", () => {
     render(
-      <AssessmentResult
-        result={assessment("altered", [coreSwap])}
-        onStartOver={() => {}}
-      />,
+      <AssessmentResult result={assessment("altered", [coreSwap])} />,
     );
 
     expect(
@@ -95,10 +87,7 @@ describe("AssessmentResult", () => {
 
   it("shows the no-safe-fix callout for a preserved dish with an unresolved group", () => {
     render(
-      <AssessmentResult
-        result={assessment("preserved", [seasoningNoSafeSwap])}
-        onStartOver={() => {}}
-      />,
+      <AssessmentResult result={assessment("preserved", [seasoningNoSafeSwap])} />,
     );
 
     expect(screen.getByText(/no safe fix/)).toBeInTheDocument();
@@ -106,10 +95,7 @@ describe("AssessmentResult", () => {
 
   it("shows no pivot callout when the dish is preserved and fully resolved", () => {
     render(
-      <AssessmentResult
-        result={assessment("preserved", [])}
-        onStartOver={() => {}}
-      />,
+      <AssessmentResult result={assessment("preserved", [])} />,
     );
 
     expect(screen.queryByText(/different dish may serve you better/)).toBeNull();

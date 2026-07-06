@@ -139,6 +139,41 @@ class ApprovalStatus(StrEnum):
     REJECTED = "rejected"
 
 
+class SaveSource(StrEnum):
+    """Where a saved meal was snapshotted from.
+
+    ``CURATED`` and ``DAILY`` copies are made server-side from approved rows, so
+    they carry verified provenance; ``LOOKUP`` content arrives from the client's
+    assessed dish and never does.
+    """
+
+    CURATED = "curated"
+    DAILY = "daily"
+    LOOKUP = "lookup"
+
+
+class SavedMealTag(StrEnum):
+    """The closed tag vocabulary for saved-meal copies.
+
+    Users organize their saved meals with these only, no free text: the four meal
+    slots, a provenance tag for dish-check saves, and six color labels. Seeded
+    server-side at save time; free-form tags on the source meal are dropped so a
+    user's shelf stays filterable by a fixed set.
+    """
+
+    BREAKFAST = "breakfast"
+    LUNCH = "lunch"
+    DINNER = "dinner"
+    SNACK = "snack"
+    DISH_CHECK = "dish_check"
+    PINK = "pink"
+    RED = "red"
+    GREEN = "green"
+    BLUE = "blue"
+    YELLOW = "yellow"
+    ORANGE = "orange"
+
+
 class Role(StrEnum):
     """An account's privilege level, read from the database on every request.
 

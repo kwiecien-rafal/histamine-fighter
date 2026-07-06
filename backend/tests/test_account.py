@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.cookies import mint_session
 from app.config import settings
 from app.core.security import create_access_token
+from app.enums import SafetyLevel, SaveSource
 from app.models.magic_link_token import MagicLinkToken
+from app.models.saved_meal import SavedMeal
 from app.models.usage_counter import UsageCounter
 from app.models.user import User
 from app.services.quota_service import QuotaStatus
@@ -66,6 +68,18 @@ async def test_delete_me_erases_the_account_and_its_data(
             expires_at=datetime.now(UTC) + timedelta(minutes=5),
         )
     )
+    session.add(
+        SavedMeal(
+            user_id=public_user.id,
+            source=SaveSource.LOOKUP,
+            source_key="spaghetti",
+            name="Spaghetti",
+            description="a saved dish",
+            ingredients=[{"name": "courgette", "category": None}],
+            model="fake/test",
+            verdict=SafetyLevel.SAFE,
+        )
+    )
     await session.flush()
 
     resp = await user_client.delete("/api/v1/auth/me")
@@ -81,6 +95,8 @@ async def test_delete_me_erases_the_account_and_its_data(
     assert counters == []
     tokens = (await session.execute(select(MagicLinkToken))).scalars().all()
     assert tokens == []
+    saves = (await session.execute(select(SavedMeal))).scalars().all()
+    assert saves == []
 
     # The cookie is gone from the jar, so the session is over.
     assert (await user_client.get("/api/v1/auth/me")).status_code == 401

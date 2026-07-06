@@ -88,7 +88,7 @@ export function DishLookup() {
 
         {state.phase === "result" && (
           <>
-            <AssessmentResult result={state.result} onStartOver={startOver} />
+            <AssessmentResult result={state.result} />
             {resultTone && (
               <AlternativesPanel
                 alternatives={state.alternatives}
@@ -97,6 +97,15 @@ export function DishLookup() {
                 onPick={pickAlternative}
               />
             )}
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={startOver}
+                className="rounded border border-red-700 px-4 py-2 text-sm text-red-700 hover:bg-red-50 cursor-pointer"
+              >
+                Start over
+              </button>
+            </div>
           </>
         )}
       </div>
