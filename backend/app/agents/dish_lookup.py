@@ -46,7 +46,6 @@ from app.agents.prompting import load_prompt, render_prompt, strip_region_tags
 from app.enums import (
     AdaptationAction,
     AlternativeGoal,
-    Compatibility,
     CulinaryRole,
     DishIntegrity,
     HistamineMechanism,
@@ -60,6 +59,7 @@ from app.schemas.meal import (
     MAX_ALTERNATIVES,
     MAX_CONFIRMED_INGREDIENTS,
     MAX_DISH_CHARS,
+    MAX_DISH_STYLE_CHARS,
     MAX_INGREDIENT_CHARS,
     MAX_PITCH_CHARS,
     MAX_REASON_CHARS,
@@ -82,16 +82,21 @@ from app.schemas.meal import (
     ProposedIngredients,
 )
 from app.services.ingredient_lookup import (
-    LookupCandidate,
+    COMPATIBILITY_SAFETY,
+    SUBSTITUTE_LIMIT,
     LookupResult,
+    candidates_safety,
+    grounded_verdict,
     lookup_ingredients,
+    more_cautious,
+    resolve_levels,
+    worst_risky,
 )
 from app.services.ingredient_service import IngredientMatch, IngredientService
 from app.services.meal_service import MealService
 
 log = structlog.get_logger(__name__)
 
-_SUBSTITUTE_LIMIT = 3
 # Most well-tolerated anchors to steer the alternatives prompt with — a focused
 # set that points a direction without burying the goal in a long ingredient list.
 _MAX_SAFE_ANCHORS = 9
@@ -141,21 +146,6 @@ def _goal_line(goal: AlternativeGoal) -> str:
     assert_never(goal)
 
 
-# Dish-level severity, worst last, so caution is a simple max.
-_SAFETY_SEVERITY: dict[SafetyLevel, int] = {
-    SafetyLevel.SAFE: 0,
-    SafetyLevel.DEPENDS: 1,
-    SafetyLevel.AVOID: 2,
-}
-
-_COMPATIBILITY_SAFETY: dict[Compatibility, SafetyLevel] = {
-    Compatibility.WELL_TOLERATED: SafetyLevel.SAFE,
-    Compatibility.MODERATELY_COMPATIBLE: SafetyLevel.DEPENDS,
-    Compatibility.INCOMPATIBLE: SafetyLevel.AVOID,
-    Compatibility.POORLY_TOLERATED: SafetyLevel.AVOID,
-}
-
-
 @dataclass(frozen=True, slots=True)
 class FlaggedIngredient:
     """One risky ingredient summarised for synthesis, errored or normal.
@@ -180,68 +170,15 @@ class FlaggedIngredient:
     safe_options: tuple[str, ...] = ()
 
 
-def _more_cautious(first: SafetyLevel, second: SafetyLevel) -> SafetyLevel:
-    return first if _SAFETY_SEVERITY[first] >= _SAFETY_SEVERITY[second] else second
-
-
-def _resolve_levels(levels: set[SafetyLevel]) -> SafetyLevel:
-    """Resolve one ingredient's risk from the levels its index matches map to.
-
-    Disagreement is resolved at the *safety* layer, not the raw compatibility
-    one, so two distinct compatibilities that mean the same thing never look like
-    a conflict:
-
-    - no levels (ingredient absent or unrated) -> safe;
-    - all matches agree -> that level (two ``avoid`` readings stay ``avoid``, two
-      ``safe`` readings stay ``safe``);
-    - a ``safe`` reading coexists with a risky one -> ``depends`` (the genuine
-      egg-yolk-vs-egg-white case: it depends which form the dish uses);
-    - every reading is risky but they differ in degree -> the most cautious of
-      them (caution is never softened to ``depends``).
-    """
-    if not levels:
-        return SafetyLevel.SAFE
-    floor = min(levels, key=_SAFETY_SEVERITY.__getitem__)
-    ceil = max(levels, key=_SAFETY_SEVERITY.__getitem__)
-    if floor is ceil:
-        return ceil
-    return SafetyLevel.DEPENDS if floor is SafetyLevel.SAFE else ceil
-
-
-def _compatibility_safety(value: str) -> SafetyLevel:
-    """Map one lookup-result compatibility string to risk (``unknown`` -> safe)."""
-    try:
-        return _COMPATIBILITY_SAFETY[Compatibility(value)]
-    except ValueError:
-        return SafetyLevel.SAFE
-
-
-def _candidates_safety(candidates: list[LookupCandidate]) -> SafetyLevel:
-    """The risk one lookup's candidate rows contribute to the dish."""
-    return _resolve_levels({_compatibility_safety(c.compatibility) for c in candidates})
-
-
 def _matches_safety(matches: list[IngredientMatch]) -> SafetyLevel:
     """The risk a set of index matches implies, used to vet a proposed swap."""
-    return _resolve_levels(
+    return resolve_levels(
         {
-            _COMPATIBILITY_SAFETY[match.ingredient.compatibility]
+            COMPATIBILITY_SAFETY[match.ingredient.compatibility]
             for match in matches
             if match.ingredient.compatibility is not None
         }
     )
-
-
-def _worst_risky(candidates: list[LookupCandidate]) -> LookupCandidate | None:
-    """One lookup's most severe risky candidate, or ``None`` when nothing is risky."""
-    risky = [
-        candidate
-        for candidate in candidates
-        if _compatibility_safety(candidate.compatibility) is not SafetyLevel.SAFE
-    ]
-    if not risky:
-        return None
-    return max(risky, key=lambda c: _SAFETY_SEVERITY[_compatibility_safety(c.compatibility)])
 
 
 def _format_flagged(flagged: list[FlaggedIngredient]) -> str:
@@ -300,18 +237,6 @@ def _format_candidates(lookups: list[LookupResult]) -> str:
     return "\n".join(lines)
 
 
-def _grounded_verdict(lookups: list[LookupResult]) -> SafetyLevel:
-    """The dish verdict the index supports: the most cautious per-ingredient risk.
-
-    Each lookup contributes one level; ingredients absent from the index return no
-    candidates and add no risk. With nothing risky recorded the verdict is safe.
-    """
-    verdict = SafetyLevel.SAFE
-    for lookup in lookups:
-        verdict = _more_cautious(verdict, _candidates_safety(lookup.candidates))
-    return verdict
-
-
 def _clipped(value: str, limit: int = MAX_INGREDIENT_CHARS) -> str:
     return value.strip()[:limit].rstrip()
 
@@ -361,10 +286,10 @@ def _ingredient_assessment(name: str, lookup: LookupResult) -> IngredientAssessm
     """
     if lookup.error:
         return IngredientAssessment(name=name, safety=SafetyLevel.DEPENDS, found=False, error=True)
-    worst = _worst_risky(lookup.candidates)
+    worst = worst_risky(lookup.candidates)
     return IngredientAssessment(
         name=name,
-        safety=_candidates_safety(lookup.candidates),
+        safety=candidates_safety(lookup.candidates),
         found=lookup.found,
         matched_on=lookup.matched_on,
         mechanisms=list(worst.mechanisms) if worst else [],
@@ -654,16 +579,21 @@ class DishLookupAgent(BaseAgent):
         proposal = await self._structured_invoke(ProposedIngredients, messages, step="propose")
         log.debug("dish_lookup.propose_reply", proposal=proposal.model_dump())
         ingredients = _normalized(proposal.ingredients)
+        # Either signal means unrecognized: the explicit flag, or a list that
+        # normalized to nothing (a model ignoring the flag still returns junk-free).
+        recognized = proposal.recognized and bool(ingredients)
         # Counts only, never names: this always-on line carries no user content.
         log.info(
             "dish_lookup.proposed",
             proposed=len(proposal.ingredients),
             kept=len(ingredients),
+            recognized=recognized,
             model=self._chat.model_name,
         )
         return IngredientProposalResponse(
             dish=dish,
-            ingredients=ingredients,
+            recognized=recognized,
+            ingredients=ingredients if recognized else [],
             model=self._chat.model_name,
             usage=self._collect_usage(),
         )
@@ -697,9 +627,9 @@ class DishLookupAgent(BaseAgent):
         # A failed lookup (DB blip) read nothing, so it is not evidence of safety:
         # the confirmed list is complete by declaration, but its grounding is not.
         grounded = [lookup for lookup in lookups if not lookup.error]
-        verdict = _grounded_verdict(grounded)
+        verdict = grounded_verdict(grounded)
         if len(grounded) < len(lookups):
-            verdict = _more_cautious(verdict, SafetyLevel.DEPENDS)
+            verdict = more_cautious(verdict, SafetyLevel.DEPENDS)
             log.warning(
                 "dish_lookup.incomplete_grounding",
                 grounded=len(grounded),
@@ -713,7 +643,7 @@ class DishLookupAgent(BaseAgent):
         ]
         flagged = self._flagged(lookups)
         # Severity decides the tier: avoid-level ingredients are adaptation
-        # material, depends-level ones only warrant a note. _candidates_safety
+        # material, depends-level ones only warrant a note. candidates_safety
         # is the same reading the per-ingredient badges use, so the egg-style
         # ambiguous case (safe + risky readings) lands in advisories.
         avoid_flagged = [entry for entry in flagged if entry.severity is SafetyLevel.AVOID]
@@ -744,6 +674,7 @@ class DishLookupAgent(BaseAgent):
         )
         return DishAssessmentResponse(
             dish=draft.dish,
+            dish_style=_clipped(draft.dish_style, MAX_DISH_STYLE_CHARS) or None,
             verdict=verdict,
             explanation=draft.explanation,
             adaptations=adaptations,
@@ -810,7 +741,7 @@ class DishLookupAgent(BaseAgent):
             if not kept or len(kept) == len(lookup.candidates):
                 revised.append(lookup)
                 continue
-            if _candidates_safety(kept) is not _candidates_safety(lookup.candidates):
+            if candidates_safety(kept) is not candidates_safety(lookup.candidates):
                 held += 1
                 revised.append(lookup)
                 continue
@@ -857,13 +788,13 @@ class DishLookupAgent(BaseAgent):
                     )
                 )
                 continue
-            worst = _worst_risky(lookup.candidates)
+            worst = worst_risky(lookup.candidates)
             if worst is None:
                 continue
             flagged.append(
                 FlaggedIngredient(
                     ingredient=lookup.ingredient,
-                    severity=_candidates_safety(lookup.candidates),
+                    severity=candidates_safety(lookup.candidates),
                     compatibility=worst.compatibility,
                     ambiguous=lookup.ambiguous,
                     readings=tuple((c.name, c.compatibility) for c in lookup.candidates),
@@ -888,7 +819,7 @@ class DishLookupAgent(BaseAgent):
                 attached.append(entry)
                 continue
             substitutes = await self._service.find_substitutes(
-                entry.category, limit=_SUBSTITUTE_LIMIT
+                entry.category, limit=SUBSTITUTE_LIMIT
             )
             name = entry.ingredient.casefold()
             options = tuple(sub.name for sub in substitutes if sub.name.casefold() != name)
@@ -1021,9 +952,7 @@ class DishLookupAgent(BaseAgent):
         # the cap, so a well-anchored dish does no extra DB work.
         if not take(prefer_ingredients):
             for category in await self._avoid_categories(avoid_ingredients):
-                substitutes = await self._service.find_substitutes(
-                    category, limit=_SUBSTITUTE_LIMIT
-                )
+                substitutes = await self._service.find_substitutes(category, limit=SUBSTITUTE_LIMIT)
                 if take(sub.name for sub in substitutes):
                     break
 
@@ -1196,7 +1125,7 @@ class DishLookupAgent(BaseAgent):
                 for ingredient in meal.ingredients
             ]
             lookups = await lookup_ingredients(self._service, items)
-            if _grounded_verdict(lookups) is SafetyLevel.SAFE:
+            if grounded_verdict(lookups) is SafetyLevel.SAFE:
                 kept.append(meal)
         return kept
 

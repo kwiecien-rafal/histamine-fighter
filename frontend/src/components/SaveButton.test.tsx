@@ -96,6 +96,36 @@ describe("SaveButton", () => {
     expect(screen.queryByText("Thonk!")).not.toBeInTheDocument();
   });
 
+  it("offers to save a fresh lookup result even when a same-named save exists", () => {
+    // The old name-derived key made a new result of "Spaghetti" light up as
+    // already saved; the per-result id must not collide with the older save.
+    useSavedMealsStore.setState({
+      status: "ready",
+      keys: new Map([[saveKey("lookup", "res-older"), "save-1"]]),
+    });
+    render(
+      <MemoryRouter>
+        <SaveButton
+          target={{
+            source: "lookup",
+            payload: {
+              lookup_id: "res-newer",
+              dish: "Spaghetti",
+              verdict: "depends",
+              description: "",
+              ingredients: [{ name: "tomato", category: null }],
+              model: "fake/test",
+              recipe: null,
+              recipe_model: null,
+            },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Save this dish" })).toBeInTheDocument();
+  });
+
   it("hides the visible label when labelHidden but keeps the accessible name", () => {
     render(
       <MemoryRouter>

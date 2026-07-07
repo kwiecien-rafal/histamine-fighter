@@ -4,7 +4,7 @@
 // assessed snapshot, which the server normalizes and never marks verified.
 
 import { sessionRequest } from "./auth";
-import type { ProposedIngredient } from "./client";
+import { buildLLMHeaders, type LLMUsage, type ProposedIngredient } from "./client";
 import type { CautionedIngredient, MealType } from "./domain";
 
 export type SaveSource = "curated" | "daily" | "lookup";
@@ -29,14 +29,23 @@ export interface SavedMealDetail extends SavedMealCard {
   recipe: string[] | null;
   cautioned_ingredients: CautionedIngredient[];
   model: string;
+  // Which model wrote the lazily generated recipe; null until one exists.
+  recipe_model: string | null;
 }
 
 export interface LookupSavePayload {
+  // Client-minted per-result id; becomes the save's source_key, so each
+  // assessment result saves as its own row even under a reused dish name.
+  lookup_id: string;
   dish: string;
   verdict: SavedVerdict;
   description: string;
   ingredients: ProposedIngredient[];
   model: string;
+  // A recipe generated on the result card rides into the save; null when the
+  // user never asked for one.
+  recipe: string[] | null;
+  recipe_model: string | null;
 }
 
 // What a heart button points at: a server row for pool content, the assessed
@@ -88,4 +97,21 @@ export async function updateSave(id: string, edit: SavedMealUpdate): Promise<Sav
 
 export async function deleteSave(id: string): Promise<void> {
   await sessionRequest(`/api/v1/me/meals/${id}`, { method: "DELETE" });
+}
+
+export interface SavedRecipeResponse {
+  meal: SavedMealDetail;
+  recipe_model: string;
+  usage: LLMUsage;
+}
+
+// Writes a recipe for a saved meal that has none and persists it on the row.
+// One LLM call, ever, per saved meal: the server returns an existing recipe
+// unchanged. The LLM provider headers ride along like on the lookup calls.
+export async function generateRecipe(id: string): Promise<SavedRecipeResponse> {
+  const response = await sessionRequest(`/api/v1/me/meals/${id}/recipe`, {
+    method: "POST",
+    headers: buildLLMHeaders(),
+  });
+  return (await response.json()) as SavedRecipeResponse;
 }

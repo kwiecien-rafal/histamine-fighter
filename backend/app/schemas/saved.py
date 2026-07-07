@@ -12,7 +12,7 @@ import datetime as dt
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.enums import MealType, SafetyLevel, SavedMealTag, SaveSource
 from app.schemas.admin import MealEditFields
@@ -23,7 +23,9 @@ from app.schemas.meal import (
     ProposedIngredient,
     normalize_dish_text,
     normalize_ingredients,
+    normalize_recipe,
 )
+from app.schemas.usage import LLMUsage
 
 # The model name arrives from the client on lookup saves; cap it so the column
 # cannot be used as a free-text dump.
@@ -42,14 +44,25 @@ class SaveFromLookup(BaseModel):
 
     There is no durable server row to copy from, so this content is client-asserted
     by construction; it is stored privately per user and never presented as verified.
+
+    ``lookup_id`` is minted by the client per assessment result and becomes the
+    save's ``source_key``. It cannot be server-assigned: a cached assessment is
+    shared across users, so a server id would collide where results must stay
+    distinct. Keying on it (not the dish name) lets two different results of the
+    same-named dish coexist as separate saves.
     """
 
     source: Literal[SaveSource.LOOKUP]
+    lookup_id: UUID
     dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
     verdict: SafetyLevel
     description: str = ""
     ingredients: list[ProposedIngredient] = Field(min_length=1)
     model: str = Field(min_length=1, max_length=MAX_MODEL_CHARS)
+    # A recipe generated on the result card, riding into the save. Normalized
+    # like an edited recipe, so a save can never hold more than an edit could.
+    recipe: list[str] | None = None
+    recipe_model: str | None = Field(default=None, max_length=MAX_MODEL_CHARS)
 
     @field_validator("dish", mode="before")
     @classmethod
@@ -82,6 +95,21 @@ class SaveFromLookup(BaseModel):
                     )
                 )
         return normalize_ingredients(pairs)
+
+    @field_validator("recipe", mode="before")
+    @classmethod
+    def _normalize_recipe(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        # normalize_recipe returns None when every step is blank, so a junk
+        # recipe degrades to "no recipe" rather than storing empty steps.
+        return normalize_recipe([step for step in value if isinstance(step, str)])
+
+    @model_validator(mode="after")
+    def _recipe_model_needs_recipe(self) -> "SaveFromLookup":
+        if self.recipe is None:
+            self.recipe_model = None
+        return self
 
 
 SaveRequest = Annotated[SaveByReference | SaveFromLookup, Field(discriminator="source")]
@@ -144,9 +172,25 @@ class SavedMealDetail(SavedMealCard):
     recipe: list[str] | None
     cautioned_ingredients: list[CautionedIngredient]
     model: str
+    # Which model wrote the lazily generated recipe; null until one exists.
+    recipe_model: str | None
 
 
 class SavedMealPage(BaseModel):
     """Every saved meal for the signed-in user; capped, so no paging needed."""
 
     items: list[SavedMealCard]
+
+
+class SavedRecipeResponse(BaseModel):
+    """The saved meal after a recipe request, plus that call's provenance.
+
+    ``recipe_model`` names the model that wrote the steps — persisted on the
+    row, so a reload badges the same model. Only a recipe that came with the
+    snapshot itself falls back to the save's model. Usage is zero whenever a
+    stored recipe is returned unchanged.
+    """
+
+    meal: SavedMealDetail
+    recipe_model: str
+    usage: LLMUsage

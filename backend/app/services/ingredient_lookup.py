@@ -18,7 +18,7 @@ import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.term_match import TermMatcher
-from app.enums import CompatibilityVerdict, HistamineMechanism
+from app.enums import Compatibility, CompatibilityVerdict, HistamineMechanism, SafetyLevel
 from app.schemas.meal import ProposedIngredient
 from app.services.ingredient_service import (
     IngredientMatch,
@@ -63,6 +63,97 @@ class LookupResult:
     matched_on: Literal["ingredient", "category"] | None
     error: str | None
     candidates: list[LookupCandidate]
+
+
+# --- grounding: how lookup results become a code-owned safety verdict -------------
+# These live here, not in the dish agent, because the lookup cache re-grades a
+# cached assessment against the live index with the exact same rules.
+
+# Dish-level severity, worst last, so caution is a simple max.
+SAFETY_SEVERITY: dict[SafetyLevel, int] = {
+    SafetyLevel.SAFE: 0,
+    SafetyLevel.DEPENDS: 1,
+    SafetyLevel.AVOID: 2,
+}
+
+COMPATIBILITY_SAFETY: dict[Compatibility, SafetyLevel] = {
+    Compatibility.WELL_TOLERATED: SafetyLevel.SAFE,
+    Compatibility.MODERATELY_COMPATIBLE: SafetyLevel.DEPENDS,
+    Compatibility.INCOMPATIBLE: SafetyLevel.AVOID,
+    Compatibility.POORLY_TOLERATED: SafetyLevel.AVOID,
+}
+
+
+def more_cautious(first: SafetyLevel, second: SafetyLevel) -> SafetyLevel:
+    """The more severe of two safety levels."""
+    return first if SAFETY_SEVERITY[first] >= SAFETY_SEVERITY[second] else second
+
+
+def resolve_levels(levels: set[SafetyLevel]) -> SafetyLevel:
+    """Resolve one ingredient's risk from the levels its index matches map to.
+
+    Disagreement is resolved at the *safety* layer, not the raw compatibility
+    one, so two distinct compatibilities that mean the same thing never look like
+    a conflict:
+
+    - no levels (ingredient absent or unrated) -> safe;
+    - all matches agree -> that level (two ``avoid`` readings stay ``avoid``, two
+      ``safe`` readings stay ``safe``);
+    - a ``safe`` reading coexists with a risky one -> ``depends`` (the genuine
+      egg-yolk-vs-egg-white case: it depends which form the dish uses);
+    - every reading is risky but they differ in degree -> the most cautious of
+      them (caution is never softened to ``depends``).
+    """
+    if not levels:
+        return SafetyLevel.SAFE
+    floor = min(levels, key=SAFETY_SEVERITY.__getitem__)
+    ceil = max(levels, key=SAFETY_SEVERITY.__getitem__)
+    if floor is ceil:
+        return ceil
+    return SafetyLevel.DEPENDS if floor is SafetyLevel.SAFE else ceil
+
+
+def compatibility_safety(value: str) -> SafetyLevel:
+    """Map one lookup-result compatibility string to risk (``unknown`` -> safe)."""
+    try:
+        return COMPATIBILITY_SAFETY[Compatibility(value)]
+    except ValueError:
+        return SafetyLevel.SAFE
+
+
+def candidates_safety(candidates: list["LookupCandidate"]) -> SafetyLevel:
+    """The risk one lookup's candidate rows contribute to the dish."""
+    return resolve_levels({compatibility_safety(c.compatibility) for c in candidates})
+
+
+# How many index-grounded swap options a risky ingredient gets. Shared by the
+# dish agent and the lookup cache's grounding fingerprint, which must mirror
+# exactly what the agent's prose could have named.
+SUBSTITUTE_LIMIT = 3
+
+
+def worst_risky(candidates: list["LookupCandidate"]) -> LookupCandidate | None:
+    """The most severe risky candidate of one lookup, or None when all are safe."""
+    risky = [
+        candidate
+        for candidate in candidates
+        if compatibility_safety(candidate.compatibility) is not SafetyLevel.SAFE
+    ]
+    if not risky:
+        return None
+    return max(risky, key=lambda c: SAFETY_SEVERITY[compatibility_safety(c.compatibility)])
+
+
+def grounded_verdict(lookups: list["LookupResult"]) -> SafetyLevel:
+    """The dish verdict the index supports: the most cautious per-ingredient risk.
+
+    Each lookup contributes one level; ingredients absent from the index return no
+    candidates and add no risk. With nothing risky recorded the verdict is safe.
+    """
+    verdict = SafetyLevel.SAFE
+    for lookup in lookups:
+        verdict = more_cautious(verdict, candidates_safety(lookup.candidates))
+    return verdict
 
 
 def _unusable(ingredient: str, error: str) -> LookupResult:

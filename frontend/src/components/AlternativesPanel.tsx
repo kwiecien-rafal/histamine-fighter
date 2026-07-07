@@ -1,8 +1,9 @@
-import type { AlternativeGoal } from "../api/client";
+import type { AlternativeGoal, DishAssessmentResponse } from "../api/client";
 import type { AlternativesState } from "../hooks/useDishLookupFlow";
-import { ALTERNATIVE_SOURCE, ALTERNATIVE_TAP_HINT } from "../lib/alternatives";
+import { ALTERNATIVE_SOURCE, ALTERNATIVE_TAP_HINT, goalSubtitle } from "../lib/alternatives";
 import type { PivotTone } from "../lib/assessment";
 import { LLMProviderBadge } from "./LLMProviderBadge";
+import { ThinkingBrawl } from "./ThinkingBrawl";
 
 // Branded goal labels for the neutral enum values, presentation-only.
 const GOAL_OPTIONS: { value: AlternativeGoal; label: string }[] = [
@@ -14,6 +15,9 @@ const GOAL_OPTIONS: { value: AlternativeGoal; label: string }[] = [
 interface AlternativesPanelProps {
   alternatives: AlternativesState;
   tone: PivotTone;
+  // The assessment the pivot hangs off; its adaptations and dish_style make
+  // the goal buttons specific ("another hearty pasta dish, without tomato").
+  result: DishAssessmentResponse;
   onChooseGoal: (goal: AlternativeGoal) => void;
   onPick: (dish: string) => void;
 }
@@ -21,6 +25,7 @@ interface AlternativesPanelProps {
 export function AlternativesPanel({
   alternatives,
   tone,
+  result,
   onChooseGoal,
   onPick,
 }: AlternativesPanelProps) {
@@ -43,29 +48,33 @@ export function AlternativesPanel({
       </p>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        {GOAL_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            disabled={busy}
-            aria-pressed={option.value === chosenGoal}
-            onClick={() => onChooseGoal(option.value)}
-            className={`rounded border px-3 py-1.5 text-sm disabled:opacity-50 enabled:cursor-pointer ${
-              option.value === chosenGoal
-                ? "border-forest-800 bg-forest-800 text-white"
-                : "border-stone-300 text-stone-700 hover:border-forest-700"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
+        {GOAL_OPTIONS.map((option) => {
+          const chosen = option.value === chosenGoal;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              disabled={busy}
+              aria-pressed={chosen}
+              onClick={() => onChooseGoal(option.value)}
+              className={`rounded border px-3 py-1.5 text-left text-sm disabled:opacity-50 enabled:cursor-pointer ${
+                chosen
+                  ? "border-forest-800 bg-forest-800 text-white"
+                  : "border-stone-300 text-stone-700 hover:border-forest-700"
+              }`}
+            >
+              <span className="block font-medium">{option.label}</span>
+              <span
+                className={`block text-xs mt-0.5 ${chosen ? "text-white/80" : "text-stone-500"}`}
+              >
+                {goalSubtitle(option.value, result)}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {alternatives.status === "loading" && (
-        <p className="text-sm text-stone-500" aria-live="polite">
-          Finding ideas…
-        </p>
-      )}
+      {alternatives.status === "loading" && <ThinkingBrawl label="Finding ideas…" />}
 
       {alternatives.status === "error" && (
         // role="alert" announces assertively; the bold lead-in is a non-colour

@@ -32,6 +32,7 @@ function detail(overrides: Partial<SavedMealDetail> = {}): SavedMealDetail {
     recipe: null,
     cautioned_ingredients: [],
     model: "fake/test",
+    recipe_model: null,
     ...overrides,
   };
 }
@@ -70,24 +71,27 @@ describe("saved-meals store", () => {
     expect(listSavesMock).not.toHaveBeenCalled();
   });
 
-  it("stores the server's authoritative key after an optimistic lookup save", async () => {
+  it("keys a lookup save on its result id, echoed back by the server", async () => {
     saveMealMock.mockResolvedValue(
-      detail({ id: "save-9", source: "lookup", source_key: "spaghetti" }),
+      detail({ id: "save-9", source: "lookup", source_key: "res-1" }),
     );
 
     await useSavedMealsStore.getState().toggle({
       source: "lookup",
       payload: {
-        dish: "  Spaghetti  ",
+        lookup_id: "res-1",
+        dish: "Spaghetti",
         verdict: "depends",
         description: "",
         ingredients: [{ name: "tomato", category: null }],
         model: "fake/test",
+        recipe: null,
+        recipe_model: null,
       },
     });
 
     const { keys } = useSavedMealsStore.getState();
-    expect(keys.get(saveKey("lookup", "spaghetti"))).toBe("save-9");
+    expect(keys.get(saveKey("lookup", "res-1"))).toBe("save-9");
     expect(keys.size).toBe(1);
   });
 

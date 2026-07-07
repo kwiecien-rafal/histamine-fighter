@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import type { SaveTarget } from "../api/saves";
 import { useDismissableOverlay } from "../hooks/useDismissableOverlay";
 import { prefersReducedMotion } from "../lib/daily";
-import { saveKey, lookupKey, useSavedMealsStore } from "../store/saves";
+import { saveKey, useSavedMealsStore } from "../store/saves";
 import { useSessionStore } from "../store/session";
 
 interface SaveButtonProps {
@@ -35,7 +35,7 @@ export function SaveButton({ target, labelHidden = false }: SaveButtonProps) {
 
   const key =
     target.source === "lookup"
-      ? saveKey("lookup", lookupKey(target.payload.dish))
+      ? saveKey("lookup", target.payload.lookup_id)
       : saveKey(target.source, target.sourceId);
   const saved = keys.has(key);
   const label = saved ? "Unsave this dish" : "Save this dish";

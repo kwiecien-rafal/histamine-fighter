@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   assessDish,
+  generateLookupRecipe,
   MAX_INGREDIENTS,
   proposeIngredients,
   suggestAlternatives,
@@ -39,6 +40,14 @@ export type AlternativesState = { cache: AlternativesCache } & (
   | { status: "error"; goal: AlternativeGoal; message: string }
 );
 
+// The recipe is another refinement of the result phase, like alternatives: the
+// card offers it, the steps render beneath the assessment once written.
+export type RecipeState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "loaded"; steps: string[]; model: string }
+  | { status: "error"; message: string };
+
 type AlternativesOutcome = GoalAlternatives | { message: string };
 
 function resolveAlternatives(
@@ -73,19 +82,33 @@ function resolveAlternatives(
 export type FlowState =
   | { phase: "idle"; error: string | null }
   | { phase: "proposing"; dish: string }
+  | { phase: "unrecognized"; dish: string }
   | {
       phase: "editing";
       dish: string;
       ingredients: EditableIngredient[];
-      model: string;
+      // Null on the manual-entry path, where no model proposed anything.
+      model: string | null;
+      // True when the proposal came from the server-side lookup cache.
+      cached: boolean;
       error: string | null;
     }
-  | { phase: "assessing"; dish: string; ingredients: EditableIngredient[] }
+  | {
+      phase: "assessing";
+      dish: string;
+      ingredients: EditableIngredient[];
+      // Carried through so the UI keeps manual-entry affordances while busy.
+      model: string | null;
+    }
   | {
       phase: "result";
       dish: string;
+      // Client-minted identity for this one assessment result; a lookup save
+      // keys on it, so a fresh result never inherits an older save's state.
+      resultId: string;
       result: DishAssessmentResponse;
       alternatives: AlternativesState;
+      recipe: RecipeState;
     };
 
 // A fetch that never reached the server rejects with a TypeError ("Failed to
@@ -101,6 +124,67 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "Unknown error";
 }
 
+// An aborted fetch is our own doing (start over, new request, unmount), never
+// something to show error copy for.
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+// A finished assessment survives navigation: the result phase (and its fetched
+// alternatives) round-trips through sessionStorage, so clicking away does not
+// discard a response someone paid an LLM call for. Bump the version suffix
+// whenever StoredResult's shape changes, so a stale pre-deploy copy is ignored
+// instead of fed into components expecting the new shape.
+const RESULT_STORAGE_KEY = "hf.dish-lookup.result.v2";
+
+// The quality bar for manual entries: with no model-vetted context at all, a
+// dish name and this many ingredients are required before assessing is worth
+// an LLM call. The editor reads it for its copy; confirm() is the backstop.
+export const MANUAL_MIN_INGREDIENTS = 2;
+
+interface StoredResult {
+  dish: string;
+  resultId: string;
+  result: DishAssessmentResponse;
+  cache: AlternativesCache;
+  // Only a finished recipe survives; a loading or failed one restores as idle.
+  recipe: { steps: string[]; model: string } | null;
+}
+
+function clearStoredResult(): void {
+  try {
+    sessionStorage.removeItem(RESULT_STORAGE_KEY);
+  } catch {
+    // Storage unavailable: survival is best-effort.
+  }
+}
+
+function initialState(): FlowState {
+  try {
+    const raw = sessionStorage.getItem(RESULT_STORAGE_KEY);
+    if (!raw) return { phase: "idle", error: null };
+    const saved = JSON.parse(raw) as Partial<StoredResult>;
+    if (
+      typeof saved.dish !== "string" ||
+      typeof saved.resultId !== "string" ||
+      typeof saved.result?.verdict !== "string"
+    ) {
+      throw new Error("unexpected shape");
+    }
+    return {
+      phase: "result",
+      dish: saved.dish,
+      resultId: saved.resultId,
+      result: saved.result,
+      alternatives: { status: "idle", cache: saved.cache ?? {} },
+      recipe: saved.recipe ? { status: "loaded", ...saved.recipe } : { status: "idle" },
+    };
+  } catch {
+    clearStoredResult();
+    return { phase: "idle", error: null };
+  }
+}
+
 function firstDuplicateName(names: string[]): string | null {
   const seen = new Set<string>();
   for (const name of names) {
@@ -112,15 +196,82 @@ function firstDuplicateName(names: string[]): string | null {
 }
 
 export function useDishLookupFlow() {
-  const [state, setState] = useState<FlowState>({ phase: "idle", error: null });
+  const [state, setState] = useState<FlowState>(initialState);
+  // Every new request (or start over) bumps the epoch and aborts the previous
+  // in-flight call; an async completion whose captured epoch is stale must not
+  // touch state. This generalizes the identity trick resolveAlternatives uses,
+  // and the abort genuinely stops server-side LLM spend: uvicorn cancels the
+  // request task on client disconnect. Switching LLM provider mid-flight needs
+  // no guard: headers are read per request, and every displayed output carries
+  // the model that actually produced it.
+  const epochRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  // The recipe rides beside the flow requests, not through them: fetching
+  // alternatives must not cancel a recipe already being written (both are paid
+  // calls), but leaving the result — start over, a new propose — cancels it.
+  const recipeAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      recipeAbortRef.current?.abort();
+    };
+  }, []);
+
+  // Keep the stored copy in sync with whatever the result phase holds, fetched
+  // alternatives included, so a restore comes back with its goal cache intact.
+  useEffect(() => {
+    if (state.phase !== "result") return;
+    try {
+      const saved: StoredResult = {
+        dish: state.dish,
+        resultId: state.resultId,
+        result: state.result,
+        cache: state.alternatives.cache,
+        recipe:
+          state.recipe.status === "loaded"
+            ? { steps: state.recipe.steps, model: state.recipe.model }
+            : null,
+      };
+      sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(saved));
+    } catch {
+      // Storage full or unavailable: survival is best-effort.
+    }
+  }, [state]);
+
+  function beginRequest(): { epoch: number; signal: AbortSignal } {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    epochRef.current += 1;
+    return { epoch: epochRef.current, signal: controller.signal };
+  }
+
+  function abortRecipe(): void {
+    recipeAbortRef.current?.abort();
+    recipeAbortRef.current = null;
+  }
 
   async function propose(dish: string): Promise<void> {
     const trimmed = dish.trim();
     if (!trimmed) return;
+    const { epoch, signal } = beginRequest();
+    abortRecipe();
+    clearStoredResult();
     setState({ phase: "proposing", dish: trimmed });
     try {
-      const proposal = await proposeIngredients(trimmed);
-      useUsageStore.getState().record("propose", proposal.model, proposal.usage);
+      const proposal = await proposeIngredients(trimmed, signal);
+      if (epochRef.current !== epoch) return;
+      // A cache hit made no model call, so it never shows up in the usage panel.
+      if (!proposal.cached) {
+        useUsageStore.getState().record("propose", proposal.model, proposal.usage);
+      }
+      if (!proposal.recognized || proposal.ingredients.length === 0) {
+        // No dish recognisable in the text: announce it instead of dropping
+        // into an empty editor that would dead-end (or worse, assess junk).
+        setState({ phase: "unrecognized", dish: trimmed });
+        return;
+      }
       setState({
         phase: "editing",
         dish: proposal.dish,
@@ -130,11 +281,39 @@ export function useDishLookupFlow() {
           category: item.category,
         })),
         model: proposal.model,
+        cached: proposal.cached,
         error: null,
       });
     } catch (err) {
+      if (isAbortError(err) || epochRef.current !== epoch) return;
       setState({ phase: "idle", error: errorMessage(err) });
     }
+  }
+
+  // The propose-free path: the user types the ingredients themselves, either
+  // from the entry card chooser (blank dish, named on the editor card) or
+  // after an unrecognized announcement (dish prefilled).
+  function startManual(dish: string): void {
+    beginRequest(); // no request follows; this cancels any in-flight one
+    abortRecipe();
+    clearStoredResult();
+    setState({
+      phase: "editing",
+      dish: dish.trim(),
+      ingredients: [],
+      model: null,
+      cached: false,
+      error: null,
+    });
+  }
+
+  // Manual path only, enforced here: a proposed dish name is the thing the
+  // model's ingredient list describes, so it stays fixed on that path.
+  function renameDish(name: string): void {
+    setState((current) => {
+      if (current.phase !== "editing" || current.model !== null) return current;
+      return { ...current, dish: name, error: null };
+    });
   }
 
   function renameIngredient(id: string, name: string): void {
@@ -195,36 +374,87 @@ export function useDishLookupFlow() {
 
   async function confirm(): Promise<void> {
     if (state.phase !== "editing") return;
-    const { dish, ingredients, model } = state;
+    const { ingredients, model, cached } = state;
+    const dish = state.dish.trim();
     const confirmed: ConfirmedIngredient[] = ingredients
       .filter((item) => item.name.trim())
       .map((item) => ({ name: item.name.trim(), category: item.category }));
-    if (confirmed.length === 0) return;
+    // The editor blocks the shortfall with copy; this is the backstop.
+    if (!dish || confirmed.length < (model === null ? MANUAL_MIN_INGREDIENTS : 1)) return;
     // adding checks for duplicates, but a rename can still create one
     const duplicate = firstDuplicateName(confirmed.map((item) => item.name));
     if (duplicate) {
       setState({ ...state, error: `"${duplicate}" is in the list twice` });
       return;
     }
-    setState({ phase: "assessing", dish, ingredients });
+    const { epoch, signal } = beginRequest();
+    setState({ phase: "assessing", dish, ingredients, model });
     try {
-      const result = await assessDish(dish, confirmed);
-      useUsageStore.getState().record("assess", result.model, result.usage);
+      const result = await assessDish(dish, confirmed, signal);
+      if (epochRef.current !== epoch) return;
+      if (!result.cached) {
+        useUsageStore.getState().record("assess", result.model, result.usage);
+      }
       setState({
         phase: "result",
         dish,
+        resultId: crypto.randomUUID(),
         result,
         alternatives: { status: "idle", cache: {} },
+        recipe: { status: "idle" },
       });
     } catch (err) {
+      if (isAbortError(err) || epochRef.current !== epoch) return;
       // back to editing with the list intact, so the user can retry
       setState({
         phase: "editing",
         dish,
         ingredients,
         model,
+        cached,
         error: errorMessage(err),
       });
+    }
+  }
+
+  async function generateRecipe(): Promise<void> {
+    if (state.phase !== "result") return;
+    // "loaded" is final: the card renders the steps instead of the button, and
+    // a repeat call would only spend a second model call on the same dish.
+    if (state.recipe.status === "loading" || state.recipe.status === "loaded") return;
+    const { result } = state;
+    recipeAbortRef.current?.abort();
+    const controller = new AbortController();
+    recipeAbortRef.current = controller;
+    setState((prev) =>
+      prev.phase === "result" && prev.result === result
+        ? { ...prev, recipe: { status: "loading" } }
+        : prev,
+    );
+    try {
+      const response = await generateLookupRecipe(
+        result.dish,
+        result.explanation,
+        result.ingredients.map((item) => ({ name: item.name, category: null })),
+        result.advisories,
+        controller.signal,
+      );
+      useUsageStore.getState().record("recipe", response.model, response.usage);
+      setState((prev) =>
+        prev.phase === "result" && prev.result === result
+          ? {
+              ...prev,
+              recipe: { status: "loaded", steps: response.steps, model: response.model },
+            }
+          : prev,
+      );
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setState((prev) =>
+        prev.phase === "result" && prev.result === result
+          ? { ...prev, recipe: { status: "error", message: errorMessage(err) } }
+          : prev,
+      );
     }
   }
 
@@ -261,13 +491,20 @@ export function useDishLookupFlow() {
       return;
     }
 
+    const { signal } = beginRequest();
     setState((prev) =>
       prev.phase === "result" && prev.result === result
         ? { ...prev, alternatives: { ...prev.alternatives, status: "loading", goal } }
         : prev,
     );
     try {
-      const response = await suggestAlternatives(dish, goal, avoidIngredients, preferIngredients);
+      const response = await suggestAlternatives(
+        dish,
+        goal,
+        avoidIngredients,
+        preferIngredients,
+        signal,
+      );
       useUsageStore.getState().record("alternatives", response.model, response.usage);
       setState((prev) =>
         resolveAlternatives(prev, result, goal, {
@@ -276,6 +513,7 @@ export function useDishLookupFlow() {
         }),
       );
     } catch (err) {
+      if (isAbortError(err)) return;
       setState((prev) =>
         resolveAlternatives(prev, result, goal, { message: errorMessage(err) }),
       );
@@ -283,17 +521,24 @@ export function useDishLookupFlow() {
   }
 
   function startOver(): void {
+    abortRef.current?.abort();
+    abortRecipe();
+    epochRef.current += 1;
+    clearStoredResult();
     setState({ phase: "idle", error: null });
   }
 
   return {
     state,
     propose,
+    startManual,
+    renameDish,
     renameIngredient,
     removeIngredient,
     addIngredient,
     confirm,
     requestAlternatives,
+    generateRecipe,
     startOver,
   };
 }

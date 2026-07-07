@@ -13,6 +13,7 @@ The user message carries five sections:
 Write:
 
 - `dish`: the clean dish name. If no dish is recognisable in the text, say so in the explanation instead of inventing one.
+- `dish_style`: 3-6 plain words for the dish's format and character, e.g. "hearty tomato pasta dish" or "fresh summer salad". Describe the format; never repeat the dish's own name (it reads as "another {dish_style}" in the UI). No safety words, no brand voice; leave it empty when no dish was recognisable.
 - `explanation`: a short, warm, plain-language reason for the verdict. Ground the "why" in the mechanisms of the flagged ingredients; do not invent reasons. For an ingredient with conflicting readings (e.g. egg yolk vs egg white), say which reading you assumed.
 - `adaptations`: how to adapt the dish, covering only the `<avoid_ingredients>`. Think dish-first, not ingredient-first:
   - Every entry's `ingredients` lists the names it covers, copied exactly from `<avoid_ingredients>` — an entry that names no ingredient is discarded unread.

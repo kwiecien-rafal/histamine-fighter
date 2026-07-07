@@ -56,6 +56,10 @@ class SavedMeal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str] = mapped_column(Text)
     ingredients: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     recipe: Mapped[list[str] | None] = mapped_column(JSONB, default=None)
+    # Which model wrote the lazily generated recipe; null until one exists (or
+    # for recipes that came with the snapshot). `model` stays the save's
+    # original producer — the two can differ, and the badge must not lie.
+    recipe_model: Mapped[str | None] = mapped_column(default=None)
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default=text("'{}'")
     )

@@ -10,15 +10,19 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.dependencies import build_recipe_agent
 from app.embeddings import EMBEDDING_DIM
 from app.enums import ApprovalStatus, MealType, Role, SafetyLevel, SaveSource
 from app.models import CuratedMeal, DailySuggestion, SavedMeal
 from app.models.user import User
+from app.schemas.meal import RecipeGeneration
+from app.schemas.usage import LLMUsage
 
 _ZERO_VECTOR = [0.0] * EMBEDDING_DIM
 
@@ -73,9 +77,12 @@ async def _add_suggestion(
     return row
 
 
-def _lookup_body(dish: str = "Spaghetti with herb sauce") -> dict[str, object]:
+def _lookup_body(
+    dish: str = "Spaghetti with herb sauce", lookup_id: str | None = None
+) -> dict[str, object]:
     return {
         "source": "lookup",
+        "lookup_id": lookup_id or str(uuid4()),
         "dish": dish,
         "verdict": "depends",
         "description": "Fresh tomato swapped for courgette keeps it in range.",
@@ -96,6 +103,7 @@ async def test_every_route_requires_a_session(client: AsyncClient) -> None:
         await client.patch(f"/api/v1/me/meals/{some_id}", json={"name": "x"})
     ).status_code == 401
     assert (await client.delete(f"/api/v1/me/meals/{some_id}")).status_code == 401
+    assert (await client.post(f"/api/v1/me/meals/{some_id}/recipe")).status_code == 401
 
 
 # --- saving curated meals ---------------------------------------------------------
@@ -207,15 +215,16 @@ async def test_save_unapproved_daily_suggestion_is_404(
 # --- saving lookup results --------------------------------------------------------
 
 
-async def test_save_lookup_result_derives_the_key_server_side(
+async def test_save_lookup_result_keys_on_the_client_minted_id(
     user_client: AsyncClient,
 ) -> None:
-    resp = await user_client.post("/api/v1/me/meals", json=_lookup_body("  Spaghetti  "))
+    lookup_id = str(uuid4())
+    resp = await user_client.post("/api/v1/me/meals", json=_lookup_body("  Spaghetti  ", lookup_id))
 
     assert resp.status_code == 201
     body = resp.json()
     assert body["source"] == "lookup"
-    assert body["source_key"] == "spaghetti"
+    assert body["source_key"] == lookup_id
     assert body["name"] == "Spaghetti"
     assert body["verdict"] == "depends"
     assert body["meal_type"] is None
@@ -223,18 +232,72 @@ async def test_save_lookup_result_derives_the_key_server_side(
     assert body["tags"] == ["dish_check"]
 
 
-async def test_resave_of_a_reassessed_dish_keeps_the_first_snapshot(
-    user_client: AsyncClient,
+async def test_resave_of_the_same_result_returns_the_existing_snapshot(
+    user_client: AsyncClient, session: AsyncSession
 ) -> None:
-    first = await user_client.post("/api/v1/me/meals", json=_lookup_body("Spaghetti"))
-    changed = _lookup_body("SPAGHETTI")
-    changed["verdict"] = "avoid"
+    body = _lookup_body("Spaghetti")
 
-    second = await user_client.post("/api/v1/me/meals", json=changed)
+    first = await user_client.post("/api/v1/me/meals", json=body)
+    second = await user_client.post("/api/v1/me/meals", json=body)
 
     assert first.status_code == 201
     assert second.status_code == 200
-    assert second.json()["verdict"] == "depends"
+    assert second.json()["id"] == first.json()["id"]
+    rows = (await session.execute(select(SavedMeal))).scalars().all()
+    assert len(rows) == 1
+
+
+async def test_same_named_results_save_separately_with_suffixed_names(
+    user_client: AsyncClient,
+) -> None:
+    first = await user_client.post("/api/v1/me/meals", json=_lookup_body("Spaghetti"))
+    second = await user_client.post("/api/v1/me/meals", json=_lookup_body("Spaghetti"))
+    # The suffix comparison is casefolded, so a shouted duplicate collides too.
+    third = await user_client.post("/api/v1/me/meals", json=_lookup_body("SPAGHETTI (1)"))
+
+    assert first.status_code == 201 and first.json()["name"] == "Spaghetti"
+    assert second.status_code == 201 and second.json()["name"] == "Spaghetti (1)"
+    assert third.status_code == 201 and third.json()["name"] == "SPAGHETTI (1) (1)"
+
+
+async def test_lookup_save_with_a_non_uuid_id_is_422(user_client: AsyncClient) -> None:
+    resp = await user_client.post("/api/v1/me/meals", json=_lookup_body(lookup_id="not-a-uuid"))
+
+    assert resp.status_code == 422
+
+
+async def test_lookup_save_carries_a_generated_recipe(
+    user_client: AsyncClient, session: AsyncSession
+) -> None:
+    body = _lookup_body()
+    body["recipe"] = ["Boil the pasta.", "   ", "Toss and serve."]
+    body["recipe_model"] = "recipe/model"
+
+    resp = await user_client.post("/api/v1/me/meals", json=body)
+
+    assert resp.status_code == 201
+    saved = resp.json()
+    assert saved["recipe"] == ["Boil the pasta.", "Toss and serve."]
+    assert saved["recipe_model"] == "recipe/model"
+    assert saved["has_recipe"] is True
+    row = (await session.execute(select(SavedMeal))).scalar_one()
+    assert row.recipe == ["Boil the pasta.", "Toss and serve."]
+
+
+async def test_lookup_save_drops_a_recipe_model_without_steps(
+    user_client: AsyncClient,
+) -> None:
+    body = _lookup_body()
+    body["recipe"] = ["   "]
+    body["recipe_model"] = "recipe/model"
+
+    resp = await user_client.post("/api/v1/me/meals", json=body)
+
+    assert resp.status_code == 201
+    saved = resp.json()
+    assert saved["recipe"] is None
+    assert saved["recipe_model"] is None
+    assert saved["has_recipe"] is False
 
 
 async def test_lookup_save_with_no_usable_ingredients_is_422(
@@ -262,17 +325,14 @@ async def test_save_cap_answers_409(
     user_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "saved_meals_cap", 1)
-    assert (
-        await user_client.post("/api/v1/me/meals", json=_lookup_body("First dish"))
-    ).status_code == 201
+    first = _lookup_body("First dish")
+    assert (await user_client.post("/api/v1/me/meals", json=first)).status_code == 201
 
     resp = await user_client.post("/api/v1/me/meals", json=_lookup_body("Second dish"))
 
     assert resp.status_code == 409
-    # Re-saving the dish already held still answers with the existing row.
-    assert (
-        await user_client.post("/api/v1/me/meals", json=_lookup_body("First dish"))
-    ).status_code == 200
+    # Re-saving the result already held still answers with the existing row.
+    assert (await user_client.post("/api/v1/me/meals", json=first)).status_code == 200
 
 
 # --- list / detail / ownership ----------------------------------------------------
@@ -430,3 +490,97 @@ async def test_unsave_removes_the_row(user_client: AsyncClient, session: AsyncSe
     session.expire_all()
     rows = (await session.execute(select(SavedMeal))).scalars().all()
     assert rows == []
+
+
+# --- generating a recipe for a saved meal ------------------------------------------
+
+
+class _StubRecipeAgent:
+    """Stands in for RecipeAgent; fails the test if called when it must not be."""
+
+    def __init__(self, steps: list[str] | None = None) -> None:
+        self._steps = steps
+
+    async def run(self, **kwargs: object) -> RecipeGeneration:
+        assert self._steps is not None, "the recipe agent must not be called here"
+        return RecipeGeneration(steps=self._steps, model="recipe/model", usage=LLMUsage())
+
+
+async def test_generate_recipe_persists_the_steps(
+    user_client: AsyncClient, test_app: FastAPI, session: AsyncSession
+) -> None:
+    steps = ["Peel the courgette.", "Toss with oil."]
+    test_app.dependency_overrides[build_recipe_agent] = lambda: _StubRecipeAgent(steps)
+    created = await user_client.post("/api/v1/me/meals", json=_lookup_body())
+    save_id = created.json()["id"]
+    assert created.json()["has_recipe"] is False
+
+    resp = await user_client.post(f"/api/v1/me/meals/{save_id}/recipe")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meal"]["recipe"] == steps
+    assert body["meal"]["has_recipe"] is True
+    # Provenance: the recipe's own model, distinct from the save's producer,
+    # in this response and persisted for later loads.
+    assert body["recipe_model"] == "recipe/model"
+    assert body["meal"]["recipe_model"] == "recipe/model"
+    # Generated content is not a user edit: the verified badge must survive.
+    assert body["meal"]["edited_at"] is None
+    row = (await session.execute(select(SavedMeal))).scalar_one()
+    assert row.recipe == steps
+    assert row.recipe_model == "recipe/model"
+
+
+async def test_generate_recipe_returns_existing_without_a_model_call(
+    user_client: AsyncClient, test_app: FastAPI, session: AsyncSession
+) -> None:
+    # The agent stub raises if invoked, so a 200 proves the stored recipe short-
+    # circuited the model call (and with it the charge).
+    test_app.dependency_overrides[build_recipe_agent] = lambda: _StubRecipeAgent(None)
+    meal = await _add_meal(session)
+    created = await user_client.post(
+        "/api/v1/me/meals", json={"source": "curated", "source_id": str(meal.id)}
+    )
+    save_id = created.json()["id"]
+
+    resp = await user_client.post(f"/api/v1/me/meals/{save_id}/recipe")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meal"]["recipe"] == meal.recipe
+    assert body["usage"]["calls"] == 0
+    # A snapshot recipe has no recipe_model; the save's producer is the
+    # closest honest provenance.
+    assert body["recipe_model"] == body["meal"]["model"]
+
+
+async def test_generate_recipe_for_unknown_save_is_404(
+    user_client: AsyncClient, test_app: FastAPI
+) -> None:
+    test_app.dependency_overrides[build_recipe_agent] = lambda: _StubRecipeAgent(None)
+
+    resp = await user_client.post(f"/api/v1/me/meals/{uuid4()}/recipe")
+
+    assert resp.status_code == 404
+
+
+async def test_generate_recipe_after_concurrent_delete_is_404(
+    user_client: AsyncClient, test_app: FastAPI, session: AsyncSession
+) -> None:
+    # The save vanishes while the model writes (second tab deleted it): nothing
+    # persists, and the response must not pretend a recipe exists.
+    class _DeletingAgent(_StubRecipeAgent):
+        async def run(self, **kwargs: object) -> RecipeGeneration:
+            for row in (await session.execute(select(SavedMeal))).scalars().all():
+                await session.delete(row)
+            await session.flush()
+            return await super().run(**kwargs)
+
+    test_app.dependency_overrides[build_recipe_agent] = lambda: _DeletingAgent(["Serve."])
+    created = await user_client.post("/api/v1/me/meals", json=_lookup_body())
+    save_id = created.json()["id"]
+
+    resp = await user_client.post(f"/api/v1/me/meals/{save_id}/recipe")
+
+    assert resp.status_code == 404

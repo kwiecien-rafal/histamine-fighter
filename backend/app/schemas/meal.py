@@ -36,6 +36,9 @@ MAX_ADVISORY_CHARS = 200
 # the load-bearing bound on suggestion length and count; the agent clips to them.
 MAX_PITCH_CHARS = 200
 MAX_ALTERNATIVES = 3
+# The short "format and character" descriptor the synthesis step writes, used
+# by the frontend to make the alternatives goal buttons specific.
+MAX_DISH_STYLE_CHARS = 60
 
 
 class DishLookupRequest(BaseModel):
@@ -63,6 +66,11 @@ class ProposedIngredientDraft(BaseModel):
 class ProposedIngredients(BaseModel):
     """Structured output of the propose call: the drafted ingredient list and nothing else."""
 
+    recognized: bool = Field(
+        default=True,
+        description="False when the text names no real, identifiable dish; "
+        "then the ingredient list must be empty.",
+    )
     ingredients: list[ProposedIngredientDraft]
 
 
@@ -81,6 +89,15 @@ class ProposedIngredient(BaseModel):
 def normalize_dish_text(value: str, *, max_chars: int) -> str:
     """Strip a free-text meal field and cap its length."""
     return value.strip()[:max_chars].rstrip()
+
+
+def lookup_source_key(dish: str) -> str:
+    """The canonical key for a dish name, derived server-side.
+
+    Keys the lookup caches. Saved meals used to share it, but now key on a
+    client-minted per-result id so same-named results save separately.
+    """
+    return normalize_dish_text(dish, max_chars=MAX_DISH_CHARS).casefold()
 
 
 def normalize_ingredients(items: Iterable[tuple[str, str | None]]) -> list[ProposedIngredient]:
@@ -119,12 +136,44 @@ def normalize_tags(tags: Iterable[str]) -> list[str]:
     return kept
 
 
+class RecipeGeneration(BaseModel):
+    """One generated recipe: the normalized steps plus the call's provenance."""
+
+    steps: list[str] = Field(min_length=1)
+    model: str = Field(description="Which model wrote the recipe.")
+    usage: LLMUsage = Field(description="Token usage of the model call behind the recipe.")
+
+
+class RecipeDraft(BaseModel):
+    """Structured output of the recipe call: the ordered steps and nothing else.
+
+    Unconstrained like the other drafts; the agent normalizes the steps through
+    :func:`normalize_recipe`, so a sloppy model degrades instead of failing the
+    parse.
+    """
+
+    steps: list[str] = Field(
+        default_factory=list,
+        description="Ordered preparation steps, one clear action each.",
+    )
+
+
 class IngredientProposalResponse(BaseModel):
     """The proposed ingredient list the user reviews and edits before assessment."""
 
     dish: str = Field(description="The dish text the proposal was made for.")
+    recognized: bool = Field(
+        default=True,
+        description="False when no dish was recognisable in the text; the client "
+        "shows an announcement instead of the (empty) editor.",
+    )
     ingredients: list[ProposedIngredient]
     model: str = Field(description="Which model proposed the ingredients.")
+    cached: bool = Field(
+        default=False,
+        description="True when served from the lookup cache; usage is then zero "
+        "and `model` names the model that produced the original proposal.",
+    )
     usage: LLMUsage = Field(description="Token usage of the model call behind this response.")
 
 
@@ -259,6 +308,11 @@ class DishExplanationDraft(BaseModel):
     """
 
     dish: str = Field(description="The dish found in the user's message.")
+    dish_style: str = Field(
+        default="",
+        description="3-6 plain words for the dish's format and character, e.g. "
+        "'hearty tomato pasta dish'. Empty when no dish was recognisable.",
+    )
     explanation: str = Field(description="Short reason for the verdict.")
     adaptations: list[AdaptationDraft] = Field(
         default_factory=list,
@@ -300,10 +354,43 @@ class Advisory(BaseModel):
     note: str = Field(max_length=MAX_ADVISORY_CHARS)
 
 
+class LookupRecipeRequest(BaseModel):
+    """Recipe request for an assessed dish the user has not saved.
+
+    Client-asserted like a lookup save: the fields only shape the recipe text,
+    and the agent still scans the drafted steps against the live index. The
+    advisories are the assessment's own depends-level notes echoed back, so the
+    steps can honour guidance like "fresh only".
+    """
+
+    dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
+    description: str = ""
+    ingredients: list[ConfirmedIngredient] = Field(
+        min_length=1, max_length=MAX_CONFIRMED_INGREDIENTS
+    )
+    advisories: list[Advisory] = Field(default_factory=list, max_length=MAX_CONFIRMED_INGREDIENTS)
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _normalize_description(cls, value: object) -> object:
+        # Truncate, don't reject: the client echoes model prose whose length it
+        # does not control (same treatment as a lookup save's description).
+        if not isinstance(value, str):
+            return value
+        return normalize_dish_text(value, max_chars=MAX_DESCRIPTION_CHARS)
+
+
 class DishAssessmentResponse(BaseModel):
     """The assessed dish: code-derived verdict and integrity, grounded prose."""
 
     dish: str = Field(description="The dish found in the user's message.")
+    dish_style: str | None = Field(
+        default=None,
+        max_length=MAX_DISH_STYLE_CHARS,
+        description="Short model-written descriptor of the dish's format and "
+        "character ('hearty tomato pasta dish'); presentation only, never part "
+        "of the verdict.",
+    )
     verdict: SafetyLevel = Field(description="Overall histamine safety of the dish.")
     explanation: str = Field(description="Short reason for the verdict.")
     adaptations: list[Adaptation] = Field(
@@ -322,6 +409,11 @@ class DishAssessmentResponse(BaseModel):
         description="One index reading per confirmed ingredient."
     )
     model: str = Field(description="Which model produced the explanation.")
+    cached: bool = Field(
+        default=False,
+        description="True when served from the lookup cache after the verdict "
+        "re-grounded identically against the live index; usage is then zero.",
+    )
     usage: LLMUsage = Field(description="Token usage of the model call(s) behind this response.")
 
 

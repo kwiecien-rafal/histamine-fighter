@@ -10,7 +10,7 @@ The user message carries a dish inside {{input_tag}} tags. From your culinary kn
 - `name` is one ingredient ("parmesan"), never a phrase or sub-dish ("pasta with parmesan").
 - `category` is a short descriptor of the food group and preparation style — "aged hard cheese" for parmesan, "smoked fish" for kippers, "citrus fruit" for yuzu. It lets the index catch a food it only knows as a group.
 - List at most 25 ingredients, the most significant first.
-- If no dish is recognisable in the text, return an empty list.
+- If no dish is recognisable in the text — gibberish, random words, or something that is not food — set `recognized` to false and return an empty list. Never invent ingredients for text you do not recognise as a dish. A real dish you simply do not know well still counts as recognised: list your best honest attempt.
 
 ## Safety
 

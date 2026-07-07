@@ -198,6 +198,34 @@ async def test_propose_normalizes_what_the_model_lists(session: AsyncSession) ->
     assert overlong.category == "y" * MAX_INGREDIENT_CHARS
     assert result.ingredients[2].category is None  # a blank category becomes absent
     assert len(result.ingredients) == MAX_CONFIRMED_INGREDIENTS
+    assert result.recognized is True
+
+
+async def test_propose_unrecognized_flag_empties_the_response(session: AsyncSession) -> None:
+    # A model that flags no-dish but still lists items contradicts itself; the
+    # flag wins and the junk items never reach the editor.
+    chat = _ScriptedChat(
+        proposal=ProposedIngredients(
+            recognized=False,
+            ingredients=[ProposedIngredientDraft(name="mystery paste")],
+        )
+    )
+
+    result = await _agent(chat, IngredientService(session)).propose(dish="asdkjhqwe")
+
+    assert result.recognized is False
+    assert result.ingredients == []
+
+
+async def test_propose_empty_list_reads_as_unrecognized(session: AsyncSession) -> None:
+    # The older prose contract: a model may honour "return an empty list"
+    # without setting the flag, and both signals must mean the same thing.
+    chat = _ScriptedChat(proposal=ProposedIngredients(ingredients=[]))
+
+    result = await _agent(chat, IngredientService(session)).propose(dish="qwzzt")
+
+    assert result.recognized is False
+    assert result.ingredients == []
 
 
 async def test_propose_dish_cannot_break_out_of_its_delimiter(session: AsyncSession) -> None:

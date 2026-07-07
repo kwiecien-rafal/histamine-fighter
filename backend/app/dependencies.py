@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.dish_lookup import DishLookupAgent
 from app.agents.learn import LearnAgent
+from app.agents.recipe import RecipeAgent
 from app.config import settings
 from app.core.client_ip import client_ip, ip_bucket
 from app.core.security import TokenError, decode_access_token
@@ -27,6 +28,7 @@ from app.services.generation_settings_service import GenerationSettingsService
 from app.services.ingredient_service import IngredientService
 from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService
+from app.services.lookup_cache_service import LookupCacheService
 from app.services.magic_link_service import MagicLinkService
 from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
@@ -58,6 +60,15 @@ def get_learn_cache_service(
     session: AsyncSession = Depends(get_session),
 ) -> LearnCacheService:
     return LearnCacheService(session)
+
+
+def get_lookup_cache_service(
+    session: AsyncSession = Depends(get_session),
+    ingredient_service: IngredientService = Depends(get_ingredient_service),
+) -> LookupCacheService:
+    # The ingredient service powers the re-grade that a cached assessment must
+    # pass before it is served.
+    return LookupCacheService(session, ingredient_service)
 
 
 def get_meal_service(
@@ -243,6 +254,10 @@ class RequestLLM:
     """
 
     config: LLMRequestConfig
+    # True only when the config was pinned to the operator-funded shared tier.
+    # Explicit rather than inferred from ``pending``: ``charge()`` consumes the
+    # callable before the lookup-cache write gate needs the answer.
+    shared: bool = False
     _charge: Callable[[], Awaitable[None]] | None = None
 
     @property
@@ -308,7 +323,7 @@ async def get_request_llm_config(
     pinned = LLMRequestConfig(
         provider="openai", model=settings.shared_model, api_key=settings.openai_api_key
     )
-    return _arm_request_llm(request, RequestLLM(config=pinned, _charge=_charge))
+    return _arm_request_llm(request, RequestLLM(config=pinned, shared=True, _charge=_charge))
 
 
 def _arm_request_llm(request: Request, resolved: RequestLLM) -> RequestLLM:
@@ -343,6 +358,19 @@ def build_dish_lookup_agent(
     """
     chat = build_chat_model(resolved.config, allow_server_key=not settings.public_deployment)
     return DishLookupAgent(chat=chat, service=service, meal_service=meal_service)
+
+
+def build_recipe_agent(
+    resolved: RequestLLM = Depends(get_request_llm_config),
+    service: IngredientService = Depends(get_ingredient_service),
+) -> RecipeAgent:
+    """Wire a request-scoped recipe agent; same key rules as the dish lookup.
+
+    The ingredient service powers the code-side scan of the drafted steps for
+    index-avoid terms kept off the list.
+    """
+    chat = build_chat_model(resolved.config, allow_server_key=not settings.public_deployment)
+    return RecipeAgent(chat=chat, service=service)
 
 
 def build_learn_agent(

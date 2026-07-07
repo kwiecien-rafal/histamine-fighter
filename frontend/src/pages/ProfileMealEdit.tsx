@@ -3,9 +3,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import type { MealEdit } from "../api/admin";
 import { errorMessage } from "../api/errors";
-import { getSave, updateSave, type SavedMealDetail } from "../api/saves";
+import { generateRecipe, getSave, updateSave, type SavedMealDetail } from "../api/saves";
 import { MealEditForm } from "../components/MealEditForm";
+import { ThinkingBrawl } from "../components/ThinkingBrawl";
 import { saveKey, useSavedMealsStore } from "../store/saves";
+import { useUsageStore } from "../store/usage";
 
 // Edit the user's own saved copy. Reuses the admin MealEditForm (it is
 // presentational; only the onSave differs) against PATCH /me/meals/{id}. Saving
@@ -18,6 +20,11 @@ export function ProfileMealEdit() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [writingRecipe, setWritingRecipe] = useState(false);
+  const [recipeError, setRecipeError] = useState<string | null>(null);
+  // Unsaved form edits block recipe generation: it writes from the *saved*
+  // ingredients and its success remounts the form, which would discard them.
+  const [formDirty, setFormDirty] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -55,6 +62,27 @@ export function ProfileMealEdit() {
       tags: edit.tags,
     });
     void navigate("/profile");
+  }
+
+  // One LLM call, ever, per saved meal: the steps persist on the row, so the
+  // button disappears for good once they exist.
+  async function writeRecipe() {
+    if (!id || writingRecipe) return;
+    setWritingRecipe(true);
+    setRecipeError(null);
+    try {
+      const response = await generateRecipe(id);
+      // A stored recipe returned unchanged made no model call; keep the usage
+      // ledger free of zero-call entries, same policy as cached lookups.
+      if (response.usage.calls > 0) {
+        useUsageStore.getState().record("recipe", response.recipe_model, response.usage);
+      }
+      setMeal(response.meal);
+    } catch (err) {
+      setRecipeError(errorMessage(err));
+    } finally {
+      setWritingRecipe(false);
+    }
   }
 
   // Removal goes through the store so save buttons elsewhere unlight too; only
@@ -115,7 +143,39 @@ export function ProfileMealEdit() {
                 to re-verify it.
               </p>
             </header>
+            {meal.recipe === null && (
+              <div className="mb-4 rounded border border-stone-200 bg-white p-4">
+                <p className="text-sm text-stone-600 mb-2">
+                  This saved meal has no recipe yet — we can write one from its
+                  current ingredient list.
+                </p>
+                {recipeError && (
+                  <p role="alert" className="text-sm text-red-700 mb-2">
+                    <span className="font-medium">Couldn't write the recipe —</span>{" "}
+                    {recipeError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void writeRecipe()}
+                  disabled={writingRecipe || formDirty}
+                  className="rounded bg-forest-800 hover:bg-forest-700 text-white px-4 py-2 text-sm disabled:opacity-50 enabled:cursor-pointer"
+                >
+                  Write the recipe
+                </button>
+                {formDirty && (
+                  <p className="text-xs text-stone-500 mt-2">
+                    Save or discard your edits first — the recipe is written
+                    from the saved ingredients.
+                  </p>
+                )}
+                {writingRecipe && (
+                  <ThinkingBrawl label="Writing the recipe…" className="mt-3" />
+                )}
+              </div>
+            )}
             <MealEditForm
+              key={meal.recipe === null ? "without-recipe" : "with-recipe"}
               initial={{
                 name: meal.name,
                 description: meal.description,
@@ -127,7 +187,13 @@ export function ProfileMealEdit() {
               onCancel={() => void navigate("/profile")}
               submitLabel="Save my copy"
               tagsMode="picker"
+              onDirtyChange={setFormDirty}
             />
+            {meal.recipe !== null && meal.recipe_model !== null && (
+              <p className="mt-2 text-xs text-stone-500">
+                Recipe written by <span className="font-mono">{meal.recipe_model}</span>
+              </p>
+            )}
             <div className="mt-6 flex flex-col items-end gap-1 border-t border-stone-200 pt-4">
               {removeError && (
                 <p role="alert" className="text-xs text-red-700">

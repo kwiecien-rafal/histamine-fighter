@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     # corpus clears the cache regardless.
     learn_cache_ttl_days: int = 7
 
+    # How long cached dish-lookup rows stay valid. Deliberately long: a cached
+    # assessment is re-graded against the live index before it is served, so
+    # the TTL is garbage collection, not correctness.
+    lookup_cache_ttl_days: int = 90
+
     # Hour the daily board unlocks, applied by the generation script when it stamps
     # each suggestion's reveal time. Deliberately UTC, not local: the board reveals
     # at the same instant for every visitor worldwide.

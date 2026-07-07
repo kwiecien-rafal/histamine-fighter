@@ -21,11 +21,10 @@ compatibility). Both are recorded as unverified rather than waved through.
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from app.agents.dish_lookup import _grounded_verdict
 from app.core.term_match import TermMatcher
 from app.enums import Compatibility, CompatibilityVerdict, SafetyLevel, TraceReading
 from app.schemas.meal import CautionedIngredient
-from app.services.ingredient_lookup import LookupResult
+from app.services.ingredient_lookup import LookupResult, grounded_verdict
 
 # The index's guidance when a depends-rated row carries no note of its own.
 _DEFAULT_MODERATION_NOTE = "use in moderation"
@@ -68,7 +67,7 @@ def verify_meal(
             # No entry, or an entry the index never rated: unknown, not safe.
             unverified.append(lookup.ingredient)
         else:
-            level = _grounded_verdict([lookup])
+            level = grounded_verdict([lookup])
             if level is SafetyLevel.AVOID:
                 blockers.append((lookup.ingredient, TraceReading.AVOID))
             elif level is SafetyLevel.DEPENDS:

@@ -33,8 +33,12 @@ export interface ProposedIngredient {
 
 export interface IngredientProposalResponse {
   dish: string;
+  recognized: boolean;
   ingredients: ProposedIngredient[];
   model: string;
+  // Served from the server-side lookup cache: zero usage, and `model` names
+  // whichever model produced the original response.
+  cached: boolean;
   usage: LLMUsage;
 }
 
@@ -72,12 +76,22 @@ export interface Advisory {
 
 export interface DishAssessmentResponse {
   dish: string;
+  // Short model-written descriptor ("hearty tomato pasta dish"); presentation
+  // only, used to make the alternatives goal buttons specific.
+  dish_style: string | null;
   verdict: Verdict;
   explanation: string;
   adaptations: Adaptation[];
   advisories: Advisory[];
   integrity: DishIntegrity;
   ingredients: IngredientAssessment[];
+  model: string;
+  cached: boolean;
+  usage: LLMUsage;
+}
+
+export interface RecipeGenerationResponse {
+  steps: string[];
   model: string;
   usage: LLMUsage;
 }
@@ -120,7 +134,7 @@ export function buildLLMHeaders(): Record<string, string> {
   return headers;
 }
 
-async function postJSON<T>(path: string, body: unknown): Promise<T> {
+async function postJSON<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   // credentials: the shared tier authenticates by session cookie; on BYO-key and
   // Ollama calls the cookie rides along unused.
   const response = await fetch(path, {
@@ -128,6 +142,7 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json", ...buildLLMHeaders() },
     body: JSON.stringify(body),
     credentials: "include",
+    signal,
   });
   if (!response.ok) {
     // A 401 on the shared tier means the session cookie died mid-session; flip
@@ -142,15 +157,30 @@ async function postJSON<T>(path: string, body: unknown): Promise<T> {
 
 export function proposeIngredients(
   dish: string,
+  signal?: AbortSignal,
 ): Promise<IngredientProposalResponse> {
-  return postJSON("/api/v1/meals/propose", { dish });
+  return postJSON("/api/v1/meals/propose", { dish }, signal);
 }
 
 export function assessDish(
   dish: string,
   ingredients: ConfirmedIngredient[],
+  signal?: AbortSignal,
 ): Promise<DishAssessmentResponse> {
-  return postJSON("/api/v1/meals/assess", { dish, ingredients });
+  return postJSON("/api/v1/meals/assess", { dish, ingredients }, signal);
+}
+
+// Recipe for an assessed dish the user has not saved (yet). The advisories are
+// the assessment's own depends-level notes, echoed back so the steps honour
+// index guidance like "fresh only".
+export function generateLookupRecipe(
+  dish: string,
+  description: string,
+  ingredients: ConfirmedIngredient[],
+  advisories: Advisory[],
+  signal?: AbortSignal,
+): Promise<RecipeGenerationResponse> {
+  return postJSON("/api/v1/meals/recipe", { dish, description, ingredients, advisories }, signal);
 }
 
 export function suggestAlternatives(
@@ -158,11 +188,16 @@ export function suggestAlternatives(
   goal: AlternativeGoal,
   avoidIngredients: string[],
   preferIngredients: string[],
+  signal?: AbortSignal,
 ): Promise<DishAlternativesResponse> {
-  return postJSON("/api/v1/meals/alternatives", {
-    dish,
-    goal,
-    avoid_ingredients: avoidIngredients,
-    prefer_ingredients: preferIngredients,
-  });
+  return postJSON(
+    "/api/v1/meals/alternatives",
+    {
+      dish,
+      goal,
+      avoid_ingredients: avoidIngredients,
+      prefer_ingredients: preferIngredients,
+    },
+    signal,
+  );
 }

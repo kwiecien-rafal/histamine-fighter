@@ -2,10 +2,29 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AlternativeGoal } from "../api/client";
+import type {
+  AlternativeGoal,
+  DishAssessmentResponse,
+} from "../api/client";
 import type { AlternativesState } from "../hooks/useDishLookupFlow";
 import type { PivotTone } from "../lib/assessment";
 import { AlternativesPanel } from "./AlternativesPanel";
+
+const RESULT: DishAssessmentResponse = {
+  dish: "Bolognese",
+  dish_style: "hearty tomato pasta dish",
+  verdict: "avoid",
+  explanation: "x",
+  adaptations: [
+    { ingredients: ["tomato"], role: "core", action: "no_safe_swap", swap: null, reason: "x" },
+  ],
+  advisories: [],
+  integrity: "lost",
+  ingredients: [],
+  model: "stub/model",
+  cached: false,
+  usage: { calls: 1, input_tokens: 1, output_tokens: 1, total_tokens: 2, steps: [] },
+};
 
 function renderPanel(
   alternatives: AlternativesState,
@@ -19,6 +38,7 @@ function renderPanel(
     <AlternativesPanel
       alternatives={alternatives}
       tone={tone}
+      result={RESULT}
       onChooseGoal={handlers.onChooseGoal ?? vi.fn()}
       onPick={handlers.onPick ?? vi.fn()}
     />,
@@ -29,7 +49,7 @@ describe("AlternativesPanel", () => {
   it("offers the goal buttons when idle", () => {
     renderPanel({ status: "idle", cache: {} });
 
-    expect(screen.getByRole("button", { name: "Just a good meal" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Just a good meal/ })).toBeEnabled();
   });
 
   it("keeps the hard-to-save header when identity is lost", () => {
@@ -50,7 +70,7 @@ describe("AlternativesPanel", () => {
     renderPanel({ status: "loading", goal: "any_meal", cache: {} });
 
     expect(screen.getByText("Finding ideas…")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Just a good meal" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Just a good meal/ })).toBeDisabled();
   });
 
   it("shows the error message", () => {
@@ -100,7 +120,7 @@ describe("AlternativesPanel", () => {
     const user = userEvent.setup();
     renderPanel({ status: "idle", cache: {} }, { onChooseGoal });
 
-    await user.click(screen.getByRole("button", { name: "Same style of dish" }));
+    await user.click(screen.getByRole("button", { name: /Same style of dish/ }));
 
     expect(onChooseGoal).toHaveBeenCalledWith("same_style");
   });

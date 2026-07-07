@@ -8,6 +8,9 @@ DM Sans
 Copyright 2014-2017 Indian Type Foundry (info@indiantypefoundry.com)
 Copyright 2019 Google LLC. This Font Software is licensed under the SIL Open Font License, Version 1.1.
 
+Gochi Hand
+Copyright 2011 The Gochi Hand Project Authors (Huerta Tipografica, https://www.huertatipografica.com)
+
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------

@@ -138,3 +138,6 @@ before sending a large PR.
 ## License
 
 [MIT](LICENSE) (c) 2026 Rafał Kwiecień
+
+Artwork in `frontend/public/images/` is licensed separately under
+[CC BY 4.0](frontend/public/images/LICENSE.md) — reuse requires credit.

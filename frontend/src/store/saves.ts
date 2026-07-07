@@ -9,19 +9,15 @@ import {
 } from "../api/saves";
 import { useSessionStore } from "./session";
 
-// Mirrors the backend's lookup_source_key closely enough for optimistic state;
-// the server's key from the response replaces the guess on success.
-export function lookupKey(dish: string): string {
-  return dish.trim().slice(0, 200).trimEnd().toLowerCase();
-}
-
 export function saveKey(source: SaveSource, sourceKey: string): string {
   return `${source}:${sourceKey}`;
 }
 
+// A lookup save keys on the client-minted per-result id, which the server
+// stores verbatim as source_key — no name-derived guessing needed.
 function targetKey(target: SaveTarget): string {
   return target.source === "lookup"
-    ? saveKey("lookup", lookupKey(target.payload.dish))
+    ? saveKey("lookup", target.payload.lookup_id)
     : saveKey(target.source, target.sourceId);
 }
 
@@ -80,7 +76,7 @@ export const useSavedMealsStore = create<SavedMealsState>()((set, get) => ({
       set((state) => {
         const next = new Map(state.keys);
         next.delete(key);
-        // The server's key is authoritative (it derives lookup keys itself).
+        // The server's key is authoritative (it echoes the stored source_key).
         next.set(saveKey(created.source, created.source_key), created.id);
         return { keys: next };
       });

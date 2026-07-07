@@ -12,12 +12,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from app.agents.recipe import RecipeAgent
 from app.config import settings
-from app.core.ratelimit import limiter, save_rate_limit
+from app.core.ratelimit import limiter, llm_rate_limit, save_rate_limit
 from app.dependencies import (
+    RequestLLM,
+    build_recipe_agent,
     get_current_user,
     get_daily_service,
     get_meal_service,
+    get_request_llm_config,
     get_saved_meal_service,
 )
 from app.enums import ApprovalStatus, SaveSource
@@ -29,12 +33,14 @@ from app.schemas.saved import (
     SavedMealDetail,
     SavedMealPage,
     SavedMealUpdate,
+    SavedRecipeResponse,
     SaveFromLookup,
     SaveRequest,
 )
+from app.schemas.usage import LLMUsage
 from app.services.daily_service import DailyService
 from app.services.meal_service import MealService
-from app.services.saved_meal_service import SavedMealService, lookup_source_key
+from app.services.saved_meal_service import SavedMealService
 
 router = APIRouter(prefix="/api/v1/me/meals", tags=["saved-meals"])
 
@@ -68,6 +74,7 @@ def _to_detail(row: SavedMeal) -> SavedMealDetail:
             CautionedIngredient.model_validate(item) for item in row.cautioned_ingredients
         ],
         model=row.model,
+        recipe_model=row.recipe_model,
     )
 
 
@@ -112,11 +119,13 @@ async def save_meal(
     """Save a meal: 201 with the stored snapshot, or 200 with the existing one.
 
     Idempotent per (source, source row): re-liking returns the earlier snapshot
-    even if the source has changed since. The per-user cap answers 409; it is an
-    abuse bound, not something a real collection should reach.
+    even if the source has changed since. A lookup save is keyed on the client's
+    per-result ``lookup_id``, so each assessment result saves as its own row and
+    only a retry of the same result is idempotent. The per-user cap answers 409;
+    it is an abuse bound, not something a real collection should reach.
     """
     if isinstance(payload, SaveFromLookup):
-        source_key = lookup_source_key(payload.dish)
+        source_key = str(payload.lookup_id)
     else:
         source_key = str(payload.source_id)
 
@@ -153,6 +162,55 @@ async def save_meal(
     if not created:
         response.status_code = status.HTTP_200_OK
     return _to_detail(row)
+
+
+@router.post("/{save_id}/recipe", response_model=SavedRecipeResponse)
+@limiter.limit(llm_rate_limit)
+async def generate_saved_recipe(
+    request: Request,
+    save_id: UUID,
+    response: Response,
+    user: User = Depends(get_current_user),
+    service: SavedMealService = Depends(get_saved_meal_service),
+    agent: RecipeAgent = Depends(build_recipe_agent),
+    resolved: RequestLLM = Depends(get_request_llm_config),
+) -> SavedRecipeResponse:
+    """Write a recipe for a saved meal that has none, and persist it on the row.
+
+    Lazy by design: recipes cost a model call, so one is only written when its
+    owner asks, from the snapshot's current (possibly user-edited) ingredients.
+    Idempotent: a row that already has a recipe returns unchanged, uncharged.
+    """
+    response.headers["Cache-Control"] = "no-store"
+    row = await service.get(user.id, save_id)
+    if row is None:
+        raise _not_found()
+    if row.recipe:
+        # A recipe that came with the snapshot has no recipe_model of its own;
+        # the save's producer is then the closest honest provenance.
+        return SavedRecipeResponse(
+            meal=_to_detail(row),
+            recipe_model=row.recipe_model or row.model,
+            usage=LLMUsage(),
+        )
+
+    await resolved.charge()
+    generation = await agent.run(
+        name=row.name,
+        description=row.description,
+        ingredients=[ProposedIngredient.model_validate(item) for item in row.ingredients],
+        cautions=[CautionedIngredient.model_validate(item) for item in row.cautioned_ingredients],
+    )
+    saved = await service.set_recipe(user.id, save_id, generation.steps, generation.model)
+    if saved is None:
+        # The save was deleted while the model wrote; nothing was persisted, so
+        # a response claiming a recipe exists would be a lie.
+        raise _not_found()
+    return SavedRecipeResponse(
+        meal=_to_detail(saved),
+        recipe_model=saved.recipe_model or saved.model,
+        usage=generation.usage,
+    )
 
 
 @router.patch("/{save_id}", response_model=SavedMealDetail)

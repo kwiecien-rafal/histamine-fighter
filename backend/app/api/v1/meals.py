@@ -3,10 +3,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.agents.dish_lookup import DishLookupAgent
+from app.agents.recipe import RecipeAgent
+from app.config import settings
 from app.core.ratelimit import limiter, llm_rate_limit
 from app.dependencies import (
     RequestLLM,
     build_dish_lookup_agent,
+    build_recipe_agent,
+    get_lookup_cache_service,
     get_meal_service,
     get_request_llm_config,
 )
@@ -20,13 +24,16 @@ from app.schemas.meal import (
     DishAssessmentResponse,
     DishLookupRequest,
     IngredientProposalResponse,
+    LookupRecipeRequest,
     ProposedIngredient,
     PublicMealCard,
     PublicMealDetail,
     PublicMealPage,
+    RecipeGeneration,
     TraceEvent,
     public_trace,
 )
+from app.services.lookup_cache_service import LookupCacheService
 from app.services.meal_service import MealService
 
 router = APIRouter(prefix="/api/v1/meals", tags=["meals"])
@@ -112,6 +119,17 @@ async def get_curated_meal(
     return _to_detail(row)
 
 
+def _cache_writes_allowed(resolved: RequestLLM) -> bool:
+    """Whether this request's output may enter the shared lookup cache.
+
+    On a public deployment only the operator-pinned shared tier writes: a BYO
+    model is untrusted quality (and, via any endpoint-controllable provider,
+    untrusted content), and must not populate state every visitor reads. A
+    non-public deployment is one trust domain, so everything caches.
+    """
+    return resolved.shared or not settings.public_deployment
+
+
 @router.post("/propose", response_model=IngredientProposalResponse)
 @limiter.limit(llm_rate_limit)
 async def propose_ingredients(
@@ -119,11 +137,23 @@ async def propose_ingredients(
     payload: DishLookupRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
+    cache: LookupCacheService = Depends(get_lookup_cache_service),
 ) -> IngredientProposalResponse:
+    # The cache is read before charging: a hit costs no model call, so it must
+    # not consume shared-tier quota (the rate limit still bounds it).
+    cached = await cache.get_proposal(payload.dish)
+    if cached is not None:
+        # Release the unspent shared-tier charge so the leak backstop does not
+        # bill a free answer as a forgotten charge.
+        resolved.waive()
+        return cached
     # The same instance the agent was built from (FastAPI caches the dependency
     # per request); charging here, at the model-call boundary, is the contract.
     await resolved.charge()
-    return await agent.propose(dish=payload.dish)
+    response = await agent.propose(dish=payload.dish)
+    if _cache_writes_allowed(resolved):
+        await cache.store_proposal(response)
+    return response
 
 
 @router.post("/assess", response_model=DishAssessmentResponse)
@@ -133,9 +163,48 @@ async def assess_dish(
     payload: DishAssessmentRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
+    cache: LookupCacheService = Depends(get_lookup_cache_service),
 ) -> DishAssessmentResponse:
+    # A hit is only served while its grounding fingerprint still matches the
+    # live index — no model call either way; see the service.
+    cached = await cache.get_assessment(payload.dish, payload.ingredients)
+    if cached is not None:
+        resolved.waive()
+        return cached
     await resolved.charge()
-    return await agent.assess(dish=payload.dish, ingredients=payload.ingredients)
+    response = await agent.assess(dish=payload.dish, ingredients=payload.ingredients)
+    if _cache_writes_allowed(resolved):
+        await cache.store_assessment(payload.dish, payload.ingredients, response)
+    return response
+
+
+@router.post("/recipe", response_model=RecipeGeneration)
+@limiter.limit(llm_rate_limit)
+async def generate_lookup_recipe(
+    request: Request,
+    payload: LookupRecipeRequest,
+    agent: RecipeAgent = Depends(build_recipe_agent),
+    resolved: RequestLLM = Depends(get_request_llm_config),
+) -> RecipeGeneration:
+    """Write a recipe for an assessed dish straight off the result card.
+
+    Nothing is persisted: the result is not a saved meal (yet), so the steps
+    live in the client until a save carries them along. The payload is
+    client-asserted like a lookup save; the agent's own scan of the drafted
+    steps against the index is the guardrail that matters.
+    """
+    await resolved.charge()
+    return await agent.run(
+        name=payload.dish,
+        description=payload.description,
+        ingredients=[
+            ProposedIngredient(name=item.name, category=item.category)
+            for item in payload.ingredients
+        ],
+        cautions=[
+            CautionedIngredient(name=item.ingredient, note=item.note) for item in payload.advisories
+        ],
+    )
 
 
 @router.post("/alternatives", response_model=DishAlternativesResponse)

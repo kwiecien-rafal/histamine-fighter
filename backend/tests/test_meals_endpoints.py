@@ -5,13 +5,22 @@ contract: routing, request validation, and the exact response shapes the
 frontend consumes — no database, no LLM.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.core.ratelimit import limiter
-from app.dependencies import build_dish_lookup_agent
+from app.dependencies import (
+    RequestLLM,
+    build_dish_lookup_agent,
+    build_recipe_agent,
+    get_lookup_cache_service,
+    get_request_llm_config,
+)
 from app.enums import (
     AdaptationAction,
     AlternativeGoal,
@@ -20,6 +29,7 @@ from app.enums import (
     HistamineMechanism,
     SafetyLevel,
 )
+from app.llm.config import LLMRequestConfig
 from app.main import create_app
 from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,
@@ -27,6 +37,7 @@ from app.schemas.meal import (
     MAX_INGREDIENT_CHARS,
     Adaptation,
     Advisory,
+    CautionedIngredient,
     ConfirmedIngredient,
     DishAlternative,
     DishAlternativesRequest,
@@ -35,6 +46,7 @@ from app.schemas.meal import (
     IngredientAssessment,
     IngredientProposalResponse,
     ProposedIngredient,
+    RecipeGeneration,
 )
 from app.schemas.usage import LLMUsage
 
@@ -107,12 +119,59 @@ class _StubAgent:
         )
 
 
-# A module-local client: unlike the conftest one, it needs no database — the
-# stubbed agent cuts off the whole session dependency chain.
-@pytest_asyncio.fixture
-async def client() -> AsyncIterator[AsyncClient]:
+class _MissLookupCache:
+    """A transparent cache: every read misses, every write is dropped.
+
+    Keeps these tests database-free now that the routes consult the cache; the
+    real cache behaviour is covered in test_lookup_cache_service.
+    """
+
+    async def get_proposal(self, dish: str) -> None:
+        return None
+
+    async def store_proposal(self, response: object) -> None:
+        return None
+
+    async def get_assessment(self, dish: str, ingredients: object) -> None:
+        return None
+
+    async def store_assessment(self, dish: str, ingredients: object, response: object) -> None:
+        return None
+
+
+class _RecordingCache(_MissLookupCache):
+    """A miss cache that remembers which store methods the routes invoked."""
+
+    def __init__(self) -> None:
+        self.stored: list[str] = []
+
+    async def store_proposal(self, response: object) -> None:
+        self.stored.append("proposal")
+
+    async def store_assessment(self, dish: str, ingredients: object, response: object) -> None:
+        self.stored.append("assessment")
+
+
+def _probe_llm(shared: bool, charges: list[str]) -> RequestLLM:
+    """A resolved config whose charge is observable, for hit/gate assertions."""
+
+    async def _charge() -> None:
+        charges.append("charged")
+
+    return RequestLLM(config=LLMRequestConfig(), shared=shared, _charge=_charge)
+
+
+# One app wiring for the whole module: the stubbed agent and cache cut off the
+# session dependency chain, so no database is needed. Tests that need their own
+# cache or RequestLLM probe pass extra dependency overrides.
+@asynccontextmanager
+async def _lookup_client(
+    overrides: dict[Callable[..., object], Callable[[], object]] | None = None,
+) -> AsyncIterator[AsyncClient]:
     app = create_app()
     app.dependency_overrides[build_dish_lookup_agent] = _StubAgent
+    app.dependency_overrides[get_lookup_cache_service] = _MissLookupCache
+    app.dependency_overrides.update(overrides or {})
     limiter.enabled = False
     transport = ASGITransport(app=app)
     try:
@@ -120,6 +179,12 @@ async def client() -> AsyncIterator[AsyncClient]:
             yield http_client
     finally:
         limiter.enabled = True
+
+
+@pytest_asyncio.fixture
+async def client() -> AsyncIterator[AsyncClient]:
+    async with _lookup_client() as http_client:
+        yield http_client
 
 
 # --- POST /api/v1/meals/propose ---------------------------------------------------
@@ -131,13 +196,109 @@ async def test_propose_returns_the_proposal_shape(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json() == {
         "dish": "spaghetti bolognese",
+        "recognized": True,
         "ingredients": [
             {"name": "tomato", "category": "vegetable"},
             {"name": "parmesan", "category": "aged hard cheese"},
         ],
         "model": "stub/model",
+        "cached": False,
         "usage": _EMPTY_USAGE,
     }
+
+
+async def test_propose_serves_a_cache_hit_uncharged() -> None:
+    # A hit short-circuits the agent entirely and costs no quota: the shared
+    # charge is waived, not spent and not left pending for the leak backstop.
+    hit = IngredientProposalResponse(
+        dish="spaghetti bolognese",
+        ingredients=[ProposedIngredient(name="beef", category="fresh meat")],
+        model="earlier/model",
+        cached=True,
+        usage=LLMUsage(),
+    )
+
+    class _HitCache(_MissLookupCache):
+        async def get_proposal(self, dish: str) -> IngredientProposalResponse:
+            return hit
+
+    charges: list[str] = []
+    resolved = _probe_llm(shared=True, charges=charges)
+    overrides = {get_lookup_cache_service: _HitCache, get_request_llm_config: lambda: resolved}
+    async with _lookup_client(overrides) as http_client:
+        resp = await http_client.post("/api/v1/meals/propose", json={"dish": "spaghetti bolognese"})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cached"] is True
+    assert body["model"] == "earlier/model"
+    assert [item["name"] for item in body["ingredients"]] == ["beef"]
+    assert charges == []
+    assert resolved.pending is False  # waived, so the leak backstop stays quiet
+
+
+async def test_assess_serves_a_cache_hit_uncharged() -> None:
+    hit = DishAssessmentResponse(
+        dish="pasta",
+        verdict=SafetyLevel.SAFE,
+        explanation="All clear.",
+        adaptations=[],
+        advisories=[],
+        integrity=DishIntegrity.PRESERVED,
+        ingredients=[IngredientAssessment(name="rice", safety=SafetyLevel.SAFE, found=False)],
+        model="earlier/model",
+        cached=True,
+        usage=LLMUsage(),
+    )
+
+    class _HitCache(_MissLookupCache):
+        async def get_assessment(self, dish: str, ingredients: object) -> DishAssessmentResponse:
+            return hit
+
+    charges: list[str] = []
+    resolved = _probe_llm(shared=True, charges=charges)
+    overrides = {get_lookup_cache_service: _HitCache, get_request_llm_config: lambda: resolved}
+    async with _lookup_client(overrides) as http_client:
+        resp = await http_client.post(
+            "/api/v1/meals/assess",
+            json={"dish": "pasta", "ingredients": [{"name": "rice"}]},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cached"] is True
+    assert body["model"] == "earlier/model"
+    assert charges == []
+    assert resolved.pending is False
+
+
+@pytest.mark.parametrize(
+    ("public", "shared", "expect_stored"),
+    [
+        (True, True, ["proposal", "assessment"]),  # shared tier writes everywhere
+        (True, False, []),  # BYO must not write shared state on a public deployment
+        (False, False, ["proposal", "assessment"]),  # self-hosted: one trust domain
+    ],
+)
+async def test_cache_writes_are_gated_to_trusted_models(
+    monkeypatch: pytest.MonkeyPatch, public: bool, shared: bool, expect_stored: list[str]
+) -> None:
+    monkeypatch.setattr(settings, "public_deployment", public)
+    cache = _RecordingCache()
+    charges: list[str] = []
+    overrides = {
+        get_lookup_cache_service: lambda: cache,
+        get_request_llm_config: lambda: _probe_llm(shared=shared, charges=charges),
+    }
+    async with _lookup_client(overrides) as http_client:
+        await http_client.post("/api/v1/meals/propose", json={"dish": "pasta"})
+        await http_client.post(
+            "/api/v1/meals/assess",
+            json={"dish": "pasta", "ingredients": [{"name": "rice"}]},
+        )
+
+    assert cache.stored == expect_stored
+    assert charges == ["charged", "charged"]  # misses always charge, gated or not
 
 
 async def test_propose_without_a_dish_is_422(client: AsyncClient) -> None:
@@ -170,6 +331,7 @@ async def test_assess_returns_the_assessment_shape(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.json() == {
         "dish": "pasta",
+        "dish_style": None,
         "verdict": "avoid",
         "explanation": "Tomato is recorded as incompatible.",
         "adaptations": [
@@ -202,6 +364,7 @@ async def test_assess_returns_the_assessment_shape(client: AsyncClient) -> None:
             },
         ],
         "model": "stub/model",
+        "cached": False,
         "usage": _EMPTY_USAGE,
     }
 
@@ -356,3 +519,74 @@ def test_alternatives_request_dedupes_repeated_names() -> None:
     )
 
     assert request.avoid_ingredients == ["Tomato", "parmesan"]
+
+
+# --- POST /api/v1/meals/recipe ------------------------------------------------------
+
+
+class _StubRecipeAgent:
+    """Stands in for RecipeAgent, capturing what the route hands it."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def run(
+        self,
+        name: str,
+        description: str,
+        ingredients: list[ProposedIngredient],
+        cautions: list[CautionedIngredient],
+    ) -> RecipeGeneration:
+        self.calls.append(
+            {
+                "name": name,
+                "description": description,
+                "ingredients": ingredients,
+                "cautions": cautions,
+            }
+        )
+        return RecipeGeneration(steps=["Chop.", "Simmer."], model="stub/model", usage=LLMUsage())
+
+
+async def test_lookup_recipe_returns_steps_and_charges_once() -> None:
+    stub = _StubRecipeAgent()
+    charges: list[str] = []
+    resolved = _probe_llm(shared=True, charges=charges)
+    overrides = {
+        build_recipe_agent: lambda: stub,
+        get_request_llm_config: lambda: resolved,
+    }
+    async with _lookup_client(overrides) as http_client:
+        resp = await http_client.post(
+            "/api/v1/meals/recipe",
+            json={
+                "dish": "courgette pasta",
+                "description": "Light and herby.",
+                "ingredients": [{"name": "courgette", "category": None}],
+                "advisories": [{"ingredient": "spinach", "note": "fresh only"}],
+            },
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "steps": ["Chop.", "Simmer."],
+        "model": "stub/model",
+        "usage": _EMPTY_USAGE,
+    }
+    assert charges == ["charged"]
+    # The assessment's advisories reach the agent as its cautioned ingredients.
+    call = stub.calls[0]
+    assert call["name"] == "courgette pasta"
+    assert call["cautions"] == [CautionedIngredient(name="spinach", note="fresh only")]
+
+
+async def test_lookup_recipe_without_ingredients_is_422() -> None:
+    stub = _StubRecipeAgent()
+    async with _lookup_client({build_recipe_agent: lambda: stub}) as http_client:
+        resp = await http_client.post(
+            "/api/v1/meals/recipe",
+            json={"dish": "courgette pasta", "ingredients": []},
+        )
+
+    assert resp.status_code == 422
+    assert stub.calls == []

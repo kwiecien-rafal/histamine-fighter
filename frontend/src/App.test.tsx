@@ -51,7 +51,10 @@ describe("App routing", () => {
   it("serves the dish lookup at /lookup", () => {
     renderAt("/lookup");
 
-    expect(screen.getByPlaceholderText("e.g. Spaghetti Bolognese")).toBeInTheDocument();
+    // The lookup now opens on the two-card entry chooser, not the search form.
+    expect(
+      screen.getByRole("button", { name: /start with just a dish name/i }),
+    ).toBeInTheDocument();
   });
 
   it("redirects an unknown path to Home", async () => {

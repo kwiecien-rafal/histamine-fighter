@@ -9,7 +9,7 @@ flagged and the whole dish needs rethinking is the kind of open-ended call a
 hard-coded generate-check loop could not make.
 
 Safety stays out of the model's hands. ``SubmitMeal`` is not trusted: code re-runs
-the whole submitted list through the curated index and the same ``_grounded_verdict``
+the whole submitted list through the curated index and the same ``grounded_verdict``
 the dish lookup owns, and also scans the recipe prose for an index-flagged ingredient
 written into the steps but kept off the list. Nothing the index flags as avoid can
 survive. A moderately compatible ingredient may stay, capped in number and carried
@@ -39,7 +39,6 @@ from langchain_core.messages.tool import ToolCall
 from pydantic import ValidationError
 
 from app.agents.base import BaseAgent
-from app.agents.dish_lookup import _grounded_verdict
 from app.agents.inspiration import InspirationBrief
 from app.agents.meal_judge import MealJudgeAgent
 from app.agents.meal_quality import check_structure
@@ -70,6 +69,7 @@ from app.schemas.meal import (
 from app.services.ingredient_lookup import (
     LookupCandidate,
     LookupResult,
+    grounded_verdict,
     lookup_ingredient_safety,
     verify_submission,
 )
@@ -535,7 +535,7 @@ class ComposerAgent(BaseAgent):
             return TraceReading.UNVERIFIABLE
         if not result.found:
             return TraceReading.NOT_INDEXED
-        return TraceReading(_grounded_verdict([result]).value)
+        return TraceReading(grounded_verdict([result]).value)
 
     @staticmethod
     def _reading_phrase(reading: TraceReading) -> str:

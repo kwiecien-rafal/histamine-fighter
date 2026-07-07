@@ -5,10 +5,11 @@ source row at save time (the route enforces the approval/reveal gates first), a
 lookup save stores the client's normalized assessment. Inserts go through
 ``INSERT .. ON CONFLICT DO NOTHING`` so two racing taps on the same save button cannot
 raise a unique violation into the request session; the loser reads the winner's
-row. Two consequences worth knowing: a daily slot the admin regenerates keeps its
+row. One consequence worth knowing: a daily slot the admin regenerates keeps its
 id but goes back to pending and off the board, so a save pointing at it simply
-goes stale until re-approval; and re-saving a re-assessed dish returns the old
-snapshot (delete and save again to refresh it).
+goes stale until re-approval. Lookup saves are keyed on the client-minted
+per-result id, so every assessment result can be saved on its own; a name that
+collides with an existing save gets a " (n)" suffix instead of being rejected.
 """
 
 from datetime import UTC, datetime
@@ -22,13 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.enums import SavedMealTag, SaveSource
 from app.models import CuratedMeal, DailySuggestion, SavedMeal
 from app.schemas.daily import DailyMealContent
-from app.schemas.meal import MAX_DISH_CHARS, normalize_dish_text
+from app.schemas.meal import MAX_DISH_CHARS
 from app.schemas.saved import SavedMealUpdate, SaveFromLookup
-
-
-def lookup_source_key(dish: str) -> str:
-    """The dedupe key for a lookup save, derived server-side from the dish name."""
-    return normalize_dish_text(dish, max_chars=MAX_DISH_CHARS).casefold()
 
 
 class SavedMealService:
@@ -52,6 +48,25 @@ class SavedMealService:
             select(SavedMeal).where(SavedMeal.id == save_id, SavedMeal.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def set_recipe(
+        self, user_id: UUID, save_id: UUID, steps: list[str], model: str
+    ) -> SavedMeal | None:
+        """Attach generated recipe steps and their producing model to the saved copy.
+
+        First write wins: a row that already has a recipe is returned unchanged,
+        so concurrent generations cannot overwrite each other. Not a user edit:
+        ``edited_at`` stays untouched, so a verified badge is not lost to a
+        recipe the app itself wrote.
+        """
+        row = await self.get(user_id, save_id)
+        if row is None:
+            return None
+        if row.recipe:
+            return row
+        row.recipe = steps
+        row.recipe_model = model
+        return row
 
     async def find(self, user_id: UUID, source: SaveSource, source_key: str) -> SavedMeal | None:
         """The user's existing save for a source row, if any."""
@@ -117,12 +132,13 @@ class SavedMealService:
         return await self._upsert(
             user_id,
             SaveSource.LOOKUP,
-            lookup_source_key(payload.dish),
+            str(payload.lookup_id),
             meal_type=None,
-            name=payload.dish,
+            name=await self._unique_name(user_id, payload.dish),
             description=payload.description,
             ingredients=[item.model_dump() for item in payload.ingredients],
-            recipe=None,
+            recipe=payload.recipe,
+            recipe_model=payload.recipe_model,
             tags=[SavedMealTag.DISH_CHECK.value],
             cautioned_ingredients=[],
             model=payload.model,
@@ -144,6 +160,26 @@ class SavedMealService:
     async def delete(self, row: SavedMeal) -> None:
         await self._session.delete(row)
         await self._session.flush()
+
+    async def _unique_name(self, user_id: UUID, name: str) -> str:
+        """The name, suffixed " (n)" if the user already saved one by that name.
+
+        Lookup saves are keyed on the per-result id, so nothing stops two saves
+        from sharing a name; this keeps the collection tellable-apart instead.
+        The base is trimmed so a suffixed name still fits the dish cap.
+        """
+        result = await self._session.execute(
+            select(SavedMeal.name).where(SavedMeal.user_id == user_id)
+        )
+        taken = {existing.casefold() for existing in result.scalars()}
+        if name.casefold() not in taken:
+            return name
+        for n in range(1, len(taken) + 2):
+            suffix = f" ({n})"
+            candidate = name[: MAX_DISH_CHARS - len(suffix)].rstrip() + suffix
+            if candidate.casefold() not in taken:
+                return candidate
+        raise AssertionError("unreachable: more suffixes than existing saves")
 
     async def _upsert(
         self, user_id: UUID, source: SaveSource, source_key: str, **content: Any

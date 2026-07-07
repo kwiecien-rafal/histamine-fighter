@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { EditRejectedError, errorMessage, type MealEdit, type MealType } from "../api/admin";
 import { MAX_DISH_CHARS, MAX_INGREDIENT_CHARS, MAX_INGREDIENTS } from "../api/client";
@@ -18,6 +18,9 @@ interface MealEditFormProps {
   // "free": the admin's comma-separated text input (default). "picker": the closed
   // saved-meal vocabulary as toggle buttons, used by the profile edit view.
   tagsMode?: "free" | "picker";
+  // Reports whether the fields differ from `initial`, so a parent can guard
+  // actions that would discard unsaved edits (the profile's recipe button).
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 interface Row {
@@ -36,6 +39,7 @@ export function MealEditForm({
   mealType,
   submitLabel = "Save changes",
   tagsMode = "free",
+  onDirtyChange,
 }: MealEditFormProps) {
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -56,6 +60,30 @@ export function MealEditForm({
   function setRow(index: number, patch: Partial<Row>) {
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   }
+
+  // Dirty means "the fields differ from initial", compared on content so the
+  // parent only hears actual flips; a re-created but equal `initial` prop
+  // never causes a callback.
+  const lastReportedDirty = useRef(false);
+  useEffect(() => {
+    if (!onDirtyChange) return;
+    const initialRows =
+      initial.ingredients.length > 0
+        ? initial.ingredients.map((i) => ({ name: i.name, category: i.category ?? "" }))
+        : [{ name: "", category: "" }];
+    const dirty =
+      name !== initial.name ||
+      description !== initial.description ||
+      recipeText !== (initial.recipe ?? []).join("\n") ||
+      JSON.stringify(rows) !== JSON.stringify(initialRows) ||
+      (tagsMode === "picker"
+        ? JSON.stringify(pickedTags) !== JSON.stringify(initial.tags)
+        : tagsText !== initial.tags.join(", "));
+    if (dirty !== lastReportedDirty.current) {
+      lastReportedDirty.current = dirty;
+      onDirtyChange(dirty);
+    }
+  }, [onDirtyChange, initial, name, description, rows, recipeText, tagsText, pickedTags, tagsMode]);
 
   // Mirror the server's minimums (name, description, at least one named ingredient) so a
   // blank create can't be sent only to bounce as a schema 422 the form would show as a

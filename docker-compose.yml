@@ -81,6 +81,9 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend/src:/app/src
+      # Static assets (fonts, images) change like source; without the mount a
+      # new file needs an image rebuild to show up.
+      - ./frontend/public:/app/public
       - ./frontend/index.html:/app/index.html
       - ./frontend/vite.config.ts:/app/vite.config.ts
       - ./frontend/tsconfig.json:/app/tsconfig.json

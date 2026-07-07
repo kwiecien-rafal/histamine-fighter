@@ -18,7 +18,7 @@ export function SavedMealCard({ meal }: SavedMealCardProps) {
   return (
     <Link
       to={`/profile/meals/${meal.id}`}
-      className="block rounded border border-stone-200 bg-white p-5 hover:border-forest-300 transition-colors"
+      className="flex h-full flex-col rounded border border-stone-200 bg-white p-5 hover:border-forest-300 transition-colors"
     >
       <div className="flex items-start justify-between gap-3 mb-1">
         <h3 className="text-lg font-medium">{meal.name}</h3>
@@ -48,8 +48,10 @@ export function SavedMealCard({ meal }: SavedMealCardProps) {
       </div>
       {meal.description && <p className="text-sm text-stone-600 mb-4">{meal.description}</p>}
 
-      {meal.tags.length > 0 && (
-        <ul className="flex flex-wrap items-center gap-1.5 mb-4">
+      {/* mt-auto pins this row to the card's bottom edge, so tags and the
+          action label line up across cards of different content heights. */}
+      <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+        <ul className="flex flex-wrap items-center gap-1.5">
           {meal.tags.map((tag) =>
             isColorTag(tag) ? (
               <li key={tag}>
@@ -70,12 +72,7 @@ export function SavedMealCard({ meal }: SavedMealCardProps) {
             ),
           )}
         </ul>
-      )}
-
-      <div className="mt-4 flex justify-end text-xs">
-        <span className="text-forest-800 font-medium">
-          {meal.has_recipe ? "Recipe · Edit →" : "View · Edit →"}
-        </span>
+        <span className="shrink-0 text-xs text-forest-800 font-medium">View · Edit →</span>
       </div>
     </Link>
   );
