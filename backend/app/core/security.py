@@ -71,7 +71,7 @@ def create_access_token(
     now = datetime.now(UTC)
     ttl = expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     payload: dict[str, Any] = {"sub": subject, "ver": token_version, "iat": now, "exp": now + ttl}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.jwt_signing_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_access_token(token: str) -> TokenClaims:
@@ -81,7 +81,7 @@ def decode_access_token(token: str) -> TokenClaims:
         TokenError: the token is expired, tampered with, or missing a claim.
     """
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_signing_key, algorithms=[settings.jwt_algorithm])
     except jwt.InvalidTokenError as exc:  # base class: expired, bad signature, malformed
         raise TokenError("Invalid or expired token.") from exc
     subject = payload.get("sub")
@@ -106,7 +106,7 @@ def create_purpose_token(purpose: str, *, jti: str, ttl: timedelta) -> str:
     """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {"purpose": purpose, "jti": jti, "iat": now, "exp": now + ttl}
-    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.jwt_signing_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_purpose_token(token: str, *, expected_purpose: str) -> str:
@@ -116,7 +116,7 @@ def decode_purpose_token(token: str, *, expected_purpose: str) -> str:
         TokenError: the token is expired, tampered with, or for another purpose.
     """
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(token, settings.jwt_signing_key, algorithms=[settings.jwt_algorithm])
     except jwt.InvalidTokenError as exc:
         raise TokenError("Invalid or expired token.") from exc
     if payload.get("purpose") != expected_purpose:

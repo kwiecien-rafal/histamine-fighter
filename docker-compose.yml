@@ -21,54 +21,17 @@ services:
       - "8000:8000"
     volumes:
       - ./backend/app:/app/app
-      # The composer reads culinary_anchors.json at runtime; mounting it keeps
-      # the anchor pools editable without a rebuild, like the app source.
       - ./backend/seed_data:/app/seed_data
-      # Persist the downloaded embedding model so it is fetched once, not on
-      # every container recreate (see FASTEMBED_CACHE_PATH below).
       - fastembed_cache:/app/.cache/fastembed
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DEBUG=true
       - DATABASE_URL=postgresql+asyncpg://histamine:histamine@db:5432/histamine
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      # Cloud-provider keys for the server-side LLM paths (composer, daily cron,
-      # Learn). The container never reads the root .env, so they are forwarded here.
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-gpt-oss:20b}
-      # Lifts HuggingFace's anonymous rate limit on the embedding-model download
-      # at startup. Optional; read from the root .env. huggingface_hub reads this
-      # env var directly, so no app config is involved.
-      - HF_TOKEN=${HF_TOKEN:-}
-      # Pin fastembed's cache to the persisted volume above; without this it
-      # defaults to /tmp and re-downloads the model on every container recreate.
       - FASTEMBED_CACHE_PATH=/app/.cache/fastembed
-      # Phase 2 public-auth + shared-tier config. Same reason as the keys above:
-      # the container never reads the root .env, so every runtime var is forwarded
-      # explicitly. Unset ones fall back to the app defaults (feature disabled).
-      - RESEND_API_KEY=${RESEND_API_KEY:-}
-      - "EMAIL_FROM=${EMAIL_FROM:-Histamine Fighter <login@histaminefighter.com>}"
-      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173}
-      - SHARED_MODEL=${SHARED_MODEL:-gpt-5.4-mini}
-      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
-      # Quota and session tuning. Integer settings cannot ride the ${VAR:-}
-      # blank fallback (pydantic refuses ""), so each default mirrors config.py.
-      - SHARED_USER_DAILY_LIMIT=${SHARED_USER_DAILY_LIMIT:-20}
-      - SHARED_IP_DAILY_LIMIT=${SHARED_IP_DAILY_LIMIT:-40}
-      - SHARED_GLOBAL_DAILY_LIMIT=${SHARED_GLOBAL_DAILY_LIMIT:-500}
-      - SIGNUP_IP_DAILY_LIMIT=${SIGNUP_IP_DAILY_LIMIT:-3}
-      - MAGIC_SEND_IP_DAILY_LIMIT=${MAGIC_SEND_IP_DAILY_LIMIT:-20}
-      - MAGIC_LINK_TTL_MINUTES=${MAGIC_LINK_TTL_MINUTES:-15}
-      - MAGIC_LINK_MAX_ATTEMPTS=${MAGIC_LINK_MAX_ATTEMPTS:-5}
-      - USER_SESSION_EXPIRE_DAYS=${USER_SESSION_EXPIRE_DAYS:-30}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -81,16 +44,12 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend/src:/app/src
-      # Static assets (fonts, images) change like source; without the mount a
-      # new file needs an image rebuild to show up.
       - ./frontend/public:/app/public
       - ./frontend/index.html:/app/index.html
       - ./frontend/vite.config.ts:/app/vite.config.ts
       - ./frontend/tsconfig.json:/app/tsconfig.json
     environment:
       - VITE_API_PROXY=http://backend:8000
-      # Vite exposes VITE_* from the process env; forwarded so Turnstile and the
-      # public-deployment default are exercisable under compose, not just prod.
       - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY:-}
       - VITE_PUBLIC_DEPLOYMENT=${VITE_PUBLIC_DEPLOYMENT:-}
     depends_on:

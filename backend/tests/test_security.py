@@ -65,13 +65,15 @@ def test_tampered_token_is_rejected() -> None:
 
 def test_token_without_a_subject_is_rejected() -> None:
     # A correctly signed token that simply carries no subject must still be refused.
-    token = jwt.encode({"ver": 1}, settings.secret_key, algorithm=settings.jwt_algorithm)
+    token = jwt.encode({"ver": 1}, settings.jwt_signing_key, algorithm=settings.jwt_algorithm)
     with pytest.raises(TokenError):
         decode_access_token(token)
 
 
 def test_token_without_a_version_is_rejected() -> None:
     # A pre-version token (signed before the claim existed) must not slip through.
-    token = jwt.encode({"sub": _SUBJECT}, settings.secret_key, algorithm=settings.jwt_algorithm)
+    token = jwt.encode(
+        {"sub": _SUBJECT}, settings.jwt_signing_key, algorithm=settings.jwt_algorithm
+    )
     with pytest.raises(TokenError):
         decode_access_token(token)

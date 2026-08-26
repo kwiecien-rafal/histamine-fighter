@@ -10,7 +10,7 @@ ROOT_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 # Obvious placeholder so local dev and tests boot without a secret. Production
 # (PUBLIC_DEPLOYMENT or DEBUG off) is refused while this is still in place (see
 # the validator below), so it can never stand in for a real production secret.
-DEV_SECRET_KEY = "dev-secret-change-me-not-for-production"
+DEV_JWT_SIGNING_KEY = "dev-secret-change-me-not-for-production"
 
 
 class Settings(BaseSettings):
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Admin auth: signs the JWT issued at /admin/auth/login. Sourced from the
     # environment in production; the dev placeholder is rejected there.
-    secret_key: str = DEV_SECRET_KEY
+    jwt_signing_key: str = DEV_JWT_SIGNING_KEY
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 
@@ -174,9 +174,9 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _blank_to_none(cls, value: object) -> object:
-        """Treat a blank optional secret as unset. Compose forwards absent vars as
-        empty strings (``VAR=${VAR:-}``), and an empty secret must disable its
-        feature, not half-enable it, matching the blank-SECRET_KEY handling below.
+        """Treat a blank optional secret as unset. ``.env.example`` ships these keys
+        blank, and an empty secret must disable its feature, not half-enable it,
+        matching the blank-JWT_SIGNING_KEY handling below.
         """
         if isinstance(value, str) and not value.strip():
             return None
@@ -232,13 +232,15 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_secret(self) -> "Settings":
         """Require a strong admin secret in production, failing fast at startup."""
-        # A blank SECRET_KEY is treated as unset so a copied .env.example falls
+        # A blank JWT_SIGNING_KEY is treated as unset so a copied .env.example falls
         # back to the placeholder instead of signing tokens with an empty key.
-        if not self.secret_key.strip():
-            self.secret_key = DEV_SECRET_KEY
-        if self.is_production and (self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32):
+        if not self.jwt_signing_key.strip():
+            self.jwt_signing_key = DEV_JWT_SIGNING_KEY
+        if self.is_production and (
+            self.jwt_signing_key == DEV_JWT_SIGNING_KEY or len(self.jwt_signing_key) < 32
+        ):
             raise ValueError(
-                "SECRET_KEY must be a strong, non-default value (>=32 chars) in "
+                "JWT_SIGNING_KEY must be a strong, non-default value (>=32 chars) in "
                 "production (PUBLIC_DEPLOYMENT=true or DEBUG=false)."
             )
         return self
