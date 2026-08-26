@@ -40,7 +40,7 @@ export function Terms() {
       <Section title="Changes">
         We may update these terms; material changes will be noted on this page. Continuing to use
         the service after a change means you accept it. Questions: open an issue on GitHub or
-        email privacy@histaminefighter.com.
+        email contact@histaminefighter.com.
       </Section>
     </article>
   );
