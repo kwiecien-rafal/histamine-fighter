@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Your saved meals · Histamine Fighter{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>Your saved meals</h1>
+    <p class="muted">
+      Each save is your own copy, taken at the moment you saved it — edit it freely, it
+      stays private to you. <a href="/account">Your account</a>
+    </p>
+  </header>
+
+  {% if error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  {% if total %}
+    <nav class="row" aria-label="Filter saved meals">
+      <a class="button" href="/profile"{% if not selected %} aria-current="true"{% endif %}>All</a>
+      {% for value in meal_types %}
+        <a class="button" href="/profile?filter={{ value.value }}"
+           {% if selected == value.value %}aria-current="true"{% endif %}>
+          {{ ui.meal_type_label(value.value) }}
+        </a>
+      {% endfor %}
+      <a class="button" href="/profile?filter={{ lookup_filter }}"
+         {% if selected == lookup_filter %}aria-current="true"{% endif %}>
+        Dish checks
+      </a>
+    </nav>
+
+    {% if meals %}
+      <ul class="grid plain-list">
+        {% for meal in meals %}
+          <li class="card">
+            <div class="row row--between">
+              <span class="badge">
+                {%- if meal.meal_type -%}
+                  {{ ui.meal_type_label(meal.meal_type.value) }}
+                {%- else -%}
+                  Dish check
+                {%- endif -%}
+              </span>
+              {% if meal.verdict %}{{ ui.verdict_badge(meal.verdict.value) }}{% endif %}
+            </div>
+            <h3><a class="card__link" href="/profile/meals/{{ meal.id }}">{{ meal.name }}</a></h3>
+            <p class="small muted">{{ meal.description }}</p>
+            <div class="row">
+              {% if meal.has_recipe %}<span class="badge">Recipe</span>{% endif %}
+              {% if meal.edited_at %}<span class="badge">Edited by you</span>{% endif %}
+            </div>
+            {% if meal.tags %}
+              <ul class="chips">
+                {% for tag in meal.tags %}
+                  <li class="badge">{{ ui.saved_tag_label(tag) }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="notice">
+        Nothing saved under this filter yet. <a href="/profile">Show everything</a>.
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="notice">
+      Nothing saved yet. Hit “Save this meal” on <a href="/daily">today's board</a> or on any
+      of the <a href="/meals">safe meals</a>.
+    </p>
+  {% endif %}
+{% endblock %}

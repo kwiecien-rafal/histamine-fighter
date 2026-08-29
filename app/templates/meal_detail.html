@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ meal.name }} · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <p><a href="/meals">← All meals</a></p>
+  {{ ui.meal_card(meal, heading="h1") }}
+  <div class="row">{{ ui.save_control(user, "curated", meal.id, save_id, back_url) }}</div>
+  {{ ui.medical_note() }}
+{% endblock %}

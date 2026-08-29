@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Safe meals · Histamine Fighter{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>Safe meals</h1>
+    <p class="muted">
+      Every meal here was composed from the curated safe index and approved by a human.
+    </p>
+  </header>
+
+  <nav class="row" aria-label="Filter by meal type">
+    <a class="button" href="{{ browse_url(none, 0) }}"{% if not meal_type %} aria-current="true"{% endif %}>All</a>
+    {% for value in meal_types %}
+      <a class="button" href="{{ browse_url(value, 0) }}"{% if meal_type == value %} aria-current="true"{% endif %}>{{ ui.meal_type_label(value.value) }}</a>
+    {% endfor %}
+  </nav>
+
+  {% if meals %}
+    <p class="small muted">Showing {{ first_shown }}–{{ last_shown }} of {{ total }}.</p>
+    <ul class="grid plain-list">
+      {% for meal in meals %}
+        <li class="card">
+          <div class="row row--between">
+            <span class="badge">{{ ui.meal_type_label(meal.meal_type.value) }}</span>
+            {{ ui.safety_badge() }}
+          </div>
+          <h3><a class="card__link" href="/meals/{{ meal.id }}">{{ meal.name }}</a></h3>
+          <p class="small muted">{{ meal.description }}</p>
+          {% if meal.tags %}
+            <ul class="chips">
+              {% for tag in meal.tags %}<li class="badge">{{ tag }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+          {{ ui.attribution(meal.model) }}
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if previous_url or next_url %}
+      <nav class="row row--between" aria-label="Pages">
+        {{ ui.step_link(previous_url, "← Previous") }}
+        {{ ui.step_link(next_url, "Next →") }}
+      </nav>
+    {% endif %}
+  {% elif meal_type %}
+    <p class="notice">
+      No approved {{ ui.meal_type_label(meal_type.value) | lower }} meals yet.
+      <a href="/meals">Try another filter</a>.
+    </p>
+  {% else %}
+    <p class="notice">No meals to show here yet. Check back soon.</p>
+  {% endif %}
+{% endblock %}

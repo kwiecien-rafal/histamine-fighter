@@ -1,0 +1,230 @@
+"""Shared fixtures for database-backed tests.
+
+Integration tests run against a dedicated ``<db>_test`` database on the same
+Postgres server used for development. The schema is built once per session
+from the models (kept in step with the migrations by ``alembic check``), and
+each test runs inside a transaction that is rolled back, so tests stay
+isolated and the database stays empty.
+
+Only tests that request the ``session`` fixture touch Postgres. The pure unit
+tests do not, so they still run without a database.
+"""
+
+import asyncio
+from collections.abc import AsyncIterator
+
+import pytest
+import pytest_asyncio
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import URL, make_url, text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+import app.models  # noqa: F401  (registers the models on Base.metadata)
+from app.config import settings
+from app.core.ratelimit import limiter
+from app.core.security import create_access_token, hash_password
+from app.db.base import Base
+from app.db.session import get_session
+from app.dependencies import (
+    get_http_client,
+    get_knowledge_service,
+    get_meal_service,
+    get_quota_service,
+)
+from app.enums import Role
+from app.main import create_app
+from app.models.user import User
+from app.services.knowledge_service import KnowledgeService
+from app.services.meal_service import MealService
+from tests.fakes import FakeEmbedder, FakeQuotaService, refusing_http_client
+
+ADMIN_EMAIL = "admin@example.com"
+ADMIN_PASSWORD = "supersecret"
+PUBLIC_EMAIL = "gerald@example.com"
+
+
+def _test_database_url() -> URL:
+    url = make_url(settings.database_url)
+    return url.set(database=f"{url.database}_test")
+
+
+TEST_DATABASE_URL = _test_database_url()
+
+
+async def _create_database_and_schema() -> None:
+    """Recreate the test database and build the schema from the models."""
+    db_name = TEST_DATABASE_URL.database
+    admin_engine = create_async_engine(settings.database_url, isolation_level="AUTOCOMMIT")
+    try:
+        async with admin_engine.connect() as conn:
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)'))
+            await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    finally:
+        await admin_engine.dispose()
+
+    engine = create_async_engine(TEST_DATABASE_URL)
+    try:
+        async with engine.begin() as conn:
+            # create_all needs the extensions the migrations would otherwise install.
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            await conn.run_sync(Base.metadata.create_all)
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def _database_schema() -> None:
+    asyncio.run(_create_database_and_schema())
+
+
+@pytest_asyncio.fixture
+async def session(_database_schema: None) -> AsyncIterator[AsyncSession]:
+    """A session bound to a transaction that is rolled back after each test.
+
+    Tests should ``flush`` rather than ``commit`` so the rollback keeps the
+    database empty between tests.
+    """
+    engine = create_async_engine(TEST_DATABASE_URL)
+    connection = await engine.connect()
+    transaction = await connection.begin()
+    db = AsyncSession(bind=connection, expire_on_commit=False)
+    try:
+        yield db
+    finally:
+        await db.close()
+        # A failed flush rolls the transaction back itself, so only roll back
+        # when it is still active to avoid a spurious warning.
+        if transaction.is_active:
+            await transaction.rollback()
+        await connection.close()
+        await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _offline_auth_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin every third-party sign-in credential to unconfigured, whatever the
+    operator's .env says.
+
+    The suite runs fully offline (the refusing HTTP client enforces it); a real
+    RESEND_API_KEY in the developer's .env must not flip the app into the send
+    path, and configured OAuth apps must not change which buttons a page renders.
+    Tests that exercise the configured paths monkeypatch these themselves.
+    """
+    monkeypatch.setattr(settings, "resend_api_key", None)
+    monkeypatch.setattr(settings, "turnstile_secret_key", None)
+    monkeypatch.setattr(settings, "turnstile_site_key", None)
+    monkeypatch.setattr(settings, "google_client_id", None)
+    monkeypatch.setattr(settings, "google_client_secret", None)
+    monkeypatch.setattr(settings, "github_client_id", None)
+    monkeypatch.setattr(settings, "github_client_secret", None)
+
+
+@pytest.fixture
+def fake_embedder() -> FakeEmbedder:
+    """A deterministic, offline embedder so retrieval tests skip the model."""
+    return FakeEmbedder()
+
+
+@pytest.fixture
+def fake_quota() -> FakeQuotaService:
+    """The in-memory quota double the test app runs on.
+
+    The real QuotaService commits in its own transactions, which would escape
+    the rollback isolation; its SQL is covered directly in test_quota_service.py.
+    """
+    return FakeQuotaService()
+
+
+@pytest_asyncio.fixture
+async def test_app(session: AsyncSession, fake_quota: FakeQuotaService) -> AsyncIterator[FastAPI]:
+    """The app wired to the test transaction and offline test doubles.
+
+    Exposed as its own fixture so a test can add further dependency_overrides
+    (e.g. a scripted outbound HTTP client for OAuth) before making requests.
+    """
+    app = create_app()
+
+    async def _use_test_session() -> AsyncIterator[AsyncSession]:
+        yield session
+
+    def _use_fake_embedder() -> KnowledgeService:
+        return KnowledgeService(session, FakeEmbedder())
+
+    def _use_fake_meal_service() -> MealService:
+        return MealService(session, FakeEmbedder())
+
+    app.dependency_overrides[get_session] = _use_test_session
+    # The real embedder would download a model on first use; API tests retrieve
+    # through the deterministic fake instead.
+    app.dependency_overrides[get_knowledge_service] = _use_fake_embedder
+    app.dependency_overrides[get_meal_service] = _use_fake_meal_service
+    app.dependency_overrides[get_quota_service] = lambda: fake_quota
+    # Nothing in the suite may reach the network; OAuth tests override this with
+    # a scripted transport.
+    app.dependency_overrides[get_http_client] = refusing_http_client
+    # The limiter is process-wide and counts by client IP, which is the same for
+    # every test request; disabled here so unrelated tests cannot trip it. The
+    # rate-limit tests re-enable it explicitly.
+    limiter.enabled = False
+    try:
+        yield app
+    finally:
+        limiter.enabled = True
+
+
+@pytest_asyncio.fixture
+async def client(test_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    """An HTTP client whose requests run on the test transaction."""
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as http_client:
+        yield http_client
+
+
+@pytest_asyncio.fixture
+async def admin_user(session: AsyncSession) -> User:
+    """An active admin account on the test transaction."""
+    user = User(
+        email=ADMIN_EMAIL,
+        password_hash=hash_password(ADMIN_PASSWORD),
+        role=Role.ADMIN,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+@pytest_asyncio.fixture
+async def authenticated_client(client: AsyncClient, admin_user: User) -> AsyncClient:
+    """A client that has logged in, so it carries the httpOnly session cookie.
+
+    Goes through the real /login flow rather than minting a header by hand: the
+    server sets the cookie and httpx keeps it in the jar for the rest of the test.
+    """
+    resp = await client.post(
+        "/admin/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+    )
+    assert resp.status_code == 200
+    return client
+
+
+@pytest_asyncio.fixture
+async def public_user(session: AsyncSession) -> User:
+    """An active passwordless public account on the test transaction."""
+    user = User(email=PUBLIC_EMAIL, password_hash=None, role=Role.USER)
+    session.add(user)
+    await session.flush()
+    return user
+
+
+@pytest_asyncio.fixture
+async def user_client(client: AsyncClient, public_user: User) -> AsyncClient:
+    """A client carrying a valid public-user session cookie.
+
+    Minted directly rather than driven through magic verify: the cookie contents
+    are the same, and the verify flow has its own dedicated tests.
+    """
+    token = create_access_token(str(public_user.id), token_version=public_user.token_version)
+    client.cookies.set(settings.session_cookie_name, token)
+    return client

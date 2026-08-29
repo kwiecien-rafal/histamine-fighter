@@ -1,0 +1,93 @@
+{#
+  The AI panel every page carries: which model answers, and what this browser has
+  spent so far. Both are read and written by app.js against localStorage — an API
+  key is sent as a header on the call it pays for and is never posted to us, stored
+  by us, or logged (CLAUDE section 13). Without JavaScript the panel simply shows
+  the deployment's own default, which is what the server would have used anyway.
+#}
+
+{% set PROVIDER_ROWS = [
+  {"id": "shared", "label": "Free shared tier", "note": "Our model on our bill, capped per day. Needs an account, but no key of your own."},
+  {"id": "ollama", "label": "Local Ollama", "note": "A model on your own machine. No key, no cost, and nothing leaves it."},
+  {"id": "openai", "label": "OpenAI", "note": "Your own OpenAI key."},
+  {"id": "anthropic", "label": "Anthropic", "note": "Your own Anthropic key."},
+  {"id": "gemini", "label": "Google Gemini", "note": "Your own Gemini key."},
+  {"id": "openrouter", "label": "OpenRouter", "note": "Your own OpenRouter key. Hundreds of models, so this one needs the model named."}
+] %}
+
+<section class="wrap ai-panel">
+  <details id="ai-settings">
+    <summary>AI settings</summary>
+    <p class="small muted">
+      Which model answers your dish checks. Keys stay in this browser and travel only as
+      a request header — we never store them.
+    </p>
+
+    <ul class="plain-list stack">
+      {% for row in PROVIDER_ROWS %}
+        {% set unavailable = (row.id == "shared" and not user) or (row.id == "ollama" and public_deployment) %}
+        <li>
+          <label class="check">
+            <input type="radio" name="provider" value="{{ row.id }}" {% if unavailable %}disabled{% endif %} />
+            {{ row.label }}
+          </label>
+          <p class="small muted">{{ row.note }}</p>
+
+          {% if row.id == "shared" and not user %}
+            <p class="small muted"><a href="/login">Sign in</a> to unlock it.</p>
+          {% elif row.id == "ollama" and public_deployment %}
+            <p class="small muted">Available when you run the stack yourself.</p>
+          {% endif %}
+
+          {# Nothing to set up for a provider this deployment cannot offer. #}
+          {% if not unavailable %}
+            <div class="stack" data-fields="{{ row.id }}" hidden>
+              {% if row.id == "shared" %}
+                <p class="small muted">
+                  Nothing to configure. <a href="/account">Your account</a> shows today's allowance.
+                </p>
+              {% else %}
+                {% if row.id == "ollama" %}
+                  <label class="field field--wide">
+                    <span>Base URL</span>
+                    <input type="text" data-llm="baseUrl" data-provider="ollama"
+                           placeholder="server default — e.g. http://localhost:11434" />
+                  </label>
+                {% else %}
+                  <label class="field field--wide">
+                    <span>API key</span>
+                    <input type="password" data-llm="key" data-provider="{{ row.id }}"
+                           autocomplete="off" spellcheck="false" placeholder="stays in this browser" />
+                  </label>
+                {% endif %}
+                <label class="field field--wide">
+                  <span>Model{% if row.id == 'openrouter' %} (required){% endif %}</span>
+                  <input type="text" data-llm="model" data-provider="{{ row.id }}"
+                         placeholder="{% if row.id == 'openrouter' %}e.g. anthropic/claude-sonnet-4{% elif DEFAULT_MODELS.get(row.id) %}provider default — e.g. {{ DEFAULT_MODELS.get(row.id) }}{% else %}server default{% endif %}" />
+                </label>
+              {% endif %}
+            </div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </details>
+
+  <details id="ai-usage">
+    <summary>Model usage <span class="badge" data-usage="summary">nothing yet</span></summary>
+    <p class="small muted">
+      Counted in this browser only — token totals, never what you looked up. Costs are
+      approximate list prices as of <span data-usage="priced">—</span>; an unpriced or
+      self-hosted model shows no figure.
+    </p>
+    <div class="scroll-x">
+      <table class="table small">
+        <thead>
+          <tr><th>Model</th><th>Calls</th><th>In</th><th>Out</th><th>≈ cost</th></tr>
+        </thead>
+        <tbody data-usage="rows"></tbody>
+      </table>
+    </div>
+    <p><button class="button" type="button" data-usage="reset">Reset the tally</button></p>
+  </details>
+</section>

@@ -33,13 +33,13 @@ The issue at hand is that even if we know a dish ingredient is either heavy on h
 - **Backend.** FastAPI (async), SQLAlchemy 2, Pydantic v2. Business logic lives in a service layer with no HTTP awareness.
 - **AI layer.** LangChain chat models behind one swappable seam; agents return typed Pydantic results. Prompts stored Markdown files.
 - **Retrieval.** Postgres with pgvector and local fastembed embeddings back the Learn answers and meal composition.
-- **Frontend.** React 19, Vite, TypeScript, Tailwind. The dev server proxies the API so the admin session cookie stays same-origin.
+- **Frontend.** Server-rendered Jinja2 pages with htmx for the interactive steps, served by the same FastAPI app. One hand-written stylesheet, no Node and no build step.
 
-Using: Python 3.12, FastAPI, SQLAlchemy (async), Alembic, LangChain, pgvector, fastembed, React 19, Vite, TypeScript, Tailwind, Docker Compose, Postgres 16.
+Using: Python 3.12, FastAPI, SQLAlchemy (async), Alembic, LangChain, pgvector, fastembed, Jinja2, htmx, Docker Compose, Postgres 16.
 
 ## Install
 
-Requires Docker, [uv](https://docs.astral.sh/uv/), and Node 20+.
+Requires Docker and [uv](https://docs.astral.sh/uv/).
 
 ### Quick start
 
@@ -49,13 +49,13 @@ Install [`just`](https://github.com/casey/just), a small cross-platform command 
 just bootstrap
 ```
 
-That copies `.env`, starts Postgres and waits for it to be healthy, applies migrations, seeds the factual data, then builds and starts the backend and frontend. Open http://localhost:5173.
+That copies `.env`, starts Postgres and waits for it to be healthy, applies migrations, seeds the factual data, then builds and starts the app. Open http://localhost:8000.
 
 Run `just` to list every task. The common ones:
 
 ```bash
 just admin you@example.com   # create an admin account (optional; prompts for a password)
-just test                    # backend test suite
+just test                    # test suite
 just reset                   # wipe the database volume and rebuild from scratch
 ```
 
@@ -72,46 +72,45 @@ cp .env.example .env
 docker compose up -d db
 
 # 2. Apply the schema and seed the factual data (run from the host)
-uv run --directory backend alembic upgrade head
-uv run --directory backend python -m app.scripts.seed_histamine_db
-uv run --directory backend python -m app.scripts.seed_knowledge
+uv run alembic upgrade head
+uv run python -m app.scripts.seed_histamine_db
+uv run python -m app.scripts.seed_knowledge
 
 # 3. Create an admin account (you can skip this if all you want is the dish replacement)
-uv run --directory backend python -m app.scripts.create_admin --email you@example.com
+uv run python -m app.scripts.create_admin --email you@example.com
 
-# 4. Start the backend and frontend
-docker compose up -d --build backend frontend
+# 4. Start the app (one service, serving both the pages and the API)
+docker compose up -d --build backend
 ```
 
 Migrations and seeds run on the host, not in the backend container: the image ships only the application code, while Alembic and the seed data live in the repo.
 
 ## Usage
 
-Open http://localhost:5173. Pick a provider and paste an API key in the in-app settings, or run a local Ollama model. Server-side keys in `.env` are only needed for the daily-board generation script.
+Open http://localhost:8000. Pick a provider and paste an API key in the in-app settings, or run a local Ollama model. Server-side keys in `.env` are only needed for the daily-board generation script.
 
-Run the services natively instead of in Docker:
+Run the app natively instead of in Docker:
 
 ```bash
-uv run --directory backend uvicorn app.main:app --reload
-cd frontend && npm install && npm run dev
+uv run uvicorn app.main:app --reload
 ```
 
 Generate a day's meal board (needs a tool-calling model configured):
 
 ```bash
-uv run --directory backend python -m app.scripts.generate_daily_meals
+uv run python -m app.scripts.generate_daily_meals
 ```
 
 After changing a model, author a migration, review it, then apply it:
 
 ```bash
-uv run --directory backend alembic revision --autogenerate -m "describe change"
-uv run --directory backend alembic upgrade head
+uv run alembic revision --autogenerate -m "describe change"
+uv run alembic upgrade head
 ```
 
 ## Configuration
 
-All settings are environment variables, documented inline in `.env.example`. The app reads `.env` from the repo root. User-supplied LLM keys travel as request headers and are never stored.
+Secrets and per-deployment values live in `.env` at the repo root, listed in `.env.example`. Everything else has a validated default in `app/config.py`. User-supplied LLM keys travel as request headers and are never stored.
 
 ## Operations
 
@@ -139,5 +138,5 @@ before sending a large PR.
 
 [MIT](LICENSE) (c) 2026 Rafał Kwiecień
 
-Artwork in `frontend/public/images/` is licensed separately under
-[CC BY 4.0](frontend/public/images/LICENSE.md) — reuse requires credit.
+Artwork in `app/static/images/` is licensed separately under
+[CC BY 4.0](app/static/images/LICENSE.md) — reuse requires credit.

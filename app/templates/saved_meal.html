@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ meal.name }} · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <p><a href="/profile">← Your saved meals</a></p>
+
+  <header>
+    <h1>{{ meal.name }}</h1>
+    <div class="row">
+      {% if meal.meal_type %}
+        <span class="badge">{{ ui.meal_type_label(meal.meal_type.value) }}</span>
+      {% endif %}
+      {% if meal.verdict %}{{ ui.verdict_badge(meal.verdict.value) }}{% endif %}
+      {{ ui.attribution(meal.model) }}
+    </div>
+  </header>
+
+  {% if error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  {% if meal.cautioned_ingredients %}
+    <div class="notice notice--caution small">
+      <strong>Enjoy in moderation:</strong>
+      <ul>
+        {% for item in meal.cautioned_ingredients %}
+          <li><strong>{{ item.name }}</strong>: {{ item.note }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if not meal.recipe %}
+    <section class="card stack">
+      <h2>No recipe yet</h2>
+      <p class="small muted">
+        We can write one from the ingredients below. Save any edits first — the recipe is
+        written from the saved copy, and it is written once.
+      </p>
+      <form method="post" action="/profile/meals/{{ meal.id }}/recipe">
+        <button class="button" type="submit">Write the recipe</button>
+      </form>
+    </section>
+  {% endif %}
+
+  <section class="stack">
+    <h2>Your copy</h2>
+    <p class="small muted">
+      Edits touch your copy only{% if not meal.edited_at %}, and it stops showing as
+      verified once you change it{% endif %}. Nothing here is re-checked against the
+      ingredient index.
+    </p>
+
+    <form class="stack" method="post" action="/profile/meals/{{ meal.id }}">
+      <label class="field field--wide">
+        <span>Name</span>
+        <input type="text" name="name" value="{{ form.name }}" required />
+      </label>
+
+      <label class="field field--wide">
+        <span>Description</span>
+        <textarea name="description" rows="3" required>{{ form.description }}</textarea>
+      </label>
+
+      <label class="field field--wide">
+        <span>Ingredients — one per line, as <code>name {{ separator }} category</code></span>
+        <textarea name="ingredients" rows="8" required>{{ form.ingredients }}</textarea>
+      </label>
+
+      <label class="field field--wide">
+        <span>Recipe — one step per line, empty for none</span>
+        <textarea name="recipe" rows="8">{{ form.recipe }}</textarea>
+      </label>
+
+      <fieldset class="field field--wide">
+        <legend>Tags</legend>
+        <ul class="chips plain-list">
+          {% for tag in saved_tags %}
+            <li>
+              <label class="check">
+                <input type="checkbox" name="tags" value="{{ tag.value }}"
+                       {% if tag.value in form.tags %}checked{% endif %} />
+                {{ ui.saved_tag_label(tag.value) }}
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+      </fieldset>
+
+      <p><button class="button" type="submit">Save my copy</button></p>
+    </form>
+
+    {% if meal.recipe and meal.recipe_model %}
+      <p class="small muted">Recipe written by <span class="badge">{{ meal.recipe_model }}</span></p>
+    {% endif %}
+  </section>
+
+  <section class="stack">
+    <h2>Remove</h2>
+    <p class="small muted">This drops your copy for good. The original meal stays where it is.</p>
+    <form method="post" action="/profile/meals/{{ meal.id }}/delete">
+      <button class="button" type="submit">Remove from saved</button>
+    </form>
+  </section>
+
+  {{ ui.medical_note() }}
+{% endblock %}

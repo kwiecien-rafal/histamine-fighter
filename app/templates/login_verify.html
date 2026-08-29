@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Finish signing in · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  {% if token %}
+    <h1>Finish signing in</h1>
+    <p class="lede">
+      One click and you're in. The link is spent the moment you confirm, so nothing that
+      merely previewed this page can have used it.
+    </p>
+    <form method="post" action="/login/verify">
+      <input type="hidden" name="token" value="{{ token }}" />
+      <button class="button" type="submit">Confirm and sign in</button>
+    </form>
+  {% else %}
+    <h1>That link no longer works</h1>
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+    <p>
+      Sign-in links work once and expire quickly.
+      <a href="/login">Request a fresh one</a>, or type the code from your newest email.
+    </p>
+  {% endif %}
+{% endblock %}

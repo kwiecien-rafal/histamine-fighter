@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Check your inbox · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <h1>Check your inbox</h1>
+  <p class="lede">
+    If <strong>{{ email }}</strong> can be signed in with, a link is on its way. Click it,
+    or type the {{ code_length }}-digit code from the email below.
+  </p>
+
+  {% if error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <form class="stack" method="post" action="/login/code">
+    <input type="hidden" name="email" value="{{ email }}" />
+    <label class="field">
+      <span>{{ code_length }}-digit code</span>
+      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*"
+             maxlength="{{ code_length }}" autocomplete="one-time-code" required autofocus />
+    </label>
+    <p><button class="button" type="submit">Sign in with the code</button></p>
+  </form>
+
+  <p class="small muted">
+    Nothing arrived? Check the spam folder — the code is in the subject line. Or
+    <a href="/login">start again with a different address</a>.
+  </p>
+{% endblock %}

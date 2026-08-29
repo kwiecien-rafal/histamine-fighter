@@ -1,0 +1,137 @@
+{#
+  Fragments the admin panel uses and no public page does. Everything here shows the
+  domain's own values — ``pending``, ``breakfast``, the model's name — rather than the
+  site's branded wording: admin tooling stays neutral and readable (CLAUDE section 19).
+
+  ``_macros.html`` is imported for the pieces that are genuinely shared, so the composer
+  trace renders here exactly as it does on a public meal.
+#}
+{% import "_macros.html" as ui %}
+
+{% set STATE_TONES = {"approved": "badge--ok", "rejected": "badge--danger"} %}
+
+
+{# One review action as its own form, carrying the tab to return to when there is one. #}
+{% macro action_form(action, label, tab) -%}
+  <form method="post" action="{{ action }}">
+    {% if tab %}<input type="hidden" name="status" value="{{ tab }}" />{% endif %}
+    <button class="button" type="submit">{{ label }}</button>
+  </form>
+{%- endmacro %}
+
+
+{#
+  What can still be done to a row in its current state. Editing is offered only while a
+  meal is pending, which is the only state the index re-check will accept a rewrite in.
+  Removal sits behind a disclosure: it is the one action with nothing left to audit
+  afterwards, so it should take a deliberate second click.
+#}
+{% macro moderation(base, id, state, tab) -%}
+  <div class="row">
+    {% if state == "pending" %}
+      <a class="button" href="{{ base }}/{{ id }}">Edit</a>
+    {% endif %}
+    {% if state != "approved" %}
+      {{ action_form(base ~ "/" ~ id ~ "/approve", "Approve", tab) }}
+    {% endif %}
+    {% if state != "rejected" %}
+      {{ action_form(base ~ "/" ~ id ~ "/reject", "Reject", tab) }}
+    {% endif %}
+  </div>
+  <details>
+    <summary class="small">Remove permanently</summary>
+    <p class="small muted">
+      Drops the row for good and frees its slot. Rejecting keeps it on record instead.
+    </p>
+    {{ action_form(base ~ "/" ~ id ~ "/delete", "Remove permanently", tab) }}
+  </details>
+{%- endmacro %}
+
+
+{#
+  One row awaiting a decision, with everything approval rests on: the ingredients as
+  composed, the ones the index could not vouch for, and the full reasoning trace (the
+  model's own drafting included, which the public board never shows).
+
+  ``row`` carries the review metadata and ``content`` the meal itself. For a curated meal
+  they are the same object; a daily slot keeps its meal in a content blob.
+#}
+{% macro review_card(row, content, base, tab="") -%}
+  <article class="card stack">
+    <div class="row row--between">
+      <h3>{{ content.name }}</h3>
+      <span class="row">
+        <span class="badge">{{ row.meal_type.value }}</span>
+        <span class="badge {{ STATE_TONES.get(row.approval_status.value, '') }}">
+          {{ row.approval_status.value }}
+        </span>
+      </span>
+    </div>
+
+    <p class="small muted">{{ content.description }}</p>
+
+    <ul class="chips">
+      {% for item in content.ingredients %}
+        <li class="chip">
+          {{ item.name }}{% if item.category %} <span class="muted">· {{ item.category }}</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+
+    {% if content.unverified_ingredients %}
+      <p class="notice notice--caution small">
+        <strong>Not in the index:</strong>
+        {{ content.unverified_ingredients | join(", ") }} — the gate could not vouch for
+        these, so check them yourself before approving.
+      </p>
+    {% endif %}
+
+    {% if content.cautioned_ingredients %}
+      <div class="notice notice--caution small">
+        <strong>Moderately compatible:</strong>
+        <ul>
+          {% for item in content.cautioned_ingredients %}
+            <li><strong>{{ item.name }}</strong>: {{ item.note }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if content.recipe %}
+      <details>
+        <summary class="small">Recipe ({{ content.recipe | length }} steps)</summary>
+        <ol class="small">
+          {% for step in content.recipe %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+      </details>
+    {% endif %}
+
+    {{ ui.trace_details(row.reasoning_trace) }}
+
+    <p class="row small muted">
+      <span class="badge">{{ row.model }}</span>
+      {% if row.usage %}
+        <span class="badge">{{ row.usage.calls }} calls · {{ row.usage.total_tokens }} tokens</span>
+      {% endif %}
+      {% if row.approved_by %}<span>approved by {{ row.approved_by }}</span>{% endif %}
+    </p>
+
+    {{ moderation(base, row.id, row.approval_status.value, tab) }}
+  </article>
+{%- endmacro %}
+
+
+{#
+  Where a live composition writes itself: the slot in progress, the trace as it arrives,
+  and any refusal worth reading. Empty and hidden until admin.js has a run to show.
+#}
+{% macro compose_output(id) -%}
+  <div class="stack" id="{{ id }}" hidden>
+    <p class="row">
+      <span class="small" data-compose-status aria-live="polite"></span>
+      <button class="button" type="button" data-compose-stop hidden>Stop</button>
+    </p>
+    <ol class="small stack" data-compose-log></ol>
+    <div class="stack" data-compose-notes role="alert"></div>
+  </div>
+{%- endmacro %}

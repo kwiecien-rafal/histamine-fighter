@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Admin · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>Admin</h1>
+    <p class="muted">
+      Review what the composer wrote, approve what is safe to publish, and choose the
+      model it runs on.
+    </p>
+  </header>
+
+  {% if error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  {% if user %}
+    <p class="notice">
+      You're signed in as {{ user.email }}, which is not an admin account.
+      <a href="/">Back to the site</a>.
+    </p>
+  {% else %}
+    <form class="stack" method="post" action="/admin/login">
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" value="{{ email }}"
+               maxlength="{{ max_email_chars }}" autocomplete="username" required autofocus />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password"
+               maxlength="{{ max_password_chars }}" autocomplete="current-password" required />
+      </label>
+      <p><button class="button" type="submit">Sign in</button></p>
+    </form>
+
+    <p class="small muted">
+      Admin accounts are created from the command line with
+      <code>just admin you@example.com</code> — there is no sign-up, by design. Everyone
+      else signs in <a href="/login">without a password</a>.
+    </p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if is_today %}Today's meals{% else %}{{ board.date | board_date }}{% endif %} · Histamine Fighter
+{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>{% if is_today %}Today's meals{% else %}{{ board.date | board_date }}{% endif %}</h1>
+    {% if is_today %}
+      <p class="muted">Four histamine-safe meals our agent composes fresh each day.</p>
+    {% endif %}
+    {{ ui.medical_note() }}
+  </header>
+
+  <nav class="row row--between" aria-label="Browse board days">
+    {{ ui.step_link(previous_url, "← Previous day") }}
+    {{ ui.step_link(next_url, "Next day →") }}
+  </nav>
+
+  {% if board.status == "revealed" %}
+    <section class="stack">
+      <p class="small muted">{{ board.meals | length }} meals on this board.</p>
+      {% for meal in board.meals %}
+        {{ ui.meal_card(meal) }}
+        <div class="row">
+          {{ ui.save_control(user, "daily", meal.id, saved.get(meal.id | string), back_url) }}
+        </div>
+      {% endfor %}
+    </section>
+  {% elif not is_today %}
+    {# A past day that never reached an approval: nothing to count down to, just the record. #}
+    <p class="notice">No board was published on {{ board.date | board_date }}.</p>
+  {% elif board.reveal_at %}
+    <section class="card stack">
+      <p class="small muted">Next board in</p>
+      <p class="countdown">{{ board.reveal_at | countdown }}</p>
+      <p class="muted">
+        The board unlocks at {{ board.reveal_at | utc_time }} — reload then to see the meals.
+      </p>
+    </section>
+  {% else %}
+    <p class="notice">Today's board hasn't been set yet. Check back a little later.</p>
+  {% endif %}
+{% endblock %}

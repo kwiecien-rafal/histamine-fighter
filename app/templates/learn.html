@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Learn · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>Know your enemy</h1>
+    <p class="muted">
+      What histamine is, why it hits, and which foods pick the fight. Everything here comes
+      from a curated, cited library — never a model improvising about your health.
+    </p>
+  </header>
+
+  {% if articles %}
+    {% for topic, entries in articles | groupby("topic") %}
+      <section>
+        <h2>{{ topic }}</h2>
+        <ul>
+          {% for article in entries %}<li>{{ article.title }}</li>{% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  {% else %}
+    <p class="notice">
+      The knowledge library is empty on this deployment — run the seed script to fill it.
+    </p>
+  {% endif %}
+{% endblock %}

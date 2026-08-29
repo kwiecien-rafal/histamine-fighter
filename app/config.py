@@ -1,0 +1,258 @@
+from pathlib import Path
+
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The .env lives at the repo root, one level above this package. Resolved absolutely
+# so a script started from any working directory still finds it.
+ROOT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
+# Obvious placeholder so local dev and tests boot without a secret. Production
+# (PUBLIC_DEPLOYMENT or DEBUG off) is refused while this is still in place (see
+# the validator below), so it can never stand in for a real production secret.
+DEV_JWT_SIGNING_KEY = "dev-secret-change-me-not-for-production"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=ROOT_ENV_FILE, extra="ignore")
+
+    debug: bool = True
+
+    # Browser origins allowed to call the JSON API cross-origin. The app's own pages
+    # are same-origin and never need an entry here; this is only for third-party
+    # clients of /api/v1, so the default trusts none.
+    cors_origins: list[str] = []
+
+    public_deployment: bool = False
+
+    # Admin auth: signs the JWT issued at /admin/auth/login. Sourced from the
+    # environment in production; the dev placeholder is rejected there.
+    jwt_signing_key: str = DEV_JWT_SIGNING_KEY
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+
+    # Browser session cookie carrying the admin JWT. Set httpOnly by the route so
+    # XSS cannot read it. The Secure/SameSite flags and lifetime come from below.
+    session_cookie_name: str = "hf_session"
+
+    # Public user sessions live much longer than the admin's 60 minutes: signing in
+    # again via email or OAuth is friction, and a stolen public token only spends
+    # the shared-tier quota. Admins keep the short TTL regardless of login method.
+    user_session_expire_days: int = Field(default=30, ge=1, le=365)
+
+    # The app's own public address, for links the backend hands to browsers: the
+    # magic-link URL in emails and the post-OAuth redirect.
+    app_base_url: str = "http://localhost:8000"
+
+    # Magic-link login. Links and their 6-digit codes expire together; the attempt
+    # cap bounds online guessing of a code (10^6 space needs far more tries).
+    magic_link_ttl_minutes: int = Field(default=15, ge=1, le=120)
+    magic_link_max_attempts: int = Field(default=5, ge=1, le=20)
+
+    # Resend transactional email. Unset means dev/self-hosted mode: the magic link
+    # is logged instead of sent, so login works with zero external services.
+    resend_api_key: str | None = None
+    email_from: str = "Histamine Fighter <login@mail.histaminefighter.com>"
+
+    # Cloudflare Turnstile on the magic-link request form. Unset skips verification
+    # (dev and self-hosted). The site key is public and is rendered into the sign-in
+    # page; the secret key stays server-side and verifies the token the widget issues.
+    # Both must be set for the gate to run: the widget cannot render without one, and
+    # verification is skipped without the other.
+    turnstile_site_key: str | None = None
+    turnstile_secret_key: str | None = None
+
+    # OAuth sign-in. A provider with either value unset is disabled (501 at /start),
+    # so self-hosters can run without registering OAuth apps.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+
+    # Shared LLM tier: signed-in users ride the operator's OpenAI key, hard-pinned
+    # to this model server-side. Client model/key headers are ignored on this tier.
+    shared_model: str = "gpt-5.4-mini"
+
+    # Daily ceilings for the shared tier, counted in LLM-backed requests per UTC
+    # day. Effective per-user limit is min(user, ip); the global cap bounds total
+    # spend however many accounts exist. The signup cap slows account farming.
+    shared_user_daily_limit: int = Field(default=20, ge=1)
+    shared_ip_daily_limit: int = Field(default=40, ge=1)
+    shared_global_daily_limit: int = Field(default=500, ge=1)
+    signup_ip_daily_limit: int = Field(default=3, ge=1)
+
+    # Magic-link emails one IP may trigger per UTC day. Bounds inbox bombing and
+    # Resend spend when Turnstile is not configured; a hit answers the same uniform
+    # 200, silently not sending.
+    magic_send_ip_daily_limit: int = Field(default=20, ge=1)
+
+    # Per-IP ceiling for the LLM-backed endpoints (the ones that cost money).
+    rate_limit_per_minute: int = 10
+
+    # Tighter per-IP ceiling on admin credential checks, to blunt brute force.
+    auth_rate_limit_per_minute: int = 5
+
+    # Per-IP ceiling on saved-meal writes. Roomier than the auth limit: a burst of
+    # save taps across a board is normal use, not an attack.
+    save_rate_limit_per_minute: int = 30
+
+    # Most saved meals one account may hold; an abuse bound on storage, not a
+    # product limit a real user should ever meet.
+    saved_meals_cap: int = Field(default=200, ge=1)
+
+    # How long a cached Learn answer stays valid. Re-seeding the knowledge
+    # corpus clears the cache regardless.
+    learn_cache_ttl_days: int = 7
+
+    # How long cached dish-lookup rows stay valid. Deliberately long: a cached
+    # assessment is re-graded against the live index before it is served, so
+    # the TTL is garbage collection, not correctness.
+    lookup_cache_ttl_days: int = 90
+
+    # Hour the daily board unlocks, applied by the generation script when it stamps
+    # each suggestion's reveal time. Deliberately UTC, not local: the board reveals
+    # at the same instant for every visitor worldwide.
+    daily_reveal_hour_utc: int = Field(default=10, ge=0, le=23)
+
+    # How many days ahead, starting tomorrow, the nightly cron keeps the board filled.
+    # 1 preserves the "just tomorrow" cadence; raise for a longer auto-runway.
+    daily_cron_horizon_days: int = Field(default=1, ge=1, le=14)
+
+    # The furthest ahead, in days from today, an admin may manually queue a board.
+    daily_queue_max_ahead_days: int = Field(default=14, ge=1, le=90)
+
+    # How many days back the public past-board view can read, and the retention the
+    # nightly cron prunes to. The two share one value so history stays bounded to
+    # exactly what can be shown.
+    daily_history_days: int = Field(default=7, ge=1, le=90)
+
+    # Database connection. Default points at the Postgres in docker-compose.
+    database_url: str = "postgresql+asyncpg://histamine:histamine@localhost:5432/histamine"
+
+    llm_provider: str = "ollama"
+
+    # Composer sampling temperature, shared by the cron, the headless script, and the
+    # live admin demo so they cannot drift apart. Creative enough that meals vary run
+    # to run; safety never rides on the sampler, it is gated in code against the index.
+    compose_temperature: float = 0.4
+
+    # How many days of recent board names the composer is told not to repeat.
+    # 0 disables the do-not-repeat list entirely.
+    daily_variety_window_days: int = Field(default=14, ge=0, le=90)
+
+    # How many moderately compatible ingredients a composed meal may keep. Safety
+    # posture, not code structure: 0 restores the strict all-well-tolerated gate for
+    # deployments serving highly sensitive users. Incompatible and poorly tolerated
+    # ingredients always block regardless.
+    composer_max_moderate_ingredients: int = Field(default=2, ge=0, le=5)
+
+    # Whether a composed meal is quality-reviewed by an LLM judge before it is
+    # accepted. One extra structured call per accepted meal; disable on forks where
+    # the extra call is not worth it. Quality only, never safety: the index gate
+    # runs regardless.
+    composer_judge_enabled: bool = True
+
+    # How many of the judge's five yes/no criteria must pass.
+    composer_judge_threshold: int = Field(default=4, ge=1, le=5)
+
+    # Fixed for the whole corpus: stored and query vectors must share one model.
+    embedding_backend: str = "fastembed"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "gpt-oss:20b"
+
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    gemini_api_key: str | None = None
+    openrouter_api_key: str | None = None
+
+    @field_validator(
+        "resend_api_key",
+        "turnstile_site_key",
+        "turnstile_secret_key",
+        "google_client_id",
+        "google_client_secret",
+        "github_client_id",
+        "github_client_secret",
+        "openai_api_key",
+        "anthropic_api_key",
+        "gemini_api_key",
+        "openrouter_api_key",
+        mode="before",
+    )
+    @classmethod
+    def _blank_to_none(cls, value: object) -> object:
+        """Treat a blank optional secret as unset. ``.env.example`` ships these keys
+        blank, and an empty secret must disable its feature, not half-enable it,
+        matching the blank-JWT_SIGNING_KEY handling below.
+        """
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("app_base_url")
+    @classmethod
+    def _normalize_app_base_url(cls, value: str) -> str:
+        """Fail fast on a malformed origin and drop any trailing slash.
+
+        The value is concatenated into the magic-link URL and both OAuth redirect
+        URIs; a trailing slash would produce ``https://site//api/...`` and break
+        the exact-match check registered at the OAuth provider.
+        """
+        value = value.strip().rstrip("/")
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("APP_BASE_URL must start with http:// or https://")
+        return value
+
+    @property
+    def is_production(self) -> bool:
+        """Whether this runs as a production deployment.
+
+        Any production signal counts: PUBLIC_DEPLOYMENT, or DEBUG off (CLAUDE
+        section 20 mandates DEBUG=false in production). The secret-key gate and the
+        Secure-cookie gate both read this, so they cannot disagree on what counts
+        as production if one flag is later forgotten.
+        """
+        return self.public_deployment or not self.debug
+
+    @property
+    def cookie_secure(self) -> bool:
+        """Whether the session cookie is restricted to HTTPS.
+
+        Keyed on public_deployment, the only flag that implies TLS (terminated at the
+        proxy in production, the same signal HSTS uses). Deliberately not is_production:
+        DEBUG governs error verbosity, not transport, so keying Secure on it would make
+        the cookie silently fail to set when an operator runs with DEBUG off over http.
+        """
+        return self.public_deployment
+
+    @property
+    def session_cookie_max_age(self) -> int:
+        """Session cookie lifetime in seconds, matched to the JWT it carries so the
+        two expire together."""
+        return self.access_token_expire_minutes * 60
+
+    @property
+    def user_session_cookie_max_age(self) -> int:
+        """Public-user session cookie lifetime in seconds, matched to its JWT."""
+        return self.user_session_expire_days * 86400
+
+    @model_validator(mode="after")
+    def _validate_secret(self) -> "Settings":
+        """Require a strong admin secret in production, failing fast at startup."""
+        # A blank JWT_SIGNING_KEY is treated as unset so a copied .env.example falls
+        # back to the placeholder instead of signing tokens with an empty key.
+        if not self.jwt_signing_key.strip():
+            self.jwt_signing_key = DEV_JWT_SIGNING_KEY
+        if self.is_production and (
+            self.jwt_signing_key == DEV_JWT_SIGNING_KEY or len(self.jwt_signing_key) < 32
+        ):
+            raise ValueError(
+                "JWT_SIGNING_KEY must be a strong, non-default value (>=32 chars) in "
+                "production (PUBLIC_DEPLOYMENT=true or DEBUG=false)."
+            )
+        return self
+
+
+settings = Settings()

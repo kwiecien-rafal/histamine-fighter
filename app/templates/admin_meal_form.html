@@ -1,0 +1,92 @@
+{#
+  One meal's editable fields, shared by the hand-written entry and both edits. The
+  content is identical either way; only a new meal picks its own slot, so the meal-type
+  select appears exactly when the route passes the choices.
+#}
+{% extends "base.html" %}
+{% block title %}{{ heading }} · Admin{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <p><a href="/admin">← Admin panel</a></p>
+
+  <header>
+    <h1>{{ heading }}</h1>
+    {% if subtitle %}<p class="muted">{{ subtitle }}</p>{% endif %}
+  </header>
+
+  {% if refusal %}
+    <div class="notice notice--error stack" role="alert">
+      <p>{{ refusal.message }}</p>
+      {% if refusal.blockers %}
+        <ul class="chips">
+          {% for blocker in refusal.blockers %}
+            <li class="badge badge--danger">{{ blocker }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form class="stack" method="post" action="{{ action }}">
+    {% if meal_types %}
+      <label class="field">
+        <span>Meal slot</span>
+        <select name="meal_type">
+          {% for value in meal_types %}
+            <option value="{{ value.value }}"
+                    {% if selected_meal_type == value %}selected{% endif %}>{{ value.value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% endif %}
+
+    <label class="field field--wide">
+      <span>Name</span>
+      <input type="text" name="name" value="{{ fields.name }}" required autofocus />
+    </label>
+
+    <label class="field field--wide">
+      <span>Description</span>
+      <textarea name="description" rows="3" required>{{ fields.description }}</textarea>
+    </label>
+
+    <label class="field field--wide">
+      <span>
+        Ingredients — one per line, as <code>name {{ separator }} category</code>,
+        up to {{ max_ingredients }}
+      </span>
+      <textarea name="ingredients" rows="10" required>{{ fields.ingredients }}</textarea>
+    </label>
+
+    <label class="field field--wide">
+      <span>Recipe — one step per line, up to {{ max_recipe_steps }}, empty for none</span>
+      <textarea name="recipe" rows="10">{{ fields.recipe }}</textarea>
+    </label>
+
+    <label class="field field--wide">
+      <span>Tags — comma separated, up to {{ max_tags }}</span>
+      <input type="text" name="tags" value="{{ fields.tags }}" />
+    </label>
+
+    {% if refusal and refusal.can_confirm %}
+      <p>
+        <label class="check">
+          <input type="checkbox" name="confirm_flagged" value="true" />
+          Save it anyway — I have read the flags above
+        </label>
+      </p>
+    {% endif %}
+
+    <p class="row">
+      <button class="button" type="submit">Save</button>
+      <a class="button" href="/admin">Cancel</a>
+    </p>
+  </form>
+
+  <p class="small muted">
+    Every ingredient is re-checked against the curated index on save. One the index
+    flags stops the save once and can be confirmed past; one it cannot read at all
+    always blocks. The meal stays pending review either way.
+  </p>
+{% endblock %}

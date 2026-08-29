@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}{{ result.dish }} · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  {{ ui.model_call(call) }}
+
+  {% if error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  {# One boosted region so every form below carries the visitor's AI settings as
+     headers. The save posts out of it: it redirects, and a redirect is a real
+     navigation rather than a swap. #}
+  <div hx-boost="true">
+    <article class="card stack">
+      <div class="row row--between">
+        <h1>{{ result.dish }}</h1>
+        {{ ui.verdict_badge(result.verdict.value) }}
+      </div>
+
+      {% if result.cached %}
+        <p class="small muted">
+          Instant answer — this exact dish and ingredient list was checked before, and
+          nothing it relied on has changed in the index since.
+        </p>
+      {% endif %}
+
+      <p>{{ result.explanation }}</p>
+      {{ ui.medical_note() }}
+
+      <div>
+        <h4>Ingredients you confirmed</h4>
+        <ul class="chips">
+          {% for item in result.ingredients %}{{ ui.ingredient_chip(item) }}{% endfor %}
+        </ul>
+      </div>
+
+      {% if result.adaptations %}
+        <div>
+          <h4>How to adapt it</h4>
+          <ul class="stack plain-list">
+            {% for entry in result.adaptations %}
+              <li class="notice small">
+                <div class="row">
+                  <strong>{{ entry.ingredients | join(" + ") }}</strong>
+                  {% if entry.swap %}
+                    <span aria-hidden="true">→</span>
+                    <strong>{{ entry.swap }}</strong>
+                  {% else %}
+                    <span class="badge{% if entry.action.value == 'no_safe_swap' %} badge--danger{% endif %}">
+                      {{ ui.adaptation_label(entry.action.value) }}
+                    </span>
+                  {% endif %}
+                  <span class="badge">{{ ui.culinary_role_label(entry.role.value) }}</span>
+                </div>
+                <p class="muted">{{ entry.reason }}</p>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      {% if result.advisories %}
+        <div class="notice notice--caution small">
+          <strong>Worth watching:</strong>
+          <ul>
+            {% for advisory in result.advisories %}
+              <li><strong>{{ advisory.ingredient }}</strong>: {{ advisory.note }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      {{ ui.attribution(result.model) }}
+    </article>
+
+    {% if tone %}
+      <section class="card stack">
+        <h2>Find something else</h2>
+        <p class="muted">{{ ui.pivot_note(tone) }}</p>
+
+        {# The goal is a radio rather than one submit button per goal, so the assessment
+           travels once instead of once per choice. #}
+        <form class="stack" method="post" action="/lookup/alternatives" hx-disabled-elt="find button">
+          <input type="hidden" name="state" value="{{ state_json }}" />
+          <fieldset class="field field--wide">
+            <legend>What are you after?</legend>
+            <ul class="chips plain-list">
+              {% for option in goals %}
+                <li>
+                  <label class="check">
+                    <input type="radio" name="goal" value="{{ option.value }}"
+                           {% if option == goal or (goal is none and loop.first) %}checked{% endif %} />
+                    {{ ui.alternative_goal_label(option.value) }}
+                  </label>
+                </li>
+              {% endfor %}
+            </ul>
+          </fieldset>
+          <p class="row">
+            <button class="button" type="submit">Suggest dishes</button>
+            <span class="busy small muted">Looking for ideas…</span>
+          </p>
+        </form>
+
+        {% if suggestions is not none %}
+          {% if suggestions.alternatives %}
+            <ul class="stack plain-list">
+              {% for item in suggestions.alternatives %}
+                <li class="notice stack">
+                  <div class="row">
+                    <strong>{{ item.name }}</strong>
+                    {% if item.source == 'verified' %}
+                      <span class="badge badge--ok" title="One of the meals composed from the index and approved by a human.">
+                        From our kitchen
+                      </span>
+                    {% endif %}
+                  </div>
+                  {% if item.pitch %}<p class="small muted">{{ item.pitch }}</p>{% endif %}
+                  {# Every suggestion, whatever its source, is re-checked from scratch on
+                     the way through — a suggested name is an idea, never a verdict. #}
+                  <form method="post" action="/lookup/propose" hx-disabled-elt="find button">
+                    <input type="hidden" name="dish" value="{{ item.name }}" />
+                    <button class="button" type="submit">Check this one instead</button>
+                    <span class="busy small muted">Fighting through the ingredient list…</span>
+                  </form>
+                </li>
+              {% endfor %}
+            </ul>
+            <p class="small muted">Suggested by <span class="badge">{{ suggestions.model }}</span></p>
+          {% else %}
+            <p class="notice">Nothing good came back for that goal — try another one.</p>
+          {% endif %}
+        {% endif %}
+      </section>
+    {% endif %}
+
+    <section class="card stack">
+      <h2>Recipe</h2>
+      {% if recipe %}
+        <ol>{% for step in recipe.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+        <p class="small muted">Written by <span class="badge">{{ recipe.model }}</span></p>
+      {% else %}
+        <form method="post" action="/lookup/recipe" hx-disabled-elt="find button">
+          <input type="hidden" name="state" value="{{ state_json }}" />
+          <p class="row">
+            <button class="button" type="submit">
+              {% if result.verdict.value == 'avoid' %}
+                Like the dish in spite of our verdict? Write the recipe
+              {% else %}
+                Like this dish? Write the recipe
+              {% endif %}
+            </button>
+            <span class="busy small muted">Writing the recipe…</span>
+          </p>
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="card stack">
+      <h2>Keep it</h2>
+      {% if user %}
+        <p class="small muted">
+          Saved as your own private copy, exactly as it reads here — recipe included.
+        </p>
+        <form method="post" action="/lookup/save" hx-boost="false">
+          <input type="hidden" name="state" value="{{ state_json }}" />
+          <button class="button" type="submit">Save this dish</button>
+        </form>
+      {% else %}
+        <p class="small muted">A free account keeps your checked dishes and their recipes.</p>
+        <p><a class="button" href="/login">Sign in to save this</a></p>
+      {% endif %}
+    </section>
+
+    <p class="small muted"><a href="/lookup">← Start over with another dish</a></p>
+  </div>
+{% endblock %}

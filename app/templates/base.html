@@ -1,0 +1,72 @@
+{#
+  Imported once here, so every page extending this shell can call ui.* directly. A
+  template that does NOT extend it must import the macros itself.
+#}
+{% import "_macros.html" as ui %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Histamine Fighter{% endblock %}</title>
+    <link rel="icon" href="/static/favicon.svg" />
+    <link rel="stylesheet" href="/static/app.css" />
+    {# Vendored, not a CDN, and deferred: the pages render and submit without them.
+       htmx only carries the visitor's AI settings as request headers, which a plain
+       form post cannot do; app.js is the settings panel and the usage tally. #}
+    <script src="/static/vendor/htmx.min.js" defer></script>
+    <script src="/static/app.js" defer></script>
+    {% block head %}{% endblock %}
+  </head>
+  {# Read by app.js: the shared tier is the sensible default only where we pay the
+     bill, and a self-hoster's default is the Ollama they already run. #}
+  <body data-public-deployment="{{ 'true' if public_deployment else 'false' }}">
+    <header class="masthead">
+      <div class="wrap">
+        <a class="masthead__brand" href="/">Histamine Fighter</a>
+        <nav>
+          {{ ui.nav_link(request, "/", "Home") }}
+          {{ ui.nav_link(request, "/lookup", "Check a dish") }}
+          {{ ui.nav_link(request, "/daily", "Today's meals") }}
+          {{ ui.nav_link(request, "/meals", "Safe meals") }}
+          {{ ui.nav_link(request, "/learn", "Learn") }}
+          {% if user %}
+            {{ ui.nav_link(request, "/profile", "Saved") }}
+            <a class="masthead__account" href="/account" title="{{ user.email }}"
+               {% if request.url.path == "/account" %}aria-current="page"{% endif %}>
+              {{ user.email }}
+            </a>
+          {% else %}
+            {{ ui.nav_link(request, "/login", "Sign in") }}
+          {% endif %}
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <div class="wrap {% block wrap %}{% endblock %}">{% block content %}{% endblock %}</div>
+    </main>
+
+    {% include "_ai_panel.html" %}
+
+    <footer class="colophon">
+      <div class="wrap stack">
+        <p>
+          <strong>Histamine Fighter</strong> — in your corner against histamine intolerance.
+        </p>
+        <p>
+          Histamine Fighter is an educational tool, not medical advice. Histamine tolerance is
+          highly individual — verdicts and meal suggestions are general guidance built from a
+          curated ingredient index and an AI assistant, and they can be wrong. Always confirm
+          with your doctor or dietitian before changing your diet.
+        </p>
+        <p>
+          An open-source portfolio project · MIT license ·
+          <a href="https://github.com/kwiecien-rafal/histamine-fighter">GitHub</a> ·
+          <a href="/privacy">Privacy</a> ·
+          <a href="/terms">Terms</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

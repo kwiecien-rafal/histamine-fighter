@@ -217,15 +217,5 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Node / Vite
-node_modules/
-dist/
-.vite/
-*.local
-*.tsbuildinfo
-
-# Frontend application code; the Python `lib/` rule above would otherwise swallow it
-!frontend/src/lib/
-
 # Local env file (committed template lives in .env.example)
 .env

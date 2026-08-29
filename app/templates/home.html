@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Histamine Fighter · Fight back against histamine intolerance{% endblock %}
+
+{% block content %}
+  <section class="stack">
+    <h1>Fight back against histamine.</h1>
+    <p class="lede">
+      Check any dish in seconds. Get an honest verdict, smart swaps, and meals that won't
+      fight back — grounded in a curated ingredient index, never a model's guess.
+    </p>
+    <p class="row">
+      <a class="button" href="/lookup">Check a dish</a>
+      <a class="button" href="/daily">See today's board</a>
+      <a class="button" href="/meals">Browse the safe meals</a>
+    </p>
+  </section>
+
+  <section class="stack">
+    <h2>Today's game plan</h2>
+    <p class="muted">Four safe meals, composed fresh every day and approved by a human.</p>
+    {{ ui.medical_note() }}
+
+    {% if board.status == "revealed" %}
+      <ul class="grid plain-list">
+        {% for meal in board.meals %}
+          <li class="card">
+            <p><span class="badge">{{ ui.meal_type_label(meal.meal_type.value) }}</span></p>
+            <h3>{{ meal.name }}</h3>
+            <p class="small muted">{{ meal.description }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+      <p><a href="/daily">See the full board, with recipes and composition traces →</a></p>
+    {% elif board.reveal_at %}
+      <p class="notice">
+        Today's board unlocks at {{ board.reveal_at | utc_time }},
+        about {{ board.reveal_at | countdown }} from now.
+        <a href="/daily">Watch for the reveal on the board →</a>
+      </p>
+    {% else %}
+      <p class="notice">
+        Today's board hasn't been set yet —
+        <a href="/meals">browse the safe meals instead</a>.
+      </p>
+    {% endif %}
+  </section>
+
+  <section class="stack">
+    <h2>How the fight is won</h2>
+    <ul class="grid plain-list">
+      <li class="card">
+        <h3>1. Name the dish</h3>
+        <p class="small muted">The AI proposes the ingredients it expects inside.</p>
+      </li>
+      <li class="card">
+        <h3>2. Confirm the lineup</h3>
+        <p class="small muted">
+          You know your plate. Add, rename or drop ingredients before anything is judged.
+        </p>
+      </li>
+      <li class="card">
+        <h3>3. Get the verdict</h3>
+        <p class="small muted">
+          Safety is computed from a curated ingredient index — the model never decides.
+          Risky dish? You get swaps and alternatives.
+        </p>
+      </li>
+    </ul>
+    <p><a href="/lookup">Check a dish now →</a></p>
+  </section>
+
+  <section class="stack">
+    <h2>Keep going</h2>
+    <ul class="grid plain-list">
+      <li class="card">
+        <h3>
+          {% if approved_total %}{{ approved_total }} meals in the safe corner{% else %}
+          An open cookbook of verified-safe meals{% endif %}
+        </h3>
+        <p class="small muted">
+          Every one composed from the curated index and approved by a human.
+        </p>
+        <p><a href="/meals">Browse the safe meals →</a></p>
+      </li>
+      <li class="card">
+        <h3>Know your enemy</h3>
+        <p class="small muted">
+          What histamine is, why it hits, and which foods pick the fight — every answer
+          cited from curated sources.
+        </p>
+        <p><a href="/learn">Visit the Learn hub →</a></p>
+      </li>
+    </ul>
+  </section>
+{% endblock %}

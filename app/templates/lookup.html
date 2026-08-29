@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Check a dish · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>Is your dish safe?</h1>
+    <p class="lede">
+      Name a dish and we'll propose what goes into it. You correct that list — then the
+      verdict is computed from the curated ingredient index, not guessed by a model.
+    </p>
+  </header>
+
+  {% if unrecognized %}
+    <div class="notice notice--caution" role="status">
+      <p><strong>We couldn't place “{{ dish }}”.</strong></p>
+      <p>Try another name, or list the ingredients yourself and skip straight to the verdict.</p>
+      <p><a class="button" href="/lookup/manual?dish={{ dish | urlencode }}">Enter the ingredients myself</a></p>
+    </div>
+  {% elif error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  {# Boosted so the AI settings ride along as request headers; without JavaScript this
+     posts as an ordinary form and falls back to the server's own provider. #}
+  <div hx-boost="true">
+    <form class="stack" method="post" action="/lookup/propose" hx-disabled-elt="find button">
+      <label class="field field--wide">
+        <span>Dish name</span>
+        <input type="text" name="dish" value="{{ dish }}" maxlength="{{ max_dish_chars }}"
+               placeholder="e.g. spaghetti bolognese" autocomplete="off" required autofocus />
+      </label>
+      <p class="row">
+        <button class="button" type="submit">Find the ingredients</button>
+        <span class="busy small muted">Fighting through the ingredient list…</span>
+      </p>
+    </form>
+  </div>
+
+  <p class="small muted">
+    Know what's in it already? <a href="/lookup/manual">List the ingredients yourself</a> —
+    that step costs no model call at all.
+  </p>
+
+  {{ ui.medical_note() }}
+{% endblock %}

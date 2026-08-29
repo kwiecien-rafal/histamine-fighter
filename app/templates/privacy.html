@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Privacy policy · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <header>
+    <h1>Privacy policy</h1>
+    <p class="small muted">Last updated: July 2026</p>
+  </header>
+
+  <section>
+    <h2>The short version</h2>
+    <p>
+      We store your email address if you create an account, count how much you use the free
+      AI tier, and nothing else. No names, no tracking, no ads, no selling data. Deleting
+      your account removes it all, yourself, with one button.
+    </p>
+  </section>
+
+  <section>
+    <h2>What we collect and why</h2>
+    <ul>
+      <li>
+        <strong>Email address</strong> — your account identity, used to sign you in (magic
+        link) or matched from your Google/GitHub sign-in. Never used for marketing.
+      </li>
+      <li>
+        <strong>Usage counters</strong> — how many free-tier AI requests your account and
+        your network address made today, kept to enforce fair daily limits. Counters
+        reference your account id and reset daily.
+      </li>
+      <li>
+        <strong>IP address</strong> — noted at signup and used for rate limiting and abuse
+        prevention (for example, limiting how many accounts one network can create per day).
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What we deliberately don't do</h2>
+    <ul>
+      <li>No passwords — sign-in is by email link, code, or OAuth, so there is none to leak.</li>
+      <li>No analytics or tracking cookies. The single cookie we set is your session.</li>
+      <li>
+        Your own API keys (if you bring one) stay in your browser and travel only as request
+        headers; they are never stored or logged server-side.
+      </li>
+      <li>Dish lookups and questions are not linked to your account.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Third parties</h2>
+    <p>
+      Sign-in emails are delivered by Resend; Google or GitHub handle their own sign-in and
+      tell us only your verified email. Free-tier AI requests are processed by OpenAI without
+      your identity attached. Cloudflare fronts the site (and its Turnstile bot check
+      protects the sign-in form).
+    </p>
+  </section>
+
+  <section>
+    <h2>Your rights and deletion</h2>
+    <p>
+      You can delete your account at any time from your profile page; that removes your
+      email, account, and usage counters immediately. For anything else (GDPR access,
+      correction, complaints), open an issue on GitHub or email
+      privacy@histaminefighter.com.
+    </p>
+  </section>
+{% endblock %}

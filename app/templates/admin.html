@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% import "_admin_macros.html" as admin %}
+
+{% block title %}Admin · Histamine Fighter{% endblock %}
+{% block head %}<script src="/static/admin.js" defer></script>{% endblock %}
+
+{% block content %}
+  <header class="stack">
+    <div class="row row--between">
+      <h1>Admin</h1>
+      <form method="post" action="/logout">
+        <button class="button" type="submit">Sign out</button>
+      </form>
+    </div>
+    <p class="muted">
+      Nothing reaches the public board or the safe-meal pool until it is approved here.
+      The gate checks the ingredients a meal lists; you close the gap for the ones it
+      never listed.
+    </p>
+    <nav class="row" aria-label="Panel sections">
+      <a href="#settings">Composer model</a>
+      <a href="#compose">Compose</a>
+      <a href="#queue">Daily queue</a>
+      <a href="#curated">Curated pool</a>
+    </nav>
+  </header>
+
+  {% if error %}
+    <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% endif %}
+
+  <section id="settings" class="stack">
+    <h2>Composer model</h2>
+    <p class="small muted">
+      Which provider and model compose meals, here and in the nightly job. Only the choice
+      is stored — keys stay in the environment. Composing right now with
+      <span class="badge">{{ provider or "unset" }}{% if model %} · {{ model }}{% endif %}</span>.
+    </p>
+
+    {% if available_providers %}
+      <form class="row" method="post" action="/admin/ui/settings">
+        <label class="field">
+          <span>Provider</span>
+          <select name="provider">
+            {% for value in available_providers %}
+              <option value="{{ value.value }}"
+                      {% if provider == value.value %}selected{% endif %}>{{ value.value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Model — empty for the provider's default</span>
+          <input type="text" name="model" value="{{ model or '' }}"
+                 placeholder="provider default (OpenRouter needs one named)" />
+        </label>
+        <button class="button" type="submit">Save</button>
+      </form>
+    {% else %}
+      <p class="notice">
+        No provider is configured on this deployment. Set a provider key in the
+        environment, then this list fills itself in.
+      </p>
+    {% endif %}
+  </section>
+
+  <section id="compose" class="stack">
+    <h2>Compose</h2>
+    <p class="small muted">
+      Watch the composer work. Every run saves a pending row below, trace and all, for you
+      to review. Runs are serialized server-side, so only one goes at a time.
+    </p>
+    <noscript>
+      <p class="notice">
+        Composing streams its progress as it happens, so these two need JavaScript. The
+        nightly job fills the daily board without it.
+      </p>
+    </noscript>
+
+    <div class="card stack">
+      <h3>Daily board</h3>
+      <p class="small muted">
+        One slot, or every slot of the date still open. A slot already holding a pending or
+        approved meal is never replaced by a board run, and replacing one singly asks first.
+      </p>
+      {# No action: with the script off, submitting is a harmless GET back to the panel. #}
+      <form class="row" data-compose="daily"
+            data-url="/admin/compose/daily"
+            data-board-url="/admin/compose/daily/board"
+            data-output="#compose-daily">
+        <label class="field">
+          <span>Slot</span>
+          <select name="meal_type">
+            {% for value in meal_types %}
+              <option value="{{ value.value }}">{{ value.value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">
+          <span>Date</span>
+          <input type="date" name="date" value="{{ compose_date }}"
+                 min="{{ today }}" max="{{ latest_date }}" required />
+        </label>
+        <button class="button" type="submit">Compose the slot</button>
+        <button class="button" type="submit" name="board" value="1">Compose every open slot</button>
+      </form>
+      {{ admin.compose_output("compose-daily") }}
+    </div>
+
+    <div class="card stack">
+      <h3>Curated pool</h3>
+      <p class="small muted">A meal for the browsable pool, with no date attached.</p>
+      <form class="row" data-compose="curated"
+            data-url="/admin/compose/curated"
+            data-output="#compose-curated">
+        <label class="field">
+          <span>Slot</span>
+          <select name="meal_type">
+            {% for value in meal_types %}
+              <option value="{{ value.value }}">{{ value.value }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="button" type="submit">Compose a meal</button>
+      </form>
+      {{ admin.compose_output("compose-curated") }}
+    </div>
+  </section>
+
+  <section id="queue" class="stack">
+    <h2>Daily queue</h2>
+
+    {% if queue %}
+      {% for day in queue %}
+        <div class="stack">
+          <div class="row row--between">
+            <h3>{{ day.date | board_date }}</h3>
+            <span class="small muted">
+              reveals {{ day.slots[0].reveal_at | utc_time }} ·
+              {{ day.approved_count }} approved · {{ day.pending_count }} pending
+            </span>
+          </div>
+
+          {% if day.pending_count or day.missing_meal_types %}
+            <p class="notice notice--caution small">
+              {% if day.approved_count %}
+                Not fully approved — the public board will show only the approved slots.
+              {% else %}
+                Nothing approved yet, so this day stays locked.
+              {% endif %}
+              {% if day.missing_meal_types %}
+                Missing: {{ day.missing_meal_types | map(attribute="value") | join(", ") }}.
+              {% endif %}
+            </p>
+          {% endif %}
+
+          {% for slot in day.slots %}
+            {{ admin.review_card(slot, slot.content, "/admin/ui/daily") }}
+          {% endfor %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="notice">
+        Nothing queued. Compose a board above, or wait for the nightly job.
+      </p>
+    {% endif %}
+  </section>
+
+  <section id="curated" class="stack">
+    <h2>Curated pool</h2>
+
+    <nav class="row" aria-label="Review state">
+      {% for state in review_states %}
+        <a class="button" href="/admin?status={{ state.value }}#curated"
+           {% if curated_state == state %}aria-current="true"{% endif %}>{{ state.value }}</a>
+      {% endfor %}
+      <a class="button" href="/admin/ui/meals/new">Write a meal by hand</a>
+    </nav>
+
+    {% if meals %}
+      <p class="small muted">{{ meals | length }} {{ curated_state.value }}, oldest first.</p>
+      {% for meal in meals %}
+        {{ admin.review_card(meal, meal, "/admin/ui/meals", curated_state.value) }}
+      {% endfor %}
+    {% else %}
+      <p class="notice">Nothing {{ curated_state.value }}.</p>
+    {% endif %}
+  </section>
+{% endblock %}

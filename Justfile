@@ -1,11 +1,9 @@
 # Histamine Fighter task runner. Run `just` (or `just --list`) to see everything.
-# Requires Docker, uv, and Node 20+ on PATH. Works from PowerShell on Windows and
-# from sh on macOS/Linux; `env` is the only recipe that differs per OS.
+# Requires Docker and uv on PATH. Works from PowerShell on Windows and from sh on
+# macOS/Linux; `env` is the only recipe that differs per OS.
 
 # Windows has no sh, so run recipes through PowerShell there instead.
 set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
-
-backend := "uv run --directory backend"
 
 # Show all recipes
 _default:
@@ -13,7 +11,7 @@ _default:
 
 # From a fresh clone to a running app in one command
 bootstrap: setup up
-    @echo "Ready -> http://localhost:5173  (admin is optional: just admin you@example.com)"
+    @echo "Ready -> http://localhost:8000  (admin is optional: just admin you@example.com)"
 
 # Bootstrap, then stay attached to the logs (Ctrl-C leaves the app running)
 dev: bootstrap
@@ -38,16 +36,16 @@ db:
 
 # Apply all database migrations
 migrate:
-    {{backend}} alembic upgrade head
+    uv run alembic upgrade head
 
 # Seed the factual histamine index and the knowledge base (safe to re-run)
 seed:
-    {{backend}} python -m app.scripts.seed_histamine_db
-    {{backend}} python -m app.scripts.seed_knowledge
+    uv run python -m app.scripts.seed_histamine_db
+    uv run python -m app.scripts.seed_knowledge
 
-# Build and start the backend and frontend containers
+# Build and start the app container, which serves both the pages and the API
 up:
-    docker compose up -d --build backend frontend
+    docker compose up -d --build backend
 
 # Stop and remove the containers (keeps the database volume)
 down:
@@ -59,28 +57,28 @@ logs service="":
 
 # Create or reset an admin account (prompts for a password): just admin you@example.com
 admin email:
-    {{backend}} python -m app.scripts.create_admin --email {{email}}
+    uv run python -m app.scripts.create_admin --email {{email}}
 
 # Generate the daily meal board (needs a tool-calling model configured)
 daily:
-    {{backend}} python -m app.scripts.generate_daily_meals
+    uv run python -m app.scripts.generate_daily_meals
 
 # Author a new migration from model changes: just migration "add reveal_at to daily"
 migration message:
-    {{backend}} alembic revision --autogenerate -m "{{message}}"
+    uv run alembic revision --autogenerate -m "{{message}}"
 
-# Run the backend test suite
+# Run the test suite
 test:
-    {{backend}} pytest
+    uv run pytest
 
-# Lint and format-check the backend, matching CI
+# Lint and format-check, matching CI
 lint:
-    {{backend}} ruff check .
-    {{backend}} ruff format --check .
+    uv run ruff check .
+    uv run ruff format --check .
 
-# Auto-format the backend
+# Auto-format
 fmt:
-    {{backend}} ruff format .
+    uv run ruff format .
 
 # Destroy the database volume and rebuild everything from scratch (DESTRUCTIVE)
 reset:

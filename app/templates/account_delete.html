@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Delete your account · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <p><a href="/account">← Your account</a></p>
+
+  <h1>Delete your account?</h1>
+  <p class="lede">
+    This erases <strong>{{ user.email }}</strong>, every meal you saved, and your usage
+    history. It happens immediately and there is no undo.
+  </p>
+
+  {% if is_admin %}
+    <p class="notice">
+      Admin accounts are managed from the command line, so this account cannot delete
+      itself here.
+    </p>
+  {% else %}
+    <form method="post" action="/account/delete">
+      <button class="button" type="submit">Yes, delete my account</button>
+    </form>
+    <p class="small muted">
+      Changed your mind? <a href="/account">Go back</a> — nothing has been deleted yet.
+    </p>
+  {% endif %}
+{% endblock %}

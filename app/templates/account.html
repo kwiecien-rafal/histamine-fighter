@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Your account · Histamine Fighter{% endblock %}
+{% block wrap %}wrap--narrow{% endblock %}
+
+{% block content %}
+  <h1>Your account</h1>
+  <p class="lede">
+    Signed in as <strong>{{ user.email }}</strong>. Your email address is all we store.
+    Your <a href="/profile">saved meals</a> live on their own page.
+  </p>
+
+  <section class="stack">
+    <h2>Free AI checks today</h2>
+    <p class="card">
+      <span class="countdown">{{ quota.limit - quota.used }}</span>
+      of {{ quota.limit }} left · full again at {{ quota.resets_at | utc_time }}
+    </p>
+    <p class="small muted">
+      The shared tier runs on the project's own API key, so it is capped. Bringing your
+      own key lifts the limit and costs the project nothing.
+    </p>
+  </section>
+
+  <section class="stack">
+    <h2>Sessions</h2>
+    <form method="post" action="/logout">
+      <button class="button" type="submit">Sign out</button>
+    </form>
+    <details>
+      <summary class="small">Signed in somewhere you no longer trust?</summary>
+      <p class="small muted">
+        Signing out here only drops this browser's cookie. This revokes every session on
+        every device, including this one.
+      </p>
+      <form method="post" action="/logout/all">
+        <button class="button" type="submit">Sign out everywhere</button>
+      </form>
+    </details>
+  </section>
+
+  <section class="stack">
+    <h2>Leaving</h2>
+    <p class="small muted">
+      Deleting your account erases your email, your saved meals, and your usage history.
+    </p>
+    <p><a href="/account/delete">Delete my account</a></p>
+  </section>
+{% endblock %}

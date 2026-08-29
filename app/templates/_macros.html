@@ -1,0 +1,312 @@
+{#
+  Shared fragments and the display labels for the neutral domain values (CLAUDE
+  section 19). The wire and the database stay on stable enum values; every piece of
+  branded wording is mapped here, so a copy change never touches the schema. Structured
+  as flat dictionaries so they can become an i18n dictionary later.
+#}
+
+{% set MEAL_TYPE_LABELS = {
+  "breakfast": "Breakfast",
+  "lunch": "Lunch",
+  "dinner": "Dinner",
+  "snack": "Snack",
+} %}
+
+{% set OAUTH_PROVIDER_LABELS = {
+  "google": "Google",
+  "github": "GitHub",
+} %}
+
+{% set SAFETY_LABELS = {
+  "safe": {"label": "Safe", "tone": "badge--ok"},
+  "depends": {"label": "Depends", "tone": "badge--caution"},
+  "avoid": {"label": "Avoid", "tone": "badge--danger"},
+} %}
+
+{% set SAVED_TAG_LABELS = {
+  "breakfast": "Breakfast",
+  "lunch": "Lunch",
+  "dinner": "Dinner",
+  "snack": "Snack",
+  "dish_check": "From a dish check",
+  "pink": "Pink",
+  "red": "Red",
+  "green": "Green",
+  "blue": "Blue",
+  "yellow": "Yellow",
+  "orange": "Orange",
+} %}
+
+{% set ADAPTATION_LABELS = {
+  "swap": "swap it",
+  "omit": "leave it out",
+  "no_safe_swap": "no safe swap",
+} %}
+
+{% set CULINARY_ROLE_LABELS = {
+  "core": "core to the dish",
+  "supporting": "supporting",
+  "seasoning": "seasoning",
+} %}
+
+{% set ALTERNATIVE_GOAL_LABELS = {
+  "any_meal": "Just a good meal",
+  "same_style": "Same style of dish",
+  "similar_flavours": "Similar flavours",
+} %}
+
+{% set PIVOT_COPY = {
+  "lost": "These changes would lose what makes this dish itself — another dish may serve you better.",
+  "altered": "Adapting this changes a core part of the dish. Want something closer to the original?",
+  "unresolved": "Part of this dish has no safe fix. Something else may suit you better.",
+} %}
+
+{% set TRACE_KIND_LABELS = {
+  "inspiration": "Inspiration",
+  "draft": "Draft",
+  "check": "Check",
+  "search": "Search",
+  "options": "Options",
+  "reject": "Reject",
+  "submit": "Submit",
+  "verify": "Verify",
+  "judge": "Judge",
+} %}
+
+
+{% macro meal_type_label(value) -%}
+  {{ MEAL_TYPE_LABELS.get(value, value) }}
+{%- endmacro %}
+
+
+{# Providers are stable lowercase keys on the wire; only the sign-in button is branded. #}
+{% macro oauth_provider_label(value) -%}
+  {{ OAUTH_PROVIDER_LABELS.get(value, value) }}
+{%- endmacro %}
+
+
+{% macro saved_tag_label(value) -%}
+  {{ SAVED_TAG_LABELS.get(value, value) }}
+{%- endmacro %}
+
+
+{% macro adaptation_label(value) -%}
+  {{ ADAPTATION_LABELS.get(value, value) }}
+{%- endmacro %}
+
+
+{% macro culinary_role_label(value) -%}
+  {{ CULINARY_ROLE_LABELS.get(value, value) }}
+{%- endmacro %}
+
+
+{% macro alternative_goal_label(value) -%}
+  {{ ALTERNATIVE_GOAL_LABELS.get(value, value) }}
+{%- endmacro %}
+
+
+{# Why a pivot to other dishes is being offered, in the tone the drift deserves. #}
+{% macro pivot_note(tone) -%}
+  {{ PIVOT_COPY.get(tone, "") }}
+{%- endmacro %}
+
+
+{# The dish-level verdict a lookup save was assessed at. Pool meals carry none. #}
+{% macro verdict_badge(value) -%}
+  {% set display = SAFETY_LABELS.get(value) %}
+  {% if display %}
+    <span class="badge {{ display.tone }}">{{ display.label }}</span>
+  {% endif %}
+{%- endmacro %}
+
+
+{#
+  Save, or unsave, one meal from a public page. The signed-out visitor is offered the
+  feature rather than shown nothing. ``back_url`` is where the write returns to, so a
+  save never moves the visitor off the page they were reading.
+#}
+{% macro save_control(user, source, source_id, save_id, back_url) -%}
+  {% if not user %}
+    <a class="button" href="/login">Sign in to save</a>
+  {% elif save_id %}
+    <span class="row">
+      <a class="button" href="/profile/meals/{{ save_id }}">Saved — open your copy</a>
+      <form method="post" action="/profile/meals/{{ save_id }}/delete">
+        <input type="hidden" name="back_url" value="{{ back_url }}" />
+        <button class="button" type="submit">Remove</button>
+      </form>
+    </span>
+  {% else %}
+    <form method="post" action="/profile/meals">
+      <input type="hidden" name="source" value="{{ source }}" />
+      <input type="hidden" name="source_id" value="{{ source_id }}" />
+      <input type="hidden" name="back_url" value="{{ back_url }}" />
+      <button class="button" type="submit">Save this meal</button>
+    </form>
+  {% endif %}
+{%- endmacro %}
+
+
+{# A top-bar link, marked current on its own page and on anything nested under it. #}
+{% macro nav_link(request, href, label) -%}
+  {% set path = request.url.path %}
+  {% set current = path == href or (href != "/" and path.startswith(href ~ "/")) %}
+  <a href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a>
+{%- endmacro %}
+
+
+{# One step of a pager: a link, or the same control greyed out at the end of the range. #}
+{% macro step_link(url, label) -%}
+  {% if url %}
+    <a class="button" href="{{ url }}">{{ label }}</a>
+  {% else %}
+    <span class="button" aria-disabled="true">{{ label }}</span>
+  {% endif %}
+{%- endmacro %}
+
+
+{# Kept in sight wherever a verdict or a meal could be acted on; the full text is in the footer. #}
+{% macro medical_note() -%}
+  <p class="small muted">
+    Informational only, not medical advice — tolerance varies from person to person;
+    when in doubt, ask your clinician.
+  </p>
+{%- endmacro %}
+
+
+{# Provenance for an AI output: the producing model, or the hand-authored sentinel. #}
+{% macro attribution(model) -%}
+  {% if model == MANUAL_MODEL %}
+    <span class="badge" title="Written and curated by an admin, not composed by a model.">
+      Curated by admin
+    </span>
+  {% else %}
+    <span class="small muted">Composed by <span class="badge">{{ model }}</span></span>
+  {% endif %}
+{%- endmacro %}
+
+
+{#
+  Every meal on a public surface cleared the curated index and an admin approved it, so
+  the badge is derived from the meal's data rather than a stored verdict: kept
+  moderately-compatible ingredients turn it into an "in moderation" reading.
+#}
+{% macro safety_badge(cautioned_ingredients=[]) -%}
+  {% if cautioned_ingredients %}
+    <span class="badge badge--caution"
+          title="Verified against the curated index and approved by a human; some ingredients are best enjoyed in moderation.">
+      In moderation
+    </span>
+  {% else %}
+    <span class="badge badge--ok"
+          title="Composed from the curated safe index and approved by a human.">
+      Verified
+    </span>
+  {% endif %}
+{%- endmacro %}
+
+
+{# The composer's code-authored reasoning, as a disclosure rather than a paced replay. #}
+{% macro trace_details(trace) -%}
+  {% if trace %}
+    <details>
+      <summary class="small">How it was composed ({{ trace | length }} steps)</summary>
+      <ol class="small stack">
+        {% for event in trace %}
+          <li><span class="badge">{{ TRACE_KIND_LABELS.get(event.kind, event.kind) }}</span> {{ event.text }}</li>
+        {% endfor %}
+      </ol>
+    </details>
+  {% endif %}
+{%- endmacro %}
+
+
+{#
+  The full view of an approved meal, shared by the daily board and the meal detail page.
+  The name's heading level is a parameter because the two differ: it is the page's own
+  title on the detail page, and one of several cards under the board's title.
+#}
+{% macro meal_card(meal, heading="h3") -%}
+  <article class="card stack">
+    <div class="row row--between">
+      <{{ heading }}>{{ meal.name }}</{{ heading }}>
+      <span class="row">
+        <span class="badge">{{ meal_type_label(meal.meal_type.value) }}</span>
+        {{ safety_badge(meal.cautioned_ingredients) }}
+      </span>
+    </div>
+
+    <p class="muted">{{ meal.description }}</p>
+
+    <div>
+      <h4>Ingredients</h4>
+      <ul class="chips">
+        {% for ingredient in meal.ingredients %}
+          {% set caution = meal.cautioned_ingredients | selectattr("name", "equalto", ingredient.name) | first %}
+          <li class="chip{% if caution %} chip--caution{% endif %}"{% if caution %} title="{{ caution.note }}"{% endif %}>
+            {{ ingredient.name }}{% if ingredient.category %} <span class="muted">· {{ ingredient.category }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    {% if meal.cautioned_ingredients %}
+      <div class="notice notice--caution small">
+        <strong>Enjoy in moderation:</strong>
+        <ul>
+          {% for item in meal.cautioned_ingredients %}
+            <li><strong>{{ item.name }}</strong>: {{ item.note }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    {% if meal.tags %}
+      <ul class="chips">
+        {% for tag in meal.tags %}<li class="badge">{{ tag }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    {% if meal.recipe %}
+      <details>
+        <summary class="small">Recipe ({{ meal.recipe | length }} steps)</summary>
+        <ol class="small">
+          {% for step in meal.recipe %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+      </details>
+    {% endif %}
+
+    {{ trace_details(meal.trace) }}
+    {{ attribution(meal.model) }}
+  </article>
+{%- endmacro %}
+
+
+{# One confirmed ingredient with the index's reading of it. An ingredient the index
+   has no entry for is neutral, not "rated safe"; a failed lookup keeps the cautious
+   reading it was defaulted to. #}
+{% macro ingredient_chip(item) -%}
+  {% if item.error %}
+    {% set tone, note = "badge--caution", "check failed" %}
+  {% elif not item.found %}
+    {% set tone, note = "", "no known concern" %}
+  {% else %}
+    {% set tone, note = SAFETY_LABELS[item.safety.value].tone, "" %}
+  {% endif %}
+  <li class="{{ ('badge ' ~ tone) | trim }}">{{ item.name }}{% if note %} · {{ note }}{% endif %}</li>
+{%- endmacro %}
+
+
+{# The model call that produced this page, for the browser's own usage tally. Carries
+   no dish text — counts only — so keeping it in the visitor's browser is harmless. #}
+{% macro model_call(call) -%}
+  {% if call %}
+    <div id="llm-call" hidden
+         data-step="{{ call.step }}"
+         data-model="{{ call.model }}"
+         data-calls="{{ call.usage.calls }}"
+         data-input="{{ call.usage.input_tokens }}"
+         data-output="{{ call.usage.output_tokens }}"
+         data-unreported="{{ call.usage.steps | rejectattr("reported") | list | length }}"></div>
+  {% endif %}
+{%- endmacro %}

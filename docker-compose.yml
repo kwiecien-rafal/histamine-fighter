@@ -16,12 +16,12 @@ services:
       retries: 5
 
   backend:
-    build: ./backend
+    build: .
     ports:
       - "8000:8000"
     volumes:
-      - ./backend/app:/app/app
-      - ./backend/seed_data:/app/seed_data
+      - ./app:/app/app
+      - ./seed_data:/app/seed_data
       - fastembed_cache:/app/.cache/fastembed
     env_file:
       - path: .env
@@ -29,7 +29,6 @@ services:
     environment:
       - DEBUG=true
       - DATABASE_URL=postgresql+asyncpg://histamine:histamine@db:5432/histamine
-      - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - FASTEMBED_CACHE_PATH=/app/.cache/fastembed
     extra_hosts:
@@ -37,23 +36,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend/src:/app/src
-      - ./frontend/public:/app/public
-      - ./frontend/index.html:/app/index.html
-      - ./frontend/vite.config.ts:/app/vite.config.ts
-      - ./frontend/tsconfig.json:/app/tsconfig.json
-    environment:
-      - VITE_API_PROXY=http://backend:8000
-      - VITE_TURNSTILE_SITE_KEY=${VITE_TURNSTILE_SITE_KEY:-}
-      - VITE_PUBLIC_DEPLOYMENT=${VITE_PUBLIC_DEPLOYMENT:-}
-    depends_on:
-      - backend
 
 volumes:
   db_data:

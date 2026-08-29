@@ -1,0 +1,15 @@
+# The build context is now the repo root, so everything the image does not COPY is
+# excluded here -- the environment file first of all.
+.env
+.git/
+.github/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+docs/
+experiments/
+migrations/
+tests/

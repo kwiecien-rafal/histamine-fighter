@@ -1,0 +1,468 @@
+/* One hand-written stylesheet for the whole app. No build step, no framework. */
+
+:root {
+  --ink: #1c1c1a;
+  --ink-muted: #5f5f58;
+  --page: #fbfaf7;
+  --surface: #ffffff;
+  --line: #dddbd3;
+  --accent: #1f5138;
+  --accent-soft: #edf3ef;
+  --caution: #8a4b0a;
+  --caution-soft: #fdf3e6;
+  --danger: #8f2d20;
+  --radius: 4px;
+  --gap: 1rem;
+  --measure: 62rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+/* --- layout ------------------------------------------------------------- */
+
+.wrap {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.wrap--narrow {
+  max-width: 42rem;
+}
+
+.page {
+  padding: 2rem 0 4rem;
+}
+
+.page section + section {
+  margin-top: 2.5rem;
+}
+
+.stack > * + * {
+  margin-top: var(--gap);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.grid {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+}
+
+/* --- typography --------------------------------------------------------- */
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
+h1 {
+  font-size: 1.75rem;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+h3 {
+  font-size: 1.05rem;
+}
+
+h4 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+p {
+  margin: 0 0 0.75rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+a:hover {
+  text-decoration: none;
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.small {
+  font-size: 0.875rem;
+}
+
+.lede {
+  font-size: 1.05rem;
+  color: var(--ink-muted);
+  max-width: 44rem;
+}
+
+/* --- header and footer -------------------------------------------------- */
+
+.masthead {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.masthead .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-block: 0.75rem;
+}
+
+.masthead__brand {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.masthead nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.9375rem;
+}
+
+.masthead nav a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.masthead__account {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colophon {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+}
+
+.colophon .wrap {
+  padding-block: 1.5rem;
+}
+
+/* --- components --------------------------------------------------------- */
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1rem;
+}
+
+.card h3 {
+  margin-bottom: 0.25rem;
+}
+
+.card__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.card__link:hover h3 {
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.05rem 0.4rem;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.badge--ok {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.badge--caution {
+  border-color: var(--caution);
+  background: var(--caution-soft);
+  color: var(--caution);
+}
+
+.badge--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.notice {
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+}
+
+.notice--caution {
+  border-color: var(--caution);
+  background: var(--caution-soft);
+  color: var(--caution);
+}
+
+.notice--error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.1rem 0.45rem;
+  font-size: 0.875rem;
+  background: var(--page);
+}
+
+.chip--caution {
+  border-color: var(--caution);
+  background: var(--caution-soft);
+  color: var(--caution);
+}
+
+.countdown {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* --- controls ----------------------------------------------------------- */
+
+.button {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.35rem 0.75rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--ink-muted);
+}
+
+.button[aria-current="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.button[aria-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.field {
+  display: block;
+  max-width: 22rem;
+}
+
+.field > span {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  margin-bottom: 0.25rem;
+}
+
+.field--wide {
+  max-width: 100%;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--accent);
+}
+
+fieldset.field {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+fieldset.field legend {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+  padding: 0;
+  margin-bottom: 0.25rem;
+}
+
+/* A checkbox and its wording travel together, so neither wraps away from the other. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.1rem 0.5rem 0.1rem 0.35rem;
+  background: var(--page);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- lists -------------------------------------------------------------- */
+
+ol,
+ul {
+  padding-left: 1.25rem;
+}
+
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+details[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+/* --- the AI panel ------------------------------------------------------- */
+
+.ai-panel {
+  border-top: 1px solid var(--line);
+  padding-block: 1rem;
+  font-size: 0.875rem;
+}
+
+.ai-panel details + details {
+  margin-top: 0.5rem;
+}
+
+.ai-panel summary {
+  font-weight: 600;
+}
+
+.ai-panel li + li {
+  margin-top: 0.75rem;
+}
+
+.ai-panel p {
+  margin-bottom: 0.35rem;
+}
+
+/* --- tables ------------------------------------------------------------- */
+
+/* Wide content scrolls inside its own box so the page never scrolls sideways. */
+.scroll-x {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.3rem 0.6rem 0.3rem 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.table td + td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- in-flight state ---------------------------------------------------- */
+
+/* htmx marks the element it is working for; the wording beside a button is the
+   only progress indicator, since the button itself is disabled while it runs. */
+.busy {
+  display: none;
+}
+
+.htmx-request .busy,
+.busy.htmx-request {
+  display: inline;
+}

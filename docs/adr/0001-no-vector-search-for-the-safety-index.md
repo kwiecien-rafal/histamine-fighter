@@ -27,7 +27,7 @@ and `find_substitutes`. Cross-dialect synonyms are covered by curating the
 ## Evidence
 
 A viability check
-([backend/experiments/ingredient_embedding_viability.py](../../backend/experiments/ingredient_embedding_viability.py))
+([experiments/ingredient_embedding_viability.py](../../experiments/ingredient_embedding_viability.py))
 embedded a set of true cross-dialect synonyms (`prosciutto` → Cured Ham) and
 *dangerous near-misses* (`almond milk` → Milk) and asked: is there a single
 cosine cutoff that keeps every true synonym while rejecting every wrong match?
