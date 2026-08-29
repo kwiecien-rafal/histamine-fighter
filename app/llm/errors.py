@@ -34,3 +34,30 @@ class LLMInvocationError(LLMError):
     detect that at resolution, so the agent surfaces it as this one error rather
     than a raw exception deep in the loop. Translated to HTTP 502 at the boundary.
     """
+
+
+class LLMRejectedError(LLMInvocationError):
+    """The provider refused the call: an unknown or unentitled model, a bad key, a request it will not accept."""
+
+
+# Statuses a provider returns when the call is unusable as sent, rather than when
+# it is momentarily unable to serve it.
+_REJECTION_STATUSES = frozenset({400, 401, 403, 404, 422})
+
+
+def rejection_status(exc: BaseException) -> int | None:
+    """The provider's status when it refused the call, else None."""
+    response = getattr(exc, "response", None)
+    candidates = (
+        getattr(exc, "status_code", None),
+        getattr(exc, "code", None),
+        getattr(response, "status_code", None),
+    )
+    return next(
+        (
+            status
+            for status in candidates
+            if isinstance(status, int) and status in _REJECTION_STATUSES
+        ),
+        None,
+    )

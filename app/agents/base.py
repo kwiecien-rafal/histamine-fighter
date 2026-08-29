@@ -6,7 +6,7 @@ import structlog
 from langchain_core.messages import AIMessage, BaseMessage
 from pydantic import BaseModel
 
-from app.llm.errors import LLMInvocationError
+from app.llm.errors import LLMInvocationError, LLMRejectedError, rejection_status
 from app.llm.langchain_factory import ChatModel
 from app.schemas.usage import LLMUsage, StepUsage
 
@@ -96,12 +96,29 @@ class BaseAgent(ABC):
             raw = cast(dict[str, Any], await structured.ainvoke(messages))
             reply, parsed = raw["raw"], raw["parsed"]
         except Exception as exc:
-            raise LLMInvocationError(self._invocation_error) from exc
+            raise self._invocation_failure(exc, step=step) from exc
         self._tally(reply, step=step)
         if parsed is None:
             log.warning("agent.malformed_structured_output", step=step, model=self.model_name)
             raise LLMInvocationError(self._invocation_error)
         return cast(SchemaT, parsed)
+
+    def _invocation_failure(self, exc: Exception, *, step: str) -> LLMInvocationError:
+        """Classify a failed model call and log what the provider said."""
+        status = rejection_status(exc)
+        log.warning(
+            "agent.invocation_failed",
+            step=step,
+            model=self.model_name,
+            status=status,
+            error=str(exc),
+        )
+        if status is None:
+            return LLMInvocationError(self._invocation_error)
+        return LLMRejectedError(
+            f"The provider would not run '{self.model_name}' — the model may not exist, "
+            "or the key in use may have no access to it. Pick another model in Settings."
+        )
 
     def _tally(self, reply: BaseMessage, *, step: str) -> None:
         """Record one model reply's token usage on the in-progress response tally.

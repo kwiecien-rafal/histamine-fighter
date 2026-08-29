@@ -24,7 +24,7 @@ from app.enums import (
     SafetyLevel,
     SaveSource,
 )
-from app.llm.errors import LLMInvocationError
+from app.llm.errors import LLMInvocationError, LLMRejectedError
 from app.models import SavedMeal
 from app.models.user import User
 from app.schemas.meal import (
@@ -94,16 +94,18 @@ class _StubLookupAgent:
         result: DishAssessmentResponse | None = None,
         echo_ingredients: bool = True,
         failing: bool = False,
+        failure: Exception | None = None,
     ) -> None:
         self._recognized = recognized
         self._result = result or _assessment()
         self._echo_ingredients = echo_ingredients
         self._failing = failing
+        self._failure = failure or LLMInvocationError("the model would not answer")
         self.alternative_calls: list[AlternativeGoal] = []
 
     async def propose(self, dish: str) -> IngredientProposalResponse:
         if self._failing:
-            raise LLMInvocationError("the model would not answer")
+            raise self._failure
         return IngredientProposalResponse(
             dish=dish,
             recognized=self._recognized,
@@ -116,7 +118,7 @@ class _StubLookupAgent:
         self, dish: str, ingredients: list[ConfirmedIngredient]
     ) -> DishAssessmentResponse:
         if self._failing:
-            raise LLMInvocationError("the model would not answer")
+            raise self._failure
         if not self._echo_ingredients:
             return self._result
         return self._result.model_copy(
@@ -283,6 +285,20 @@ async def test_a_failed_proposal_is_said_on_the_page(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "couldn&#39;t finish that step" in response.text
+
+
+async def test_a_refused_model_is_named_on_the_page(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A model the key cannot use is a settings problem, not a wait-and-retry one."""
+    refusal = LLMRejectedError("The provider would not run 'openai/gpt-5.6-luna'.")
+    _stub_agent(monkeypatch, _StubLookupAgent(failing=True, failure=refusal))
+
+    response = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+
+    assert response.status_code == 200
+    assert "openai/gpt-5.6-luna" in response.text
+    assert "Try again in a moment" not in response.text
 
 
 async def test_the_shared_tier_without_a_session_explains_itself_on_the_page(

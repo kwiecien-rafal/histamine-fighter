@@ -246,7 +246,7 @@ class ComposerAgent(BaseAgent):
             except LLMError:
                 raise
             except Exception as exc:
-                raise LLMInvocationError(_INVOCATION_ERROR) from exc
+                raise self._invocation_failure(exc, step="compose") from exc
             self._tally(reply, step="compose")
             messages.append(reply)
             log.debug(

@@ -27,7 +27,7 @@ from app.enums import (
     MealType,
     SafetyLevel,
 )
-from app.llm.errors import LLMInvocationError
+from app.llm.errors import LLMInvocationError, LLMRejectedError
 from app.llm.langchain_factory import ChatModel
 from app.models import CuratedMeal, HistamineIngredient
 from app.models.curated_meal import meal_embedding_text
@@ -247,6 +247,36 @@ async def test_propose_model_failure_becomes_a_clean_domain_error(session: Async
 
     with pytest.raises(LLMInvocationError):
         await _agent(chat, IngredientService(session)).propose(dish="anything")
+
+
+class _Refused(Exception):
+    """A provider SDK error: they all carry the refused call's status on the exception."""
+
+    def __init__(self, status: int) -> None:
+        super().__init__(f"Error code: {status} - model `gpt-5.6-luna` is not available")
+        self.status_code = status
+
+
+async def test_a_refused_model_is_a_rejection_not_a_retry(session: AsyncSession) -> None:
+    # A model the key cannot use answers a retry the same way, so the agent says so
+    # rather than inviting the person to try again in a moment.
+    chat = _ScriptedChat(proposal=_Refused(403))
+
+    with pytest.raises(LLMRejectedError) as failure:
+        await _agent(chat, IngredientService(session)).propose(dish="anything")
+
+    assert "stub/model" in str(failure.value)
+    # The provider's own words name the operator's account, so they stay in the log.
+    assert "gpt-5.6-luna" not in str(failure.value)
+
+
+async def test_an_unreachable_provider_stays_retryable(session: AsyncSession) -> None:
+    chat = _ScriptedChat(proposal=_Refused(503))
+
+    with pytest.raises(LLMInvocationError) as failure:
+        await _agent(chat, IngredientService(session)).propose(dish="anything")
+
+    assert not isinstance(failure.value, LLMRejectedError)
 
 
 class _NoOutput:

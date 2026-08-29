@@ -30,7 +30,7 @@ from app.dependencies import (
     get_saved_meal_service,
 )
 from app.enums import MealType, SavedMealTag, SaveSource
-from app.llm.errors import LLMError, LLMInvocationError
+from app.llm.errors import LLMError, LLMInvocationError, LLMRejectedError
 from app.models import SavedMeal
 from app.models.user import User
 from app.schemas.saved import SaveByReference, SavedMealDetail, SavedMealUpdate
@@ -315,6 +315,8 @@ def _recipe_failure(exc: BaseException) -> str:
         return "You're out of free AI calls for today — your account shows when they reset."
     if isinstance(exc, RateLimitExceeded):
         return "That's a lot of recipes at once. Wait a minute, then try again."
+    if isinstance(exc, LLMRejectedError):
+        return str(exc)
     if isinstance(exc, LLMInvocationError):
         return "The model couldn't write that recipe. Try again in a moment."
     return f"No AI provider is available for this: {exc}"

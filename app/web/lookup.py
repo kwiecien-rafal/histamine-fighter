@@ -44,7 +44,7 @@ from app.dependencies import (
     get_saved_meal_service,
 )
 from app.enums import AdaptationAction, AlternativeGoal, DishIntegrity, SafetyLevel, SaveSource
-from app.llm.errors import LLMError, LLMInvocationError
+from app.llm.errors import LLMError, LLMInvocationError, LLMRejectedError
 from app.models.user import User
 from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,
@@ -500,6 +500,8 @@ def _failure_message(exc: BaseException) -> str:
         return "You're out of free AI calls for today — your account shows when they reset."
     if isinstance(exc, RateLimitExceeded):
         return "That's a lot of checks at once. Wait a minute, then try again."
+    if isinstance(exc, LLMRejectedError):
+        return str(exc)
     if isinstance(exc, LLMInvocationError):
         return "The model couldn't finish that step. Try again in a moment."
     return f"No AI provider is available for this: {exc}"

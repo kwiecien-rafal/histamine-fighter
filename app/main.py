@@ -30,7 +30,12 @@ from app.core.turnstile import TurnstileError
 from app.db.engine import engine
 from app.dependencies import stashed_request_llm
 from app.embeddings import warm_up_embedder
-from app.llm.errors import LLMConfigError, LLMInvocationError, ProviderNotAvailableError
+from app.llm.errors import (
+    LLMConfigError,
+    LLMInvocationError,
+    LLMRejectedError,
+    ProviderNotAvailableError,
+)
 from app.services.email_service import EmailDeliveryError
 from app.services.quota_service import QuotaExceededError
 from app.web import router as web_router
@@ -151,9 +156,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Histamine Fighter", debug=settings.debug, lifespan=lifespan)
-    # The app's own pages are same-origin, so this only serves third-party callers of
-    # the JSON API. allow_credentials lets a configured origin send the session
-    # cookie; it is safe only because allow_origins is an explicit list, never "*".
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -161,25 +164,19 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # The LLM layer raises domain errors, not HTTPException; map them here so a
-    # bad provider/key is a 400, a reserved provider a 501, and a failed model
-    # call (e.g. a model that cannot emit structured output) a 502.
+
     app.add_exception_handler(LLMConfigError, _domain_error_handler(400))
     app.add_exception_handler(ProviderNotAvailableError, _domain_error_handler(501))
+    app.add_exception_handler(LLMRejectedError, _domain_error_handler(400))
     app.add_exception_handler(LLMInvocationError, _domain_error_handler(502))
-    # Auth-flow domain errors follow the same boundary-mapping pattern.
+
     app.add_exception_handler(TurnstileError, _domain_error_handler(400))
     app.add_exception_handler(EmailDeliveryError, _domain_error_handler(502))
     app.add_exception_handler(StarletteHTTPException, _not_found_page)
 
     async def _quota_exceeded(request: Request, exc: Exception) -> JSONResponse:
-        """429 for an exhausted daily quota.
-
-        ``detail`` stays a plain string like every other error, so generic clients
-        keep working; the structured ``quota`` sibling lets the SPA show which limit
-        was hit and when it resets.
-        """
-        if not isinstance(exc, QuotaExceededError):  # pragma: no cover - handler contract
+        """429 for an exhausted daily quota."""
+        if not isinstance(exc, QuotaExceededError):
             raise exc
         if exc.scope == "signup_ip":
             detail = "Too many new accounts from this network today. Try again tomorrow."
@@ -203,9 +200,6 @@ def create_app() -> FastAPI:
 
     app.add_exception_handler(QuotaExceededError, _quota_exceeded)
 
-    # slowapi looks the limiter up on app.state; routes opt in via its decorator.
-    # Own handler rather than slowapi's stock one: its signature is too narrow
-    # for Starlette's typing, and this keeps the error shape consistent.
     app.state.limiter = limiter
 
     async def _rate_limited(request: Request, exc: Exception) -> JSONResponse:
