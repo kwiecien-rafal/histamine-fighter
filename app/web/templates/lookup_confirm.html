@@ -8,8 +8,8 @@
   <header>
     <h1>Confirm what's in it</h1>
     <p class="lede">
-      You know your plate better than any model does. Add, rename or delete lines until
-      this is what you'll actually be eating — every one of them gets checked.
+      Add, rename or delete lines until this is what you will actually be eating. Every
+      line on the list gets checked.
     </p>
   </header>
 
@@ -28,7 +28,7 @@
         <h2>{{ dish }}</h2>
         <input type="hidden" name="dish" value="{{ dish }}" />
         <p class="small muted">
-          Ingredients proposed by <span class="badge">{{ model }}</span>{% if cached %} —
+          Ingredients proposed by <span class="badge">{{ model }}</span>{% if cached %},
           shown from an earlier check of this dish{% endif %}.
         </p>
       {% else %}
@@ -41,7 +41,7 @@
 
       <label class="field field--wide">
         <span>
-          Ingredients — one per line, as <code>name {{ separator }} category</code>.
+          Ingredients, one per line, as <code>name {{ separator }} category</code>.
           The category is optional and only helps when the index has no entry for the name.
         </span>
         <textarea name="ingredients" rows="12" required
@@ -56,7 +56,7 @@
 
       <p class="row">
         <button class="button" type="submit">Check this dish</button>
-        <span class="busy small muted">Weighing every ingredient…</span>
+        <span class="busy small muted">Checking every ingredient…</span>
       </p>
     </form>
   </div>

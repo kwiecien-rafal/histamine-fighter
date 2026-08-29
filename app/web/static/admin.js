@@ -151,7 +151,7 @@
         finished = true;
       } else if (frame.event === "slot_error") {
         failed = true;
-        view.note(frame.data.meal_type + " failed — " + frame.data.detail, "notice notice--error");
+        view.note(frame.data.meal_type + " failed: " + frame.data.detail, "notice notice--error");
       } else if (frame.event === "error") {
         failed = true;
         view.note(frame.data.detail, "notice notice--error");

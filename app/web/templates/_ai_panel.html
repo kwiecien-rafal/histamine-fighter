@@ -20,7 +20,7 @@
     <summary>AI settings</summary>
     <p class="small muted">
       Which model answers your dish checks. Keys stay in this browser and travel only as
-      a request header — we never store them.
+      a request header; we never store them.
     </p>
 
     <ul class="plain-list stack">
@@ -34,7 +34,7 @@
           <p class="small muted">{{ row.note }}</p>
 
           {% if row.id == "shared" and not user %}
-            <p class="small muted"><a href="/login">Sign in</a> to unlock it.</p>
+            <p class="small muted"><a href="/login">Sign in</a> to use it.</p>
           {% elif row.id == "ollama" and public_deployment %}
             <p class="small muted">Available when you run the stack yourself.</p>
           {% endif %}
@@ -51,7 +51,7 @@
                   <label class="field field--wide">
                     <span>Base URL</span>
                     <input type="text" data-llm="baseUrl" data-provider="ollama"
-                           placeholder="server default — e.g. http://localhost:11434" />
+                           placeholder="server default, e.g. http://localhost:11434" />
                   </label>
                 {% else %}
                   <label class="field field--wide">
@@ -63,7 +63,7 @@
                 <label class="field field--wide">
                   <span>Model{% if row.id == 'openrouter' %} (required){% endif %}</span>
                   <input type="text" data-llm="model" data-provider="{{ row.id }}"
-                         placeholder="{% if row.id == 'openrouter' %}e.g. anthropic/claude-sonnet-4{% elif DEFAULT_MODELS.get(row.id) %}provider default — e.g. {{ DEFAULT_MODELS.get(row.id) }}{% else %}server default{% endif %}" />
+                         placeholder="{% if row.id == 'openrouter' %}e.g. anthropic/claude-sonnet-4{% elif DEFAULT_MODELS.get(row.id) %}provider default, e.g. {{ DEFAULT_MODELS.get(row.id) }}{% else %}server default{% endif %}" />
                 </label>
               {% endif %}
             </div>
@@ -76,8 +76,8 @@
   <details id="ai-usage">
     <summary>Model usage <span class="badge" data-usage="summary">nothing yet</span></summary>
     <p class="small muted">
-      Counted in this browser only — token totals, never what you looked up. Costs are
-      approximate list prices as of <span data-usage="priced">—</span>; an unpriced or
+      Counted in this browser only: token totals, never what you looked up. Costs are
+      approximate list prices as of <span data-usage="priced">—</span>, and an unpriced or
       self-hosted model shows no figure.
     </p>
     <div class="scroll-x">

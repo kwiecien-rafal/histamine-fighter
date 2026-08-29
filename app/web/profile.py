@@ -306,7 +306,7 @@ def _edit_failure(exc: ValidationError) -> str:
 def _recipe_failure(exc: BaseException) -> str:
     """Plain copy for a recipe the app could not write."""
     if isinstance(exc, QuotaExceededError):
-        return "You're out of free AI calls for today — your account shows when they reset."
+        return "You're out of free AI calls for today. Your account page shows when they reset."
     if isinstance(exc, RateLimitExceeded):
         return "That's a lot of recipes at once. Wait a minute, then try again."
     if isinstance(exc, LLMRejectedError):

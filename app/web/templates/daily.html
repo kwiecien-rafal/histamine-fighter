@@ -8,7 +8,7 @@
   <header>
     <h1>{% if is_today %}Today's meals{% else %}{{ board.date | board_date }}{% endif %}</h1>
     {% if is_today %}
-      <p class="muted">Four histamine-safe meals our agent composes fresh each day.</p>
+      <p class="muted">Four histamine-safe meals, composed by the agent each day.</p>
     {% endif %}
     {{ ui.medical_note() }}
   </header>
@@ -36,7 +36,7 @@
       <p class="small muted">Next board in</p>
       <p class="countdown">{{ board.reveal_at | countdown }}</p>
       <p class="muted">
-        The board unlocks at {{ board.reveal_at | utc_time }} — reload then to see the meals.
+        The board unlocks at {{ board.reveal_at | utc_time }}. Reload then to see the meals.
       </p>
     </section>
   {% else %}

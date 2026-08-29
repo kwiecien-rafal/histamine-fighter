@@ -104,7 +104,7 @@ def resolve_llm_config(
     model = cfg.model or DEFAULT_MODELS.get(provider)
     if model is None:
         raise LLMConfigError(
-            "A model is required for OpenRouter — see https://openrouter.ai/models."
+            "A model is required for OpenRouter: see https://openrouter.ai/models."
         )
     return ResolvedLLMConfig(provider=provider, model=model, api_key=api_key, base_url=None)
 

@@ -81,7 +81,7 @@
     {% if content.unverified_ingredients %}
       <p class="notice notice--caution small">
         <strong>Not in the index:</strong>
-        {{ content.unverified_ingredients | join(", ") }} — the gate could not vouch for
+        {{ content.unverified_ingredients | join(", ") }}. The gate could not vouch for
         these, so check them yourself before approving.
       </p>
     {% endif %}

@@ -581,7 +581,7 @@ async def test_the_shared_tier_is_closed_to_an_anonymous_visitor(client: AsyncCl
     response = await client.get("/lookup")
 
     assert 'value="shared" disabled' in response.text
-    assert "Sign in</a> to unlock it." in response.text
+    assert "Sign in</a> to use it." in response.text
 
 
 async def test_the_shared_tier_opens_once_signed_in(user_client: AsyncClient) -> None:

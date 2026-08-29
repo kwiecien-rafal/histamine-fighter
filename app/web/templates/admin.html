@@ -33,7 +33,7 @@
     <h2>Composer model</h2>
     <p class="small muted">
       Which provider and model compose meals, here and in the nightly job. Only the choice
-      is stored — keys stay in the environment. Composing right now with
+      is stored; keys stay in the environment. Composing right now with
       <span class="badge">{{ provider or "unset" }}{% if model %} · {{ model }}{% endif %}</span>.
     </p>
 
@@ -49,7 +49,7 @@
           </select>
         </label>
         <label class="field">
-          <span>Model — empty for the provider's default</span>
+          <span>Model, empty for the provider's default</span>
           <input type="text" name="model" value="{{ model or '' }}"
                  placeholder="provider default (OpenRouter needs one named)" />
         </label>
@@ -67,7 +67,7 @@
     <h2>Compose</h2>
     <p class="small muted">
       Watch the composer work. Every run saves a pending row below, trace and all, for you
-      to review. Runs are serialized server-side, so only one goes at a time.
+      to review. Runs are serialised server-side, so only one goes at a time.
     </p>
     <noscript>
       <p class="notice">
@@ -143,7 +143,7 @@
           {% if day.pending_count or day.missing_meal_types %}
             <p class="notice notice--caution small">
               {% if day.approved_count %}
-                Not fully approved — the public board will show only the approved slots.
+                Not fully approved, so the public board shows only the approved slots.
               {% else %}
                 Nothing approved yet, so this day stays locked.
               {% endif %}

@@ -56,9 +56,9 @@
 } %}
 
 {% set PIVOT_COPY = {
-  "lost": "These changes would lose what makes this dish itself — another dish may serve you better.",
-  "altered": "Adapting this changes a core part of the dish. Want something closer to the original?",
-  "unresolved": "Part of this dish has no safe fix. Something else may suit you better.",
+  "lost": "These changes would take away what makes the dish itself. Another dish is the better bet.",
+  "altered": "Adapting this changes a core part of the dish, so you may prefer something closer to the original.",
+  "unresolved": "Part of this dish has no safe fix. Worth looking at something else.",
 } %}
 
 {% set TRACE_KIND_LABELS = {
@@ -130,7 +130,7 @@
     <a class="button" href="/login">Sign in to save</a>
   {% elif save_id %}
     <span class="row">
-      <a class="button" href="/profile/meals/{{ save_id }}">Saved — open your copy</a>
+      <a class="button" href="/profile/meals/{{ save_id }}">Open your saved copy</a>
       <form method="post" action="/profile/meals/{{ save_id }}/delete">
         <input type="hidden" name="back_url" value="{{ back_url }}" />
         <button class="button" type="submit">Remove</button>
@@ -168,8 +168,8 @@
 {# Kept in sight wherever a verdict or a meal could be acted on; the full text is in the footer. #}
 {% macro medical_note() -%}
   <p class="small muted">
-    Informational only, not medical advice — tolerance varies from person to person;
-    when in doubt, ask your clinician.
+    Informational only, not medical advice. Tolerance varies from person to person, so
+    ask your clinician if you are unsure.
   </p>
 {%- endmacro %}
 
@@ -177,7 +177,7 @@
 {# Provenance for an AI output: the producing model, or the hand-authored sentinel. #}
 {% macro attribution(model) -%}
   {% if model == MANUAL_MODEL %}
-    <span class="badge" title="Written and curated by an admin, not composed by a model.">
+    <span class="badge" title="Written by an admin rather than composed by a model.">
       Curated by admin
     </span>
   {% else %}
@@ -194,7 +194,7 @@
 {% macro safety_badge(cautioned_ingredients=[]) -%}
   {% if cautioned_ingredients %}
     <span class="badge badge--caution"
-          title="Verified against the curated index and approved by a human; some ingredients are best enjoyed in moderation.">
+          title="Checked against the curated index and approved by a human. Some ingredients are best kept to small amounts.">
       In moderation
     </span>
   {% else %}

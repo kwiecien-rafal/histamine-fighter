@@ -35,8 +35,8 @@
     <section class="card stack">
       <h2>No recipe yet</h2>
       <p class="small muted">
-        We can write one from the ingredients below. Save any edits first — the recipe is
-        written from the saved copy, and it is written once.
+        We can write one from the ingredients below. Save any edits first: the recipe is
+        written from the saved copy, and only once.
       </p>
       <form method="post" action="/profile/meals/{{ meal.id }}/recipe">
         <button class="button" type="submit">Write the recipe</button>
@@ -64,12 +64,12 @@
       </label>
 
       <label class="field field--wide">
-        <span>Ingredients — one per line, as <code>name {{ separator }} category</code></span>
+        <span>Ingredients, one per line, as <code>name {{ separator }} category</code></span>
         <textarea name="ingredients" rows="8" required>{{ form.ingredients }}</textarea>
       </label>
 
       <label class="field field--wide">
-        <span>Recipe — one step per line, empty for none</span>
+        <span>Recipe, one step per line. Empty for none</span>
         <textarea name="recipe" rows="8">{{ form.recipe }}</textarea>
       </label>
 

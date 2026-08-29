@@ -21,8 +21,8 @@
 
       {% if result.cached %}
         <p class="small muted">
-          Instant answer — this exact dish and ingredient list was checked before, and
-          nothing it relied on has changed in the index since.
+          Served from the cache: this exact dish and ingredient list was checked before,
+          and nothing it relied on has changed in the index since.
         </p>
       {% endif %}
 
@@ -123,14 +123,14 @@
                   <form method="post" action="/lookup/propose" hx-disabled-elt="find button">
                     <input type="hidden" name="dish" value="{{ item.name }}" />
                     <button class="button" type="submit">Check this one instead</button>
-                    <span class="busy small muted">Fighting through the ingredient list…</span>
+                    <span class="busy small muted">Working out the ingredients…</span>
                   </form>
                 </li>
               {% endfor %}
             </ul>
             <p class="small muted">Suggested by <span class="badge">{{ suggestions.model }}</span></p>
           {% else %}
-            <p class="notice">Nothing good came back for that goal — try another one.</p>
+            <p class="notice">Nothing came back for that goal. Try another one.</p>
           {% endif %}
         {% endif %}
       </section>
@@ -147,9 +147,9 @@
           <p class="row">
             <button class="button" type="submit">
               {% if result.verdict.value == 'avoid' %}
-                Like the dish in spite of our verdict? Write the recipe
+                Write the recipe anyway
               {% else %}
-                Like this dish? Write the recipe
+                Write the recipe
               {% endif %}
             </button>
             <span class="busy small muted">Writing the recipe…</span>
@@ -159,10 +159,10 @@
     </section>
 
     <section class="card stack">
-      <h2>Keep it</h2>
+      <h2>Save it</h2>
       {% if user %}
         <p class="small muted">
-          Saved as your own private copy, exactly as it reads here — recipe included.
+          Saved as your own private copy, exactly as it reads here, recipe included.
         </p>
         <form method="post" action="/lookup/save" hx-boost="false">
           <input type="hidden" name="state" value="{{ state_json }}" />

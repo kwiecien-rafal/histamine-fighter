@@ -20,7 +20,7 @@ async def test_home_renders_without_any_data(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Fight back against histamine." in response.text
+    assert "Histamine Fighter: eating well with histamine intolerance" in response.text
     assert "hasn't been set yet" in response.text
 
 
@@ -58,7 +58,7 @@ async def test_home_counts_only_approved_meals(client: AsyncClient, session: Asy
     response = await client.get("/")
 
     assert response.status_code == 200
-    assert "1 meals in the safe corner" in response.text
+    assert "1 meals checked and approved" in response.text
 
 
 async def test_privacy_page_renders(client: AsyncClient) -> None:

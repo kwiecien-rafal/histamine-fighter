@@ -478,7 +478,7 @@ def _failure_message(exc: BaseException) -> str:
         # The shared tier's own refusal, already written for the person reading it.
         return str(exc.detail)
     if isinstance(exc, QuotaExceededError):
-        return "You're out of free AI calls for today — your account shows when they reset."
+        return "You're out of free AI calls for today. Your account page shows when they reset."
     if isinstance(exc, RateLimitExceeded):
         return "That's a lot of checks at once. Wait a minute, then try again."
     if isinstance(exc, LLMRejectedError):

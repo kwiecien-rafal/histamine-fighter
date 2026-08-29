@@ -4,10 +4,10 @@
 
 {% block content %}
   <header>
-    <h1>Is your dish safe?</h1>
+    <h1>Check a dish</h1>
     <p class="lede">
-      Name a dish and we'll propose what goes into it. You correct that list — then the
-      verdict is computed from the curated ingredient index, not guessed by a model.
+      Name a dish and we will propose what goes into it. You correct that list, and the verdict
+      is then computed from the curated ingredient index rather than guessed by a model.
     </p>
   </header>
 
@@ -32,14 +32,14 @@
       </label>
       <p class="row">
         <button class="button" type="submit">Find the ingredients</button>
-        <span class="busy small muted">Fighting through the ingredient list…</span>
+        <span class="busy small muted">Working out the ingredients…</span>
       </p>
     </form>
   </div>
 
   <p class="small muted">
-    Know what's in it already? <a href="/lookup/manual">List the ingredients yourself</a> —
-    that step costs no model call at all.
+    Already know what is in it? <a href="/lookup/manual">List the ingredients yourself</a>.
+    That step costs no model call at all.
   </p>
 
   {{ ui.medical_note() }}
