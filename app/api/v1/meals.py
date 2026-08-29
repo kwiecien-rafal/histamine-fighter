@@ -4,19 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from app.agents.dish_lookup import DishLookupAgent
 from app.agents.recipe import RecipeAgent
-from app.config import settings
 from app.core.ratelimit import limiter, llm_rate_limit
 from app.dependencies import (
-    RequestLLM,
     build_dish_lookup_agent,
     build_recipe_agent,
-    get_lookup_cache_service,
+    get_dish_lookup_service,
     get_meal_service,
     get_request_llm_config,
 )
 from app.enums import MealType
+from app.llm.request import RequestLLM
 from app.schemas.meal import (
-    CautionedIngredient,
     DishAlternativesRequest,
     DishAlternativesResponse,
     DishAssessmentRequest,
@@ -24,12 +22,11 @@ from app.schemas.meal import (
     DishLookupRequest,
     IngredientProposalResponse,
     LookupRecipeRequest,
-    ProposedIngredient,
     PublicMealDetail,
     PublicMealPage,
     RecipeGeneration,
 )
-from app.services.lookup_cache_service import LookupCacheService
+from app.services.dish_lookup_service import DishLookupService
 from app.services.meal_service import MealService, public_card, public_detail
 
 router = APIRouter(prefix="/api/v1/meals", tags=["meals"])
@@ -78,17 +75,6 @@ async def get_curated_meal(
     return public_detail(row)
 
 
-def _cache_writes_allowed(resolved: RequestLLM) -> bool:
-    """Whether this request's output may enter the shared lookup cache.
-
-    On a public deployment only the operator-pinned shared tier writes: a BYO
-    model is untrusted quality (and, via any endpoint-controllable provider,
-    untrusted content), and must not populate state every visitor reads. A
-    non-public deployment is one trust domain, so everything caches.
-    """
-    return resolved.shared or not settings.public_deployment
-
-
 @router.post("/propose", response_model=IngredientProposalResponse)
 @limiter.limit(llm_rate_limit)
 async def propose_ingredients(
@@ -96,23 +82,10 @@ async def propose_ingredients(
     payload: DishLookupRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
-    cache: LookupCacheService = Depends(get_lookup_cache_service),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> IngredientProposalResponse:
-    # The cache is read before charging: a hit costs no model call, so it must
-    # not consume shared-tier quota (the rate limit still bounds it).
-    cached = await cache.get_proposal(payload.dish)
-    if cached is not None:
-        # Release the unspent shared-tier charge so the leak backstop does not
-        # bill a free answer as a forgotten charge.
-        resolved.waive()
-        return cached
-    # The same instance the agent was built from (FastAPI caches the dependency
-    # per request); charging here, at the model-call boundary, is the contract.
-    await resolved.charge()
-    response = await agent.propose(dish=payload.dish)
-    if _cache_writes_allowed(resolved):
-        await cache.store_proposal(response)
-    return response
+    """Step 1 — what the model thinks is in the dish, for the caller to correct."""
+    return await lookup.propose(payload, agent=agent, resolved=resolved)
 
 
 @router.post("/assess", response_model=DishAssessmentResponse)
@@ -122,19 +95,10 @@ async def assess_dish(
     payload: DishAssessmentRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
-    cache: LookupCacheService = Depends(get_lookup_cache_service),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> DishAssessmentResponse:
-    # A hit is only served while its grounding fingerprint still matches the
-    # live index — no model call either way; see the service.
-    cached = await cache.get_assessment(payload.dish, payload.ingredients)
-    if cached is not None:
-        resolved.waive()
-        return cached
-    await resolved.charge()
-    response = await agent.assess(dish=payload.dish, ingredients=payload.ingredients)
-    if _cache_writes_allowed(resolved):
-        await cache.store_assessment(payload.dish, payload.ingredients, response)
-    return response
+    """Step 2 — the verdict for the confirmed ingredient list."""
+    return await lookup.assess(payload, agent=agent, resolved=resolved)
 
 
 @router.post("/recipe", response_model=RecipeGeneration)
@@ -144,26 +108,10 @@ async def generate_lookup_recipe(
     payload: LookupRecipeRequest,
     agent: RecipeAgent = Depends(build_recipe_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> RecipeGeneration:
-    """Write a recipe for an assessed dish straight off the result card.
-
-    Nothing is persisted: the result is not a saved meal (yet), so the steps
-    live in the client until a save carries them along. The payload is
-    client-asserted like a lookup save; the agent's own scan of the drafted
-    steps against the index is the guardrail that matters.
-    """
-    await resolved.charge()
-    return await agent.run(
-        name=payload.dish,
-        description=payload.description,
-        ingredients=[
-            ProposedIngredient(name=item.name, category=item.category)
-            for item in payload.ingredients
-        ],
-        cautions=[
-            CautionedIngredient(name=item.ingredient, note=item.note) for item in payload.advisories
-        ],
-    )
+    """Write a recipe for an assessed dish straight off the result card."""
+    return await lookup.recipe(payload, agent=agent, resolved=resolved)
 
 
 @router.post("/alternatives", response_model=DishAlternativesResponse)
@@ -173,13 +121,7 @@ async def suggest_alternatives(
     payload: DishAlternativesRequest,
     agent: DishLookupAgent = Depends(build_dish_lookup_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> DishAlternativesResponse:
-    await resolved.charge()
-    # Both ingredient lists are client-asserted: they only steer the suggestion
-    # prompt, and every picked suggestion is fully re-vetted via propose/assess.
-    return await agent.alternatives(
-        dish=payload.dish,
-        goal=payload.goal,
-        avoid_ingredients=payload.avoid_ingredients,
-        prefer_ingredients=payload.prefer_ingredients,
-    )
+    """Step 3 — other dishes for a goal when this one cannot be rescued."""
+    return await lookup.alternatives(payload, agent=agent, resolved=resolved)

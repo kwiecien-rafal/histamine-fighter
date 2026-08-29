@@ -6,12 +6,11 @@ rules over a ``MealVerification``, so they are pinned here without a database.
 """
 
 import pytest
-from fastapi import HTTPException
 
 from app.agents.meal_verification import MealVerification
-from app.api.admin.edits import ensure_safe
 from app.enums import TraceReading
 from app.schemas.meal import CautionedIngredient
+from app.services.meal_edit import UnsafeMealEdit, ensure_safe
 
 
 def _verification(blockers: list[tuple[str, TraceReading]]) -> MealVerification:
@@ -35,16 +34,14 @@ def test_cautioned_never_blocks() -> None:
     assert ensure_safe(verification, confirmed=False) == []
 
 
-def test_avoid_blocks_with_a_confirmable_422() -> None:
+def test_avoid_blocks_with_a_confirmable_refusal() -> None:
     verification = _verification([("parmesan", TraceReading.AVOID)])
 
-    with pytest.raises(HTTPException) as excinfo:
+    with pytest.raises(UnsafeMealEdit) as excinfo:
         ensure_safe(verification, confirmed=False)
 
-    detail = excinfo.value.detail
-    assert isinstance(detail, dict)
-    assert detail["blockers"] == ["parmesan (avoid)"]
-    assert detail["can_confirm"] is True
+    assert excinfo.value.blockers == ["parmesan (avoid)"]
+    assert excinfo.value.can_confirm is True
 
 
 def test_confirmation_clears_avoid_and_returns_it_for_recording() -> None:
@@ -59,10 +56,8 @@ def test_unverifiable_blocks_even_when_confirmed() -> None:
         [("mystery", TraceReading.UNVERIFIABLE), ("parmesan", TraceReading.AVOID)]
     )
 
-    with pytest.raises(HTTPException) as excinfo:
+    with pytest.raises(UnsafeMealEdit) as excinfo:
         ensure_safe(verification, confirmed=True)
 
-    detail = excinfo.value.detail
-    assert isinstance(detail, dict)
-    assert detail["blockers"] == ["mystery (unverifiable)"]
-    assert detail["can_confirm"] is False
+    assert excinfo.value.blockers == ["mystery (unverifiable)"]
+    assert excinfo.value.can_confirm is False

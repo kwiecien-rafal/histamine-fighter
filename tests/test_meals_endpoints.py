@@ -15,7 +15,6 @@ from httpx import ASGITransport, AsyncClient
 from app.config import settings
 from app.core.ratelimit import limiter
 from app.dependencies import (
-    RequestLLM,
     build_dish_lookup_agent,
     build_recipe_agent,
     get_lookup_cache_service,
@@ -30,6 +29,7 @@ from app.enums import (
     SafetyLevel,
 )
 from app.llm.config import LLMRequestConfig
+from app.llm.request import RequestLLM
 from app.main import create_app
 from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,

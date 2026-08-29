@@ -19,9 +19,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from slowapi.errors import RateLimitExceeded
 
-from app.api.v1 import saved_meals as api_saved_meals
 from app.dependencies import (
-    RequestLLM,
     build_recipe_agent,
     get_daily_service,
     get_ingredient_service,
@@ -31,6 +29,7 @@ from app.dependencies import (
 )
 from app.enums import MealType, SavedMealTag, SaveSource
 from app.llm.errors import LLMError, LLMInvocationError, LLMRejectedError
+from app.llm.request import RequestLLM
 from app.models import SavedMeal
 from app.models.user import User
 from app.schemas.saved import SaveByReference, SavedMealDetail, SavedMealUpdate
@@ -38,7 +37,13 @@ from app.services.daily_service import DailyService
 from app.services.ingredient_service import IngredientService
 from app.services.meal_service import MealService
 from app.services.quota_service import QuotaExceededError
-from app.services.saved_meal_service import SavedMealService, saved_card, saved_detail
+from app.services.saved_meal_service import (
+    SavedMealNotFound,
+    SavedMealService,
+    SaveLimitReached,
+    saved_card,
+    saved_detail,
+)
 from app.web.deps import (
     INGREDIENT_SEPARATOR,
     ingredient_lines,
@@ -91,21 +96,20 @@ async def save_meal(
 ) -> Response:
     """Save a curated meal or a revealed daily slot, then return where it was saved from."""
     try:
-        await api_saved_meals.save_meal(
-            request=request,
-            payload=SaveByReference(source=source, source_id=source_id),
-            response=Response(),
-            user=user,
-            service=service,
-            meal_service=meal_service,
-            daily_service=daily_service,
+        await service.save(
+            user.id,
+            SaveByReference(source=source, source_id=source_id),
+            meals=meal_service,
+            daily=daily_service,
         )
-    except HTTPException as exc:
-        if exc.status_code != status.HTTP_409_CONFLICT:
-            raise
+    except SaveLimitReached as exc:
         # The only refusal a save from a public page can hit is the per-user cap,
         # and the shelf is where it gets fixed.
-        return await _shelf_page(request, user, service, error=str(exc.detail))
+        return await _shelf_page(request, user, service, error=str(exc))
+    except SavedMealNotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Meal not found."
+        ) from exc
     return _back_to(back_url)
 
 
@@ -155,9 +159,7 @@ async def edit_saved_meal(
         )
     except ValidationError as exc:
         return _meal_page(request, saved_detail(row), form=submitted, error=_edit_failure(exc))
-    await api_saved_meals.update_saved_meal(
-        request=request, save_id=save_id, payload=payload, user=user, service=service
-    )
+    await service.update(row, payload)
     return _back_to(f"/profile/meals/{save_id}")
 
 
@@ -179,15 +181,7 @@ async def write_recipe(
     row = await _owned(service, user, save_id)
     try:
         agent = build_recipe_agent(resolved, ingredients)
-        await api_saved_meals.generate_saved_recipe(
-            request=request,
-            save_id=save_id,
-            response=Response(),
-            user=user,
-            service=service,
-            agent=agent,
-            resolved=resolved,
-        )
+        await service.generate_recipe(user.id, save_id, agent=agent, resolved=resolved)
     except _RECIPE_FAILURES as exc:
         return _meal_page(request, saved_detail(row), error=_recipe_failure(exc))
     return _back_to(f"/profile/meals/{save_id}")
@@ -202,7 +196,7 @@ async def remove_saved_meal(
     service: SavedMealService = Depends(get_saved_meal_service),
 ) -> Response:
     """Remove a saved copy, then return where it was removed from."""
-    await api_saved_meals.unsave_meal(request=request, save_id=save_id, user=user, service=service)
+    await service.delete(await _owned(service, user, save_id))
     return _back_to(back_url, fallback="/profile")
 
 

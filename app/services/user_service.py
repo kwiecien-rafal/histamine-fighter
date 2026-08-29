@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password, verify_password
 from app.enums import Role
 from app.models.user import User, normalize_email
+from app.schemas.admin import AdminLoginRequest
 
 log = structlog.get_logger(__name__)
 
@@ -25,6 +26,14 @@ log = structlog.get_logger(__name__)
 # the email is unknown keeps login's timing roughly constant, so a response time
 # cannot reveal whether an account exists.
 _DUMMY_HASH = "$2b$12$crB67Aj6UoOU7YdzxnSk7uC/vEzUlAJ6c1gbsBgoWkOLWHbmaBPQ."
+
+
+class InvalidCredentials(Exception):
+    """The single refusal for any failed admin password login.
+
+    Identical for a wrong password, an unknown email, and a disabled account, so the
+    answer never reveals which of those it was. The API boundary maps this to 401.
+    """
 
 
 class UserService:
@@ -44,6 +53,23 @@ class UserService:
         """Return the account for an email, or None if there is no match."""
         stmt = select(User).where(User.email == normalize_email(email))
         return (await self._session.execute(stmt)).scalar_one_or_none()
+
+    async def authenticate_admin(self, payload: AdminLoginRequest, *, ip: str) -> User:
+        """Verify admin credentials and return the account; the caller opens the session."""
+        user = await self.authenticate(payload.email, payload.password)
+        if user is None:
+            # Log the attempted email and source IP so brute force is visible. The
+            # password is never logged.
+            log.warning("admin.login.failed", email=payload.email, client=ip)
+            raise InvalidCredentials("Incorrect email or password.")
+        if not user.is_active:
+            # Correct credentials on a disabled account. Logged on its own event for the
+            # operator, but answered identically so a session never opens and the
+            # answer cannot confirm the account exists.
+            log.warning("admin.login.inactive", email=user.email, client=ip)
+            raise InvalidCredentials("Incorrect email or password.")
+        log.info("admin.login.success", email=user.email, client=ip)
+        return user
 
     async def authenticate(self, email: str, password: str) -> User | None:
         """Return the account when the password matches, else None.

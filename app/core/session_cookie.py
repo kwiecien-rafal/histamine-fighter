@@ -1,9 +1,10 @@
-"""Session cookie helpers shared by admin and public auth routes.
+"""Session cookie helpers shared by the JSON auth routes and the web pages.
 
 One place owns the cookie attributes so the admin login, the public logins
 (magic link, OAuth), and every logout stay in agreement on name, path, and
 flags. Only the lifetime differs per caller: admins get the short TTL, public
-users the long one.
+users the long one. It sits in core rather than in either presentation because
+both of them set and clear the same cookie.
 """
 
 from datetime import timedelta

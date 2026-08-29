@@ -8,9 +8,9 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.cookies import mint_session
 from app.config import settings
 from app.core.security import create_access_token
+from app.core.session_cookie import mint_session
 from app.enums import SafetyLevel, SaveSource
 from app.models.magic_link_token import MagicLinkToken
 from app.models.saved_meal import SavedMeal

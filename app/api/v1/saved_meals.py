@@ -7,16 +7,13 @@ unapproved content. Foreign save ids read as 404 for the same reason. Writes sit
 behind their own per-IP rate limit, roomier than the auth one.
 """
 
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.agents.recipe import RecipeAgent
-from app.config import settings
 from app.core.ratelimit import limiter, llm_rate_limit, save_rate_limit
 from app.dependencies import (
-    RequestLLM,
     build_recipe_agent,
     get_current_user,
     get_daily_service,
@@ -24,21 +21,24 @@ from app.dependencies import (
     get_request_llm_config,
     get_saved_meal_service,
 )
-from app.enums import ApprovalStatus, SaveSource
+from app.llm.request import RequestLLM
 from app.models.user import User
-from app.schemas.meal import CautionedIngredient, ProposedIngredient
 from app.schemas.saved import (
     SavedMealDetail,
     SavedMealPage,
     SavedMealUpdate,
     SavedRecipeResponse,
-    SaveFromLookup,
     SaveRequest,
 )
-from app.schemas.usage import LLMUsage
 from app.services.daily_service import DailyService
 from app.services.meal_service import MealService
-from app.services.saved_meal_service import SavedMealService, saved_card, saved_detail
+from app.services.saved_meal_service import (
+    SavedMealNotFound,
+    SavedMealService,
+    SaveLimitReached,
+    saved_card,
+    saved_detail,
+)
 
 router = APIRouter(prefix="/api/v1/me/meals", tags=["saved-meals"])
 
@@ -87,46 +87,16 @@ async def save_meal(
 ) -> SavedMealDetail:
     """Save a meal: 201 with the stored snapshot, or 200 with the existing one.
 
-    Idempotent per (source, source row): re-liking returns the earlier snapshot
-    even if the source has changed since. A lookup save is keyed on the client's
-    per-result ``lookup_id``, so each assessment result saves as its own row and
-    only a retry of the same result is idempotent. The per-user cap answers 409;
-    it is an abuse bound, not something a real collection should reach.
+    Idempotent per (source, source row); the service owns that and the source gates.
+    The per-user cap answers 409 — an abuse bound, not something a real collection
+    should reach.
     """
-    if isinstance(payload, SaveFromLookup):
-        source_key = str(payload.lookup_id)
-    else:
-        source_key = str(payload.source_id)
-
-    existing = await service.find(user.id, payload.source, source_key)
-    if existing is not None:
-        response.status_code = status.HTTP_200_OK
-        return saved_detail(existing)
-
-    if await service.count_for(user.id) >= settings.saved_meals_cap:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Save limit reached ({settings.saved_meals_cap}). Remove some first.",
-        )
-
-    if isinstance(payload, SaveFromLookup):
-        row, created = await service.save_lookup(user.id, payload)
-    elif payload.source is SaveSource.CURATED:
-        meal = await meal_service.get_approved(payload.source_id)
-        if meal is None:
-            raise _not_found()
-        row, created = await service.save_curated(user.id, meal)
-    else:
-        suggestion = await daily_service.get(payload.source_id)
-        if (
-            suggestion is None
-            or suggestion.approval_status is not ApprovalStatus.APPROVED
-            or datetime.now(UTC) < suggestion.reveal_at
-        ):
-            # Unknown, unapproved, and unrevealed are indistinguishable on purpose:
-            # a saved id must not become a probe for tomorrow's board.
-            raise _not_found()
-        row, created = await service.save_daily(user.id, suggestion)
+    try:
+        row, created = await service.save(user.id, payload, meals=meal_service, daily=daily_service)
+    except SaveLimitReached as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except SavedMealNotFound as exc:
+        raise _not_found() from exc
 
     if not created:
         response.status_code = status.HTTP_200_OK
@@ -144,42 +114,12 @@ async def generate_saved_recipe(
     agent: RecipeAgent = Depends(build_recipe_agent),
     resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> SavedRecipeResponse:
-    """Write a recipe for a saved meal that has none, and persist it on the row.
-
-    Lazy by design: recipes cost a model call, so one is only written when its
-    owner asks, from the snapshot's current (possibly user-edited) ingredients.
-    Idempotent: a row that already has a recipe returns unchanged, uncharged.
-    """
+    """Write a recipe for a saved meal that has none, and persist it on the row."""
     response.headers["Cache-Control"] = "no-store"
-    row = await service.get(user.id, save_id)
-    if row is None:
-        raise _not_found()
-    if row.recipe:
-        # A recipe that came with the snapshot has no recipe_model of its own;
-        # the save's producer is then the closest honest provenance.
-        return SavedRecipeResponse(
-            meal=saved_detail(row),
-            recipe_model=row.recipe_model or row.model,
-            usage=LLMUsage(),
-        )
-
-    await resolved.charge()
-    generation = await agent.run(
-        name=row.name,
-        description=row.description,
-        ingredients=[ProposedIngredient.model_validate(item) for item in row.ingredients],
-        cautions=[CautionedIngredient.model_validate(item) for item in row.cautioned_ingredients],
-    )
-    saved = await service.set_recipe(user.id, save_id, generation.steps, generation.model)
-    if saved is None:
-        # The save was deleted while the model wrote; nothing was persisted, so
-        # a response claiming a recipe exists would be a lie.
-        raise _not_found()
-    return SavedRecipeResponse(
-        meal=saved_detail(saved),
-        recipe_model=saved.recipe_model or saved.model,
-        usage=generation.usage,
-    )
+    try:
+        return await service.generate_recipe(user.id, save_id, agent=agent, resolved=resolved)
+    except SavedMealNotFound as exc:
+        raise _not_found() from exc
 
 
 @router.patch("/{save_id}", response_model=SavedMealDetail)

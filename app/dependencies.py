@@ -1,5 +1,3 @@
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from uuid import UUID
 
 import httpx
@@ -20,9 +18,12 @@ from app.enums import Role
 from app.llm.config import LLMRequestConfig
 from app.llm.errors import ProviderNotAvailableError
 from app.llm.langchain_factory import build_chat_model
+from app.llm.request import RequestLLM
 from app.models.user import User
+from app.services.auth_service import AuthService
 from app.services.composer_streamer import ComposerStreamer
 from app.services.daily_service import DailyService
+from app.services.dish_lookup_service import DishLookupService
 from app.services.email_service import EmailService
 from app.services.generation_settings_service import GenerationSettingsService
 from app.services.ingredient_service import IngredientService
@@ -69,6 +70,12 @@ def get_lookup_cache_service(
     # The ingredient service powers the re-grade that a cached assessment must
     # pass before it is served.
     return LookupCacheService(session, ingredient_service)
+
+
+def get_dish_lookup_service(
+    cache: LookupCacheService = Depends(get_lookup_cache_service),
+) -> DishLookupService:
+    return DishLookupService(cache)
 
 
 def get_meal_service(
@@ -138,6 +145,17 @@ def get_email_service(
     client: httpx.AsyncClient = Depends(get_http_client),
 ) -> EmailService:
     return EmailService(client)
+
+
+def get_auth_service(
+    session: AsyncSession = Depends(get_session),
+    magic_links: MagicLinkService = Depends(get_magic_link_service),
+    users: UserService = Depends(get_user_service),
+    quota: QuotaService = Depends(get_quota_service),
+    emails: EmailService = Depends(get_email_service),
+    http_client: httpx.AsyncClient = Depends(get_http_client),
+) -> AuthService:
+    return AuthService(session, magic_links, users, quota, emails, http_client)
 
 
 async def get_composer_streamer(
@@ -238,50 +256,6 @@ SHARED_PROVIDER = "shared"
 # Key under which the resolved config is stashed on request.state, so the
 # charge-leak backstop middleware can see what the route left unspent.
 _REQUEST_LLM_STATE = "request_llm"
-
-
-@dataclass
-class RequestLLM:
-    """A resolved per-request LLM config and its deferred shared-tier charge.
-
-    The charge is held back until the route reaches the actual model call, past
-    body validation, the burst limiter, and the Learn cache, so a rejected or
-    cached request never spends the daily allowance. ``charge`` is a one-shot:
-    the first call spends, later calls are no-ops, and a failed charge does not
-    re-arm (the request is already being rejected). A route that resolves the
-    shared config but then makes no model call (a cache hit) calls ``waive``, so
-    the charge is released without spending it and the leak backstop stays quiet.
-    """
-
-    config: LLMRequestConfig
-    # True only when the config was pinned to the operator-funded shared tier.
-    # Explicit rather than inferred from ``pending``: ``charge()`` consumes the
-    # callable before the lookup-cache write gate needs the answer.
-    shared: bool = False
-    _charge: Callable[[], Awaitable[None]] | None = None
-
-    @property
-    def pending(self) -> bool:
-        """Whether a shared-tier charge is still unspent (the backstop's check)."""
-        return self._charge is not None
-
-    async def charge(self) -> None:
-        charge = self._charge
-        if charge is None:
-            return
-        self._charge = None
-        await charge()
-
-    def waive(self) -> None:
-        """Release the pending shared-tier charge without spending it.
-
-        For a route that resolved the shared config but served the request with no
-        model call (a Learn cache hit): the answer costs nothing, so the daily
-        allowance is untouched and the charge-leak backstop must not read the
-        deliberate skip as a forgotten charge. Unlike a forgotten charge this is an
-        expected outcome, so it stays silent.
-        """
-        self._charge = None
 
 
 async def get_request_llm_config(

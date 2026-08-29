@@ -12,6 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.llm.config import LLMRequestConfig
+from app.llm.providers import resolve_llm_config
 from app.models.generation_settings import GenerationSettings
 
 log = structlog.get_logger(__name__)
@@ -36,6 +38,18 @@ class GenerationSettingsService:
         if row is not None:
             return row
         return GenerationSettings(composer_provider=settings.llm_provider, composer_model=None)
+
+    async def set_composer(
+        self, provider: str | None, model: str | None, *, actor: str
+    ) -> GenerationSettings:
+        """Validate a composer provider/model through the provider truth source, then store it.
+
+        Running the choice through ``resolve_llm_config`` rejects a keyless or gated
+        provider before it can be persisted, so the saved setting is always usable and
+        the provider rules cannot drift between the API and the admin pages.
+        """
+        resolve_llm_config(LLMRequestConfig(provider=provider, model=model))
+        return await self.update(provider, model, actor=actor)
 
     async def update(
         self, provider: str | None, model: str | None, *, actor: str

@@ -6,8 +6,9 @@ from httpx import AsyncClient
 from structlog.testing import capture_logs
 
 from app.config import settings
-from app.dependencies import RequestLLM, get_request_llm_config
+from app.dependencies import get_request_llm_config
 from app.llm.errors import ProviderNotAvailableError
+from app.llm.request import RequestLLM
 from app.models.user import User
 from tests.fakes import FakeQuotaService, quota_exhausted
 

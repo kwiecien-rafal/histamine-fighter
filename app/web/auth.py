@@ -14,31 +14,32 @@ callback already answer with redirects, so the buttons here are plain links into
 them and the callback lands back on ``/login`` or ``/login/complete``.
 """
 
-import httpx
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Form, Query, Request, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import ValidationError
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.cookies import clear_session_cookie
-from app.api.v1 import auth as api_auth
 from app.config import settings
+from app.core.client_ip import client_ip
+from app.core.session_cookie import clear_session_cookie, mint_session
 from app.core.turnstile import TurnstileError
 from app.db.session import get_session
 from app.dependencies import (
+    get_auth_service,
     get_current_user_optional,
-    get_email_service,
-    get_http_client,
-    get_magic_link_service,
     get_quota_service,
     get_user_service,
 )
 from app.enums import Role
 from app.models.user import User
 from app.schemas.auth import MAGIC_CODE_LENGTH, MAX_EMAIL_CHARS, MagicLinkRequest, MagicLinkVerify
-from app.services.email_service import EmailDeliveryError, EmailService
-from app.services.magic_link_service import MagicLinkService
+from app.services.auth_service import (
+    AuthService,
+    DisposableEmailRefused,
+    InvalidSignInAttempt,
+)
+from app.services.email_service import EmailDeliveryError
 from app.services.oauth_service import PROVIDERS, credentials
 from app.services.quota_service import QuotaExceededError, QuotaService
 from app.services.user_service import UserService
@@ -52,10 +53,11 @@ OAUTH_ERRORS = {
     "signup_limit": "Too many new accounts from this network today. Try again tomorrow.",
 }
 
-# Everything the two magic-link handlers raise. HTTPException is their own refusal;
-# the rest are domain errors the API boundary would otherwise map to a status code.
+# Everything the two magic-link flows raise. All domain errors: the same set the API
+# boundary maps to status codes, worded here as page copy instead.
 _AUTH_FAILURES = (
-    HTTPException,
+    DisposableEmailRefused,
+    InvalidSignInAttempt,
     RateLimitExceeded,
     TurnstileError,
     QuotaExceededError,
@@ -66,12 +68,13 @@ _AUTH_FAILURES = (
 def _failure_message(exc: BaseException) -> str:
     """Page copy for a failed sign-in attempt.
 
-    An HTTPException's detail is already written for the person reading it (the
-    uniform "invalid or expired" line, the disposable-domain refusal); the domain
-    errors carry operator wording, so each gets its own sentence.
+    The two sign-in refusals are already written for the person reading them; the
+    rest carry operator wording, so each gets its own sentence.
     """
-    if isinstance(exc, HTTPException):
-        return str(exc.detail)
+    if isinstance(exc, DisposableEmailRefused):
+        return str(exc)
+    if isinstance(exc, InvalidSignInAttempt):
+        return "That sign-in link or code is invalid or has expired. Request a new one."
     if isinstance(exc, RateLimitExceeded):
         return "Too many attempts from this network. Wait a minute, then try again."
     if isinstance(exc, QuotaExceededError):
@@ -144,11 +147,7 @@ async def request_link(
     request: Request,
     email: str = Form(),
     turnstile_token: str | None = Form(default=None, alias="cf-turnstile-response"),
-    magic_links: MagicLinkService = Depends(get_magic_link_service),
-    email_service: EmailService = Depends(get_email_service),
-    http_client: httpx.AsyncClient = Depends(get_http_client),
-    quota: QuotaService = Depends(get_quota_service),
-    session: AsyncSession = Depends(get_session),
+    auth: AuthService = Depends(get_auth_service),
 ) -> HTMLResponse:
     """Send the sign-in email, then show the code form.
 
@@ -161,15 +160,7 @@ async def request_link(
     except ValidationError:
         return _login_form(request, email=email, error="That doesn't look like an email address.")
     try:
-        await api_auth.request_magic_link(
-            request=request,
-            payload=payload,
-            magic_links=magic_links,
-            email_service=email_service,
-            http_client=http_client,
-            quota=quota,
-            session=session,
-        )
+        await auth.request_magic_link(payload, ip=client_ip(request))
     except _AUTH_FAILURES as exc:
         return _login_form(request, email=email, error=_failure_message(exc))
     return _code_form(request, email=payload.email)
@@ -180,9 +171,7 @@ async def submit_code(
     request: Request,
     email: str = Form(),
     code: str = Form(),
-    magic_links: MagicLinkService = Depends(get_magic_link_service),
-    user_service: UserService = Depends(get_user_service),
-    quota: QuotaService = Depends(get_quota_service),
+    auth: AuthService = Depends(get_auth_service),
 ) -> Response:
     """Redeem the 6-digit code from the email and open the session."""
     email, code = email.strip(), code.strip()
@@ -194,14 +183,7 @@ async def submit_code(
         )
     signed_in = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
     try:
-        await api_auth.verify_magic_link(
-            request=request,
-            response=signed_in,
-            payload=payload,
-            magic_links=magic_links,
-            user_service=user_service,
-            quota=quota,
-        )
+        mint_session(signed_in, await auth.redeem_magic_link(payload, ip=client_ip(request)))
     except _AUTH_FAILURES as exc:
         return _code_form(request, email=email, error=_failure_message(exc))
     return signed_in
@@ -226,9 +208,7 @@ async def verify_page(
 async def confirm_link(
     request: Request,
     token: str = Form(),
-    magic_links: MagicLinkService = Depends(get_magic_link_service),
-    user_service: UserService = Depends(get_user_service),
-    quota: QuotaService = Depends(get_quota_service),
+    auth: AuthService = Depends(get_auth_service),
 ) -> Response:
     """Redeem the emailed link's token and open the session."""
     try:
@@ -237,14 +217,7 @@ async def confirm_link(
         return _expired_link(request)
     signed_in = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
     try:
-        await api_auth.verify_magic_link(
-            request=request,
-            response=signed_in,
-            payload=payload,
-            magic_links=magic_links,
-            user_service=user_service,
-            quota=quota,
-        )
+        mint_session(signed_in, await auth.redeem_magic_link(payload, ip=client_ip(request)))
     except _AUTH_FAILURES as exc:
         return _expired_link(request, error=_failure_message(exc))
     return signed_in
@@ -293,12 +266,12 @@ async def confirm_account_deletion(
 @router.post("/account/delete")
 async def delete_account(
     user: User = Depends(require_user),
-    user_service: UserService = Depends(get_user_service),
-    session: AsyncSession = Depends(get_session),
+    auth: AuthService = Depends(get_auth_service),
 ) -> Response:
     """Erase the account and everything attached to it, then sign out."""
     erased = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
-    await api_auth.delete_me(response=erased, user=user, user_service=user_service, session=session)
+    await auth.erase_account(user)
+    clear_session_cookie(erased)
     return erased
 
 

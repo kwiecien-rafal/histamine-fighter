@@ -27,11 +27,10 @@ from pydantic import ValidationError
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin import auth as api_admin_auth
-from app.api.admin import compose as api_admin_compose
-from app.api.admin import daily as api_admin_daily
-from app.api.admin import meals as api_admin_meals
 from app.config import settings
+from app.core.client_ip import client_ip
+from app.core.security import create_access_token
+from app.core.session_cookie import set_session_cookie
 from app.db.session import get_session
 from app.dependencies import (
     get_current_user_optional,
@@ -68,9 +67,10 @@ from app.schemas.meal import (
 from app.services.daily_service import DailyService
 from app.services.generation_settings_service import GenerationSettingsService
 from app.services.ingredient_service import IngredientService
+from app.services.meal_edit import UnsafeMealEdit
 from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
-from app.services.user_service import UserService
+from app.services.user_service import InvalidCredentials, UserService
 from app.web.deps import INGREDIENT_SEPARATOR, ingredient_lines, parse_ingredient_lines, templates
 
 router = APIRouter(prefix="/admin")
@@ -209,13 +209,16 @@ async def sign_in(
 
     signed_in = RedirectResponse("/admin", status_code=status.HTTP_303_SEE_OTHER)
     try:
-        await api_admin_auth.login(
-            request=request, response=signed_in, payload=payload, user_service=user_service
+        user = await user_service.authenticate_admin(payload, ip=client_ip(request))
+        set_session_cookie(
+            signed_in,
+            create_access_token(str(user.id), token_version=user.token_version),
+            max_age=settings.session_cookie_max_age,
         )
-    except HTTPException as exc:
+    except InvalidCredentials as exc:
         # Already worded for the person reading it, and identical for a wrong password,
         # an unknown email, and a disabled account.
-        return _sign_in_page(request, email=email, error=str(exc.detail))
+        return _sign_in_page(request, email=email, error=str(exc))
     except RateLimitExceeded:
         return _sign_in_page(
             request, email=email, error="Too many attempts. Wait a minute, then try again."
@@ -236,7 +239,7 @@ async def update_compose_settings(
     """Set which provider and model the composer runs on, here and in the nightly cron."""
     payload = ComposeSettingsUpdate(provider=provider, model=model.strip() or None)
     try:
-        await api_admin_compose.update_settings(payload=payload, admin=admin, service=generation)
+        await generation.set_composer(payload.provider.value, payload.model, actor=admin.email)
     except LLMError as exc:
         # The choice comes from a list of configured providers, so the one refusal left is
         # OpenRouter, which has no sensible default model and needs one named.
@@ -280,14 +283,8 @@ async def create_meal(
     """Store a hand-written meal as pending review, once the index gate lets it through."""
     try:
         payload = AdminMealCreate.model_validate(form.as_payload() | {"meal_type": meal_type})
-        await api_admin_meals.create_meal(
-            payload=payload,
-            admin=admin,
-            meal_service=meal_service,
-            ingredient_service=ingredient_service,
-            session=session,
-        )
-    except (ValidationError, HTTPException) as exc:
+        await meal_service.create_manual(payload, actor=admin.email, ingredients=ingredient_service)
+    except (ValidationError, UnsafeMealEdit) as exc:
         return _meal_form_page(
             request,
             heading="Write a meal by hand",
@@ -333,14 +330,8 @@ async def edit_meal(
     meal = AdminMealRead.model_validate(_editable(await meal_service.get(meal_id)))
     try:
         payload = AdminMealUpdate.model_validate(form.as_payload())
-        await api_admin_meals.update_meal(
-            meal_id=meal_id,
-            payload=payload,
-            _admin=admin,
-            meal_service=meal_service,
-            ingredient_service=ingredient_service,
-        )
-    except (ValidationError, HTTPException) as exc:
+        await meal_service.edit_pending(meal_id, payload, ingredients=ingredient_service)
+    except (ValidationError, UnsafeMealEdit) as exc:
         return _meal_form_page(
             request,
             heading=f"Edit {meal.name}",
@@ -361,17 +352,14 @@ async def moderate_meal(
     service: MealReviewService = Depends(get_meal_review_service),
 ) -> Response:
     """Approve, reject, or permanently remove one curated meal."""
-    try:
-        if action == "approve":
-            await api_admin_meals.approve_meal(meal_id=meal_id, admin=admin, service=service)
-        elif action == "reject":
-            await api_admin_meals.reject_meal(meal_id=meal_id, _admin=admin, service=service)
-        else:
-            await api_admin_meals.delete_meal(meal_id=meal_id, admin=admin, service=service)
-    except HTTPException as exc:
-        # The row went while the panel sat open; the reloaded list is the honest answer.
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
-            raise
+    # A row that went while the panel sat open is a no-op; the reloaded list is the
+    # honest answer either way.
+    if action == "approve":
+        await service.approve(meal_id, actor=admin.email)
+    elif action == "reject":
+        await service.reject(meal_id)
+    else:
+        await service.delete(meal_id, actor=admin.email)
     return _back_to("curated", review_state=_review_state(review_state))
 
 
@@ -409,14 +397,8 @@ async def edit_suggestion(
     suggestion = _editable(await daily.get(suggestion_id))
     try:
         payload = AdminDailyUpdate.model_validate(form.as_payload())
-        await api_admin_daily.update_suggestion(
-            suggestion_id=suggestion_id,
-            payload=payload,
-            _admin=admin,
-            service=daily,
-            ingredient_service=ingredient_service,
-        )
-    except (ValidationError, HTTPException) as exc:
+        await daily.edit_pending(suggestion_id, payload, ingredients=ingredient_service)
+    except (ValidationError, UnsafeMealEdit) as exc:
         return _meal_form_page(
             request,
             heading=f"Edit {DailyMealContent.model_validate(suggestion.content).name}",
@@ -436,22 +418,13 @@ async def moderate_suggestion(
     daily: DailyService = Depends(get_daily_service),
 ) -> Response:
     """Approve, reject, or permanently remove one daily slot."""
-    try:
-        if action == "approve":
-            await api_admin_daily.approve_suggestion(
-                suggestion_id=suggestion_id, admin=admin, service=daily
-            )
-        elif action == "reject":
-            await api_admin_daily.reject_suggestion(
-                suggestion_id=suggestion_id, _admin=admin, service=daily
-            )
-        else:
-            await api_admin_daily.delete_suggestion(
-                suggestion_id=suggestion_id, admin=admin, service=daily
-            )
-    except HTTPException as exc:
-        if exc.status_code != status.HTTP_404_NOT_FOUND:
-            raise
+    # A slot that went while the panel sat open is a no-op, as above.
+    if action == "approve":
+        await daily.approve(suggestion_id, actor=admin.email)
+    elif action == "reject":
+        await daily.reject(suggestion_id)
+    else:
+        await daily.delete(suggestion_id, actor=admin.email)
     return _back_to("queue")
 
 
@@ -588,12 +561,8 @@ def _refusal(exc: Exception) -> Refusal:
         field = str(location[0]) if location else ""
         fallback = "That meal couldn't be saved. Check the fields and retry."
         return Refusal(_FIELD_MESSAGES.get(field, fallback), [], False)
-    if isinstance(exc, HTTPException) and isinstance(exc.detail, dict):
-        return Refusal(
-            str(exc.detail.get("message", "")),
-            [str(item) for item in exc.detail.get("blockers", [])],
-            bool(exc.detail.get("can_confirm")),
-        )
+    if isinstance(exc, UnsafeMealEdit):
+        return Refusal(exc.message, exc.blockers, exc.can_confirm)
     return Refusal(str(getattr(exc, "detail", exc)), [], False)
 
 

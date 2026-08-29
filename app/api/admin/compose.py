@@ -33,9 +33,8 @@ from app.dependencies import (
 )
 from app.embeddings import Embedder, get_embedder
 from app.enums import ApprovalStatus, MealType
-from app.llm.config import LLMRequestConfig
 from app.llm.errors import LLMError
-from app.llm.providers import resolve_llm_config, selectable_providers
+from app.llm.providers import selectable_providers
 from app.models import DailySuggestion
 from app.models.user import User
 from app.schemas.admin import (
@@ -338,8 +337,7 @@ async def update_settings(
     provider (mapped to 400/501 at the boundary) before it can be persisted, so the
     saved setting is always usable and the provider rules cannot drift.
     """
-    resolve_llm_config(LLMRequestConfig(provider=payload.provider.value, model=payload.model))
-    row = await service.update(payload.provider.value, payload.model, actor=admin.email)
+    row = await service.set_composer(payload.provider.value, payload.model, actor=admin.email)
     return ComposeSettingsRead(
         provider=row.composer_provider,
         model=row.composer_model,

@@ -27,9 +27,9 @@ from app.models.user import User
 from app.schemas.meal import ProposedIngredient
 from app.services.meal_service import MANUAL_MODEL
 
-_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
-TEMPLATES_DIR = _PACKAGE_ROOT / "templates"
-STATIC_DIR = _PACKAGE_ROOT / "static"
+_WEB_DIR = Path(__file__).resolve().parent
+TEMPLATES_DIR = _WEB_DIR / "templates"
+STATIC_DIR = _WEB_DIR / "static"
 
 
 async def bind_current_user(

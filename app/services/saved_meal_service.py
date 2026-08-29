@@ -21,11 +21,41 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enums import SavedMealTag, SaveSource
+from app.agents.recipe import RecipeAgent
+from app.config import settings
+from app.enums import ApprovalStatus, SavedMealTag, SaveSource
+from app.llm.request import RequestLLM
 from app.models import CuratedMeal, DailySuggestion, SavedMeal
 from app.schemas.daily import DailyMealContent
 from app.schemas.meal import MAX_DISH_CHARS, CautionedIngredient, ProposedIngredient
-from app.schemas.saved import SavedMealCard, SavedMealDetail, SavedMealUpdate, SaveFromLookup
+from app.schemas.saved import (
+    SavedMealCard,
+    SavedMealDetail,
+    SavedMealUpdate,
+    SavedRecipeResponse,
+    SaveFromLookup,
+    SaveRequest,
+)
+from app.schemas.usage import LLMUsage
+from app.services.daily_service import DailyService
+from app.services.meal_service import MealService
+
+
+class SavedMealNotFound(Exception):
+    """The save, or the source it would copy, is not there for this user.
+
+    One error for both because they answer the same way on purpose: an unknown id,
+    someone else's id, and a source that is not public yet must be indistinguishable,
+    or a 404 becomes a probe. The API boundary maps this to 404.
+    """
+
+
+class SaveLimitReached(Exception):
+    """The user is at the per-account save cap. The API boundary maps this to 409."""
+
+    def __init__(self, cap: int) -> None:
+        self.cap = cap
+        super().__init__(f"Save limit reached ({cap}). Remove some first.")
 
 
 class SavedMealService:
@@ -163,6 +193,99 @@ class SavedMealService:
             cautioned_ingredients=[],
             model=payload.model,
             verdict=payload.verdict,
+        )
+
+    async def save(
+        self,
+        user_id: UUID,
+        payload: SaveRequest,
+        *,
+        meals: MealService,
+        daily: DailyService,
+    ) -> tuple[SavedMeal, bool]:
+        """Save a meal from any source; the flag is False when it was already saved.
+
+        Idempotent per (source, source row): re-liking returns the earlier snapshot
+        even if the source has changed since. A lookup save is keyed on the client's
+        per-result ``lookup_id``, so each assessment result saves as its own row and
+        only a retry of the same result is idempotent. The per-user cap raises; it is
+        an abuse bound, not something a real collection should reach.
+        """
+        if isinstance(payload, SaveFromLookup):
+            source_key = str(payload.lookup_id)
+        else:
+            source_key = str(payload.source_id)
+
+        existing = await self.find(user_id, payload.source, source_key)
+        if existing is not None:
+            return existing, False
+
+        if await self.count_for(user_id) >= settings.saved_meals_cap:
+            raise SaveLimitReached(settings.saved_meals_cap)
+
+        if isinstance(payload, SaveFromLookup):
+            return await self.save_lookup(user_id, payload)
+        if payload.source is SaveSource.CURATED:
+            meal = await meals.get_approved(payload.source_id)
+            if meal is None:
+                raise SavedMealNotFound
+            return await self.save_curated(user_id, meal)
+
+        suggestion = await daily.get(payload.source_id)
+        if (
+            suggestion is None
+            or suggestion.approval_status is not ApprovalStatus.APPROVED
+            or datetime.now(UTC) < suggestion.reveal_at
+        ):
+            # Unknown, unapproved, and unrevealed are indistinguishable on purpose:
+            # a saved id must not become a probe for tomorrow's board.
+            raise SavedMealNotFound
+        return await self.save_daily(user_id, suggestion)
+
+    async def generate_recipe(
+        self,
+        user_id: UUID,
+        save_id: UUID,
+        *,
+        agent: RecipeAgent,
+        resolved: RequestLLM,
+    ) -> SavedRecipeResponse:
+        """Write a recipe for a saved copy that has none, and persist it on the row.
+
+        Lazy by design: recipes cost a model call, so one is only written when its
+        owner asks, from the snapshot's current (possibly user-edited) ingredients.
+        Idempotent: a row that already has a recipe returns unchanged, uncharged.
+        """
+        row = await self.get(user_id, save_id)
+        if row is None:
+            raise SavedMealNotFound
+        if row.recipe:
+            # A recipe that came with the snapshot has no recipe_model of its own;
+            # the save's producer is then the closest honest provenance.
+            return SavedRecipeResponse(
+                meal=saved_detail(row),
+                recipe_model=row.recipe_model or row.model,
+                usage=LLMUsage(),
+            )
+
+        await resolved.charge()
+        generation = await agent.run(
+            name=row.name,
+            description=row.description,
+            ingredients=[ProposedIngredient.model_validate(item) for item in row.ingredients],
+            cautions=[
+                CautionedIngredient.model_validate(item) for item in row.cautioned_ingredients
+            ],
+        )
+        saved = await self.set_recipe(user_id, save_id, generation.steps, generation.model)
+        if saved is None:
+            # The save was deleted while the model wrote; nothing was persisted, so
+            # a response claiming a recipe exists would be a lie.
+            raise SavedMealNotFound
+        return SavedRecipeResponse(
+            meal=saved_detail(saved),
+            recipe_model=saved.recipe_model or saved.model,
+            usage=generation.usage,
         )
 
     async def update(self, row: SavedMeal, fields: SavedMealUpdate) -> SavedMeal:

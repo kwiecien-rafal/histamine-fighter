@@ -8,10 +8,7 @@ reasoning trace for the admin to actually check before signing off.
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.admin.edits import ensure_safe, verify_edit
-from app.db.session import get_session
 from app.dependencies import (
     get_ingredient_service,
     get_meal_review_service,
@@ -23,12 +20,23 @@ from app.models import CuratedMeal
 from app.models.user import User
 from app.schemas.admin import AdminMealCreate, AdminMealRead, AdminMealUpdate
 from app.services.ingredient_service import IngredientService
+from app.services.meal_edit import EditTargetMissing, EditTargetNotPending, UnsafeMealEdit
 from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
 
 router = APIRouter(prefix="/admin/meals", tags=["admin"])
 
-_NOT_PENDING = "Only a pending meal can be edited."
+
+def _refused(exc: UnsafeMealEdit) -> HTTPException:
+    """The index gate's refusal, with the flagged items the form has to show."""
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={
+            "message": exc.message,
+            "blockers": exc.blockers,
+            "can_confirm": exc.can_confirm,
+        },
+    )
 
 
 @router.get("", response_model=list[AdminMealRead])
@@ -53,7 +61,6 @@ async def create_meal(
     admin: User = Depends(require_admin),
     meal_service: MealService = Depends(get_meal_service),
     ingredient_service: IngredientService = Depends(get_ingredient_service),
-    session: AsyncSession = Depends(get_session),
 ) -> CuratedMeal:
     """Author a manual (non-LLM) meal, vetted by the admin index gate.
 
@@ -61,20 +68,13 @@ async def create_meal(
     ingredient is a 422 the admin can confirm past with ``confirm_flagged`` (recorded
     for the reviewer), an unverifiable one always blocks. It lands pending, marked with
     the ``manual`` model sentinel, for the same admin approval a composed meal needs.
-    ``meal_service`` and ``session`` are the one request-scoped session, so flushing here
-    persists the row the service added and populates its id and timestamp for the
-    response; ``get_session`` commits on success.
     """
-    verification = await verify_edit(ingredient_service, payload)
-    confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
-    row = await meal_service.store_manual(
-        payload,
-        unverified=verification.unverified + confirmed_flags,
-        cautioned=verification.cautioned,
-        actor=admin.email,
-    )
-    await session.flush()
-    return row
+    try:
+        return await meal_service.create_manual(
+            payload, actor=admin.email, ingredients=ingredient_service
+        )
+    except UnsafeMealEdit as exc:
+        raise _refused(exc) from exc
 
 
 @router.patch("/{meal_id}", response_model=AdminMealRead)
@@ -91,20 +91,14 @@ async def update_meal(
     admin index gate, so an introduced flagged ingredient is a 422 the admin can confirm
     past with ``confirm_flagged``, and the not-indexed list is re-derived.
     """
-    meal = await meal_service.get(meal_id)
-    if meal is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meal not found.")
-    if meal.approval_status is not ApprovalStatus.PENDING:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_PENDING)
-    verification = await verify_edit(ingredient_service, payload)
-    confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
-    await meal_service.apply_edit(
-        meal,
-        payload,
-        unverified=verification.unverified + confirmed_flags,
-        cautioned=verification.cautioned,
-    )
-    return meal
+    try:
+        return await meal_service.edit_pending(meal_id, payload, ingredients=ingredient_service)
+    except EditTargetMissing as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except EditTargetNotPending as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except UnsafeMealEdit as exc:
+        raise _refused(exc) from exc
 
 
 @router.patch("/{meal_id}/approve", response_model=AdminMealRead)

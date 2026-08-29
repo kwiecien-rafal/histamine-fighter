@@ -28,16 +28,13 @@ from pydantic import BaseModel, Field, ValidationError
 from slowapi.errors import RateLimitExceeded
 
 from app.agents.dish_lookup import DishLookupAgent
-from app.api.v1 import meals as api_meals
-from app.api.v1 import saved_meals as api_saved_meals
 from app.dependencies import (
-    RequestLLM,
     build_dish_lookup_agent,
     build_recipe_agent,
     get_current_user_optional,
     get_daily_service,
+    get_dish_lookup_service,
     get_ingredient_service,
-    get_lookup_cache_service,
     get_meal_service,
     get_quota_service,
     get_request_llm_config,
@@ -45,6 +42,7 @@ from app.dependencies import (
 )
 from app.enums import AdaptationAction, AlternativeGoal, DishIntegrity, SafetyLevel, SaveSource
 from app.llm.errors import LLMError, LLMInvocationError, LLMRejectedError
+from app.llm.request import RequestLLM
 from app.models.user import User
 from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,
@@ -62,11 +60,11 @@ from app.schemas.meal import (
 from app.schemas.saved import SaveFromLookup
 from app.schemas.usage import LLMUsage
 from app.services.daily_service import DailyService
+from app.services.dish_lookup_service import DishLookupService
 from app.services.ingredient_service import IngredientService
-from app.services.lookup_cache_service import LookupCacheService
 from app.services.meal_service import MealService
 from app.services.quota_service import QuotaExceededError, QuotaService
-from app.services.saved_meal_service import SavedMealService
+from app.services.saved_meal_service import SavedMealService, SaveLimitReached
 from app.web.deps import (
     INGREDIENT_SEPARATOR,
     ingredient_lines,
@@ -142,7 +140,7 @@ async def propose(
     quota: QuotaService = Depends(get_quota_service),
     ingredients: IngredientService = Depends(get_ingredient_service),
     meals: MealService = Depends(get_meal_service),
-    cache: LookupCacheService = Depends(get_lookup_cache_service),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
     """Ask the model what is in the dish, then hand the list over to be corrected."""
     dish = dish.strip()
@@ -153,9 +151,7 @@ async def propose(
 
     try:
         resolved, agent = await _lookup_agent(request, user, quota, ingredients, meals)
-        proposal = await api_meals.propose_ingredients(
-            request=request, payload=payload, agent=agent, resolved=resolved, cache=cache
-        )
+        proposal = await lookup.propose(payload, agent=agent, resolved=resolved)
     except _STEP_FAILURES as exc:
         return _entry_page(request, dish=dish, error=_failure_message(exc))
 
@@ -183,7 +179,7 @@ async def assess(
     quota: QuotaService = Depends(get_quota_service),
     ingredient_service: IngredientService = Depends(get_ingredient_service),
     meals: MealService = Depends(get_meal_service),
-    cache: LookupCacheService = Depends(get_lookup_cache_service),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
     """Weigh the confirmed ingredients against the index and render the verdict.
 
@@ -209,9 +205,7 @@ async def assess(
 
     try:
         resolved, agent = await _lookup_agent(request, user, quota, ingredient_service, meals)
-        result = await api_meals.assess_dish(
-            request=request, payload=payload, agent=agent, resolved=resolved, cache=cache
-        )
+        result = await lookup.assess(payload, agent=agent, resolved=resolved)
     except _STEP_FAILURES as exc:
         return _back(_failure_message(exc))
     return _result_page(
@@ -228,6 +222,7 @@ async def write_recipe(
     user: User | None = Depends(get_current_user_optional),
     quota: QuotaService = Depends(get_quota_service),
     ingredients: IngredientService = Depends(get_ingredient_service),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
     """Write a recipe for the assessed dish, straight off the result card.
 
@@ -244,11 +239,8 @@ async def write_recipe(
     )
     try:
         resolved = await get_request_llm_config(request, user, quota)
-        recipe = await api_meals.generate_lookup_recipe(
-            request=request,
-            payload=payload,
-            agent=build_recipe_agent(resolved, ingredients),
-            resolved=resolved,
+        recipe = await lookup.recipe(
+            payload, agent=build_recipe_agent(resolved, ingredients), resolved=resolved
         )
     except _STEP_FAILURES as exc:
         return _result_page(request, current, error=_failure_message(exc))
@@ -265,6 +257,7 @@ async def suggest_alternatives(
     quota: QuotaService = Depends(get_quota_service),
     ingredients: IngredientService = Depends(get_ingredient_service),
     meals: MealService = Depends(get_meal_service),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
     """Suggest other dishes for one goal, once this one cannot be kept.
 
@@ -289,9 +282,7 @@ async def suggest_alternatives(
     )
     try:
         resolved, agent = await _lookup_agent(request, user, quota, ingredients, meals)
-        suggestions = await api_meals.suggest_alternatives(
-            request=request, payload=payload, agent=agent, resolved=resolved
-        )
+        suggestions = await lookup.alternatives(payload, agent=agent, resolved=resolved)
     except _STEP_FAILURES as exc:
         return _result_page(request, current, goal=goal, error=_failure_message(exc))
     current.alternatives[goal] = suggestions
@@ -331,20 +322,10 @@ async def save_result(
         }
     )
     try:
-        saved = await api_saved_meals.save_meal(
-            request=request,
-            payload=payload,
-            response=Response(),
-            user=user,
-            service=service,
-            meal_service=meals,
-            daily_service=daily,
-        )
-    except HTTPException as exc:
-        if exc.status_code != status.HTTP_409_CONFLICT:
-            raise
+        saved, _ = await service.save(user.id, payload, meals=meals, daily=daily)
+    except SaveLimitReached as exc:
         # The per-user cap is the only refusal a save from here can hit.
-        return _result_page(request, current, error=str(exc.detail))
+        return _result_page(request, current, error=str(exc))
     except RateLimitExceeded:
         return _result_page(request, current, error="That's a lot of saves at once. Wait a minute.")
     return RedirectResponse(f"/profile/meals/{saved.id}", status_code=status.HTTP_303_SEE_OTHER)

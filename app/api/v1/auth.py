@@ -12,40 +12,37 @@ import hashlib
 import secrets
 from base64 import urlsafe_b64encode
 from datetime import timedelta
-from uuid import UUID
 
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.cookies import clear_session_cookie, mint_session
 from app.config import settings
 from app.core.client_ip import client_ip, ip_bucket
 from app.core.disposable_domains import is_disposable
 from app.core.logging import mask_email
 from app.core.ratelimit import auth_rate_limit, limiter
 from app.core.security import TokenError, create_purpose_token, decode_purpose_token
-from app.core.turnstile import verify_turnstile
+from app.core.session_cookie import clear_session_cookie, mint_session
 from app.db.session import get_session
 from app.dependencies import (
+    get_auth_service,
     get_current_user,
-    get_email_service,
     get_http_client,
-    get_magic_link_service,
     get_quota_service,
     get_user_service,
 )
 from app.enums import Role
-from app.models.magic_link_token import MagicLinkToken
-from app.models.saved_meal import SavedMeal
-from app.models.usage_counter import UsageCounter
 from app.models.user import User
 from app.schemas.auth import AuthUser, MagicLinkRequest, MagicLinkVerify, QuotaRead
-from app.services.email_service import EmailService
-from app.services.magic_link_service import MagicLinkService
+from app.services.auth_service import (
+    AuthService,
+    DisposableEmailRefused,
+    InvalidSignInAttempt,
+    SelfServeDeletionRefused,
+)
 from app.services.oauth_service import (
     PROVIDERS,
     OAuthError,
@@ -61,7 +58,6 @@ log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
-MAGIC_LINK_PURPOSE = "magic_link"
 OAUTH_STATE_PURPOSE = "oauth_state"
 OAUTH_STATE_TTL = timedelta(minutes=10)
 
@@ -95,48 +91,21 @@ def _invalid_login() -> HTTPException:
 async def request_magic_link(
     request: Request,
     payload: MagicLinkRequest,
-    magic_links: MagicLinkService = Depends(get_magic_link_service),
-    email_service: EmailService = Depends(get_email_service),
-    http_client: httpx.AsyncClient = Depends(get_http_client),
-    quota: QuotaService = Depends(get_quota_service),
-    session: AsyncSession = Depends(get_session),
+    auth: AuthService = Depends(get_auth_service),
 ) -> dict[str, str]:
     """Send a sign-in email carrying a single-use link and its 6-digit code.
 
-    Guarded by the burst rate limit, Turnstile (when configured), the
-    disposable-domain blocklist, and a per-IP daily send cap that bounds inbox
-    bombing even when Turnstile is not configured. The blocklist is the one
-    refusal that answers 400 rather than the uniform 200: the caller must be told
-    the address cannot work, and disposability is public knowledge, not account
-    state. The send cap answers the same uniform 200 (silently not sending), so a
-    hit reveals nothing.
+    Guarded by the burst rate limit and, in the service, by Turnstile, the
+    disposable-domain blocklist, and a per-IP daily send cap. The blocklist is the
+    one refusal that answers 400 rather than the uniform 200: the caller must be
+    told the address cannot work, and disposability is public knowledge, not
+    account state. A capped send answers the same uniform 200, so a hit reveals
+    nothing.
     """
-    ip = client_ip(request)
-    await verify_turnstile(http_client, payload.turnstile_token, ip)
-    if is_disposable(payload.email):
-        log.info("magic_link.disposable_refused", client=ip)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Disposable email addresses can't be used to sign in.",
-        )
     try:
-        await quota.charge_magic_send(ip_bucket(ip))
-    except QuotaExceededError:
-        log.warning("magic_link.send_cap_reached", client=ip)
-        return _MAGIC_REQUEST_ACCEPTED
-    jti, code = await magic_links.issue(payload.email, created_from_ip=ip)
-    token = create_purpose_token(
-        MAGIC_LINK_PURPOSE,
-        jti=str(jti),
-        ttl=timedelta(minutes=settings.magic_link_ttl_minutes),
-    )
-    link_url = f"{settings.app_base_url}/login/verify?token={token}"
-    # Persist the pending login before the external send: it releases the row locks
-    # issue() took (invalidating prior tokens) and guarantees the emailed link
-    # points at a committed row, so Resend latency is never held across the open
-    # request transaction and a send never outlives a rolled-back token.
-    await session.commit()
-    await email_service.send_magic_link(payload.email, link_url=link_url, code=code)
+        await auth.request_magic_link(payload, ip=client_ip(request))
+    except DisposableEmailRefused as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _MAGIC_REQUEST_ACCEPTED
 
 
@@ -146,54 +115,16 @@ async def verify_magic_link(
     request: Request,
     response: Response,
     payload: MagicLinkVerify,
-    magic_links: MagicLinkService = Depends(get_magic_link_service),
-    user_service: UserService = Depends(get_user_service),
-    quota: QuotaService = Depends(get_quota_service),
+    auth: AuthService = Depends(get_auth_service),
 ) -> AuthUser:
-    """Redeem a link token or an email + code, and open the session.
-
-    First-ever login creates the account (charged against the signup velocity
-    cap first, so a refused signup consumes nothing else). The session cookie's
-    TTL follows the account's role.
-    """
-    email = await _redeem(payload, magic_links)
-    if email is None:
-        raise _invalid_login()
-    ip = client_ip(request)
-    user = await user_service.get_by_email(email)
-    if user is None:
-        # The signup charge commits on its own before the account exists, so a
-        # failure after it wastes one signup slot for the IP. Acceptable: the
-        # alternative is an uncharged path that farms accounts via induced errors.
-        await quota.charge_signup(ip_bucket(ip))
-        user = await user_service.register_public_user(email, created_from_ip=ip)
-    if user.role is Role.ADMIN:
-        # Admin auth is the password at /admin/auth, deliberately: inbox
-        # possession must never be enough for the panel. Uniform 401, so the
-        # refusal does not confirm the address belongs to an admin.
-        log.warning("auth.login.admin_refused", email=mask_email(email), client=ip)
-        raise _invalid_login()
-    if not user.is_active:
-        log.warning("auth.login.inactive", email=mask_email(email), client=ip)
-        raise _invalid_login()
-    await user_service.record_login(user)
+    """Redeem a link token or an email + code, and open the session."""
+    try:
+        user = await auth.redeem_magic_link(payload, ip=client_ip(request))
+    except InvalidSignInAttempt as exc:
+        raise _invalid_login() from exc
     mint_session(response, user)
     response.headers["Cache-Control"] = "no-store"
-    log.info("auth.login.magic", user_id=str(user.id), client=ip)
     return AuthUser.model_validate(user)
-
-
-async def _redeem(payload: MagicLinkVerify, magic_links: MagicLinkService) -> str | None:
-    """Resolve either verify path to the proven email, or None."""
-    if payload.token is not None:
-        try:
-            jti = UUID(decode_purpose_token(payload.token, expected_purpose=MAGIC_LINK_PURPOSE))
-        except (TokenError, ValueError):
-            return None
-        return await magic_links.consume_by_token(jti)
-    if payload.email is not None and payload.code is not None:
-        return await magic_links.consume_by_code(payload.email, payload.code)
-    return None  # pragma: no cover - schema validator guarantees one path
 
 
 def _oauth_provider_or_404(name: str) -> OAuthProvider:
@@ -429,27 +360,13 @@ async def logout_all(
 async def delete_me(
     response: Response,
     user: User = Depends(get_current_user),
-    user_service: UserService = Depends(get_user_service),
-    session: AsyncSession = Depends(get_session),
+    auth: AuthService = Depends(get_auth_service),
 ) -> None:
     """Erase the account (GDPR): the user row, its saved meals, its quota counters,
     its magic-link rows, then the cookie.
-
-    Hard delete, not deactivation: the point is that no personal data remains.
-    Saved meals also cascade at the database level; the explicit delete keeps the
-    erasure visible here alongside the other purges.
     """
-    if user.role is not Role.USER:
-        # Admin accounts are operator-managed (manage_admin CLI). Self-serve
-        # erasure from the public drawer must not be able to take the panel down.
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin accounts are managed via the CLI, not self-serve deletion.",
-        )
-    await session.execute(delete(SavedMeal).where(SavedMeal.user_id == user.id))
-    await session.execute(
-        delete(UsageCounter).where(UsageCounter.scope == "user", UsageCounter.key == str(user.id))
-    )
-    await session.execute(delete(MagicLinkToken).where(MagicLinkToken.email == user.email))
-    await user_service.delete(user)
+    try:
+        await auth.erase_account(user)
+    except SelfServeDeletionRefused as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     clear_session_cookie(response)

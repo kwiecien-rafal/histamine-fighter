@@ -23,6 +23,13 @@ from app.schemas.admin import AdminDailyRead, AdminDailyUpdate, QueuedDay
 from app.schemas.daily import DailyMealCard, DailyMealContent, LockedBoard, RevealedBoard
 from app.schemas.meal import CautionedIngredient, ComposedMeal, TraceEvent, public_trace
 from app.schemas.usage import LLMUsage
+from app.services.ingredient_service import IngredientService
+from app.services.meal_edit import (
+    EditTargetMissing,
+    EditTargetNotPending,
+    ensure_safe,
+    verify_edit,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -195,6 +202,34 @@ class DailyService:
     async def get(self, suggestion_id: UUID) -> DailySuggestion | None:
         """Return one suggestion by id, or None when there is no match."""
         return await self._session.get(DailySuggestion, suggestion_id)
+
+    async def edit_pending(
+        self,
+        suggestion_id: UUID,
+        payload: AdminDailyUpdate,
+        *,
+        ingredients: IngredientService,
+    ) -> DailySuggestion:
+        """Rewrite a pending daily slot, re-verified against the index before saving.
+
+        Allowed only while pending. The edit is re-run through the admin index gate, so
+        an introduced flagged ingredient is refused until confirmed past, and the
+        not-indexed list is re-derived.
+        """
+        suggestion = await self.get(suggestion_id)
+        if suggestion is None:
+            raise EditTargetMissing("Suggestion not found.")
+        if suggestion.approval_status is not ApprovalStatus.PENDING:
+            raise EditTargetNotPending("Only a pending suggestion can be edited.")
+        verification = await verify_edit(ingredients, payload)
+        confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
+        self.apply_edit(
+            suggestion,
+            payload,
+            unverified=verification.unverified + confirmed_flags,
+            cautioned=verification.cautioned,
+        )
+        return suggestion
 
     def apply_edit(
         self,

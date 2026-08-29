@@ -11,15 +11,15 @@ Password login stays admin-only: public users sign in passwordless at
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from app.api.cookies import clear_session_cookie, set_session_cookie
 from app.config import settings
 from app.core.client_ip import client_ip
 from app.core.ratelimit import auth_rate_limit, limiter
 from app.core.security import create_access_token
+from app.core.session_cookie import clear_session_cookie, set_session_cookie
 from app.dependencies import get_current_user, get_user_service
 from app.models.user import User
 from app.schemas.admin import AdminLoginRequest, AuthUser
-from app.services.user_service import UserService
+from app.services.user_service import InvalidCredentials, UserService
 
 log = structlog.get_logger(__name__)
 
@@ -51,20 +51,10 @@ async def login(
     A wrong email and a wrong password give the same 401, so the response never
     reveals which accounts exist. The token rides in the cookie, never the body.
     """
-    client = client_ip(request)
-    user = await user_service.authenticate(payload.email, payload.password)
-    if user is None:
-        # Log the attempted email and source IP so brute force is visible. The
-        # password is never logged.
-        log.warning("admin.login.failed", email=payload.email, client=client)
-        raise _invalid_credentials()
-    if not user.is_active:
-        # Correct credentials on a disabled account. Logged on its own event for the
-        # operator, but answered with the same 401 so a session never opens and the
-        # response cannot confirm the account exists.
-        log.warning("admin.login.inactive", email=user.email, client=client)
-        raise _invalid_credentials()
-    log.info("admin.login.success", email=user.email, client=client)
+    try:
+        user = await user_service.authenticate_admin(payload, ip=client_ip(request))
+    except InvalidCredentials as exc:
+        raise _invalid_credentials() from exc
     token = create_access_token(str(user.id), token_version=user.token_version)
     set_session_cookie(response, token, max_age=settings.session_cookie_max_age)
     # The login response opens the session, so keep it out of any shared cache.

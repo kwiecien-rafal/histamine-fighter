@@ -3,12 +3,12 @@ from fastapi import APIRouter, Depends, Request
 from app.agents.learn import LearnAgent
 from app.core.ratelimit import limiter, llm_rate_limit
 from app.dependencies import (
-    RequestLLM,
     build_learn_agent,
     get_knowledge_service,
     get_learn_cache_service,
     get_request_llm_config,
 )
+from app.llm.request import RequestLLM
 from app.schemas.learn import ArticleListResponse, LearnQuery, LearnResponse
 from app.services.knowledge_service import KnowledgeService
 from app.services.learn_cache_service import LearnCacheService

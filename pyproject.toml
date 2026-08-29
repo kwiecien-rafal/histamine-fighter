@@ -37,7 +37,7 @@ include = ["app*"]
 # Non-Python files must be declared to ship with the installed package: the vendored
 # disposable-email blocklist, and the templates and assets the web pages are served from.
 [tool.setuptools.package-data]
-app = ["core/data/*.txt", "templates/*.html", "static/*", "static/vendor/*"]
+app = ["core/data/*.txt", "web/templates/*.html", "web/static/*", "web/static/vendor/*"]
 
 [dependency-groups]
 dev = [

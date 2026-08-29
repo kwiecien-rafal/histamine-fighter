@@ -35,6 +35,13 @@ from app.schemas.meal import (
     TraceEvent,
     public_trace,
 )
+from app.services.ingredient_service import IngredientService
+from app.services.meal_edit import (
+    EditTargetMissing,
+    EditTargetNotPending,
+    ensure_safe,
+    verify_edit,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -352,6 +359,60 @@ class MealService:
     async def get(self, meal_id: UUID) -> CuratedMeal | None:
         """Return one curated meal by id, or None when there is no match."""
         return await self._session.get(CuratedMeal, meal_id)
+
+    async def create_manual(
+        self,
+        payload: AdminMealCreate,
+        *,
+        actor: str,
+        ingredients: IngredientService,
+    ) -> CuratedMeal:
+        """Store a hand-written meal as pending, once the index gate lets it through.
+
+        A hand-written meal runs the same ingredient re-check an edit does: a flagged
+        ingredient is refused until confirmed past with ``confirm_flagged`` (recorded for
+        the reviewer), an unverifiable one always blocks. It lands pending, marked with
+        the ``manual`` model sentinel, for the same admin approval a composed meal needs.
+        The flush populates the row's id and timestamp; the caller owns the commit.
+        """
+        verification = await verify_edit(ingredients, payload)
+        confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
+        row = await self.store_manual(
+            payload,
+            unverified=verification.unverified + confirmed_flags,
+            cautioned=verification.cautioned,
+            actor=actor,
+        )
+        await self._session.flush()
+        return row
+
+    async def edit_pending(
+        self,
+        meal_id: UUID,
+        payload: AdminMealUpdate,
+        *,
+        ingredients: IngredientService,
+    ) -> CuratedMeal:
+        """Rewrite a pending curated meal, re-verified against the index before saving.
+
+        Allowed only while pending. The edited list is re-run through the admin index
+        gate, so an introduced flagged ingredient is refused until confirmed past, and
+        the not-indexed list is re-derived.
+        """
+        meal = await self.get(meal_id)
+        if meal is None:
+            raise EditTargetMissing("Meal not found.")
+        if meal.approval_status is not ApprovalStatus.PENDING:
+            raise EditTargetNotPending("Only a pending meal can be edited.")
+        verification = await verify_edit(ingredients, payload)
+        confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
+        await self.apply_edit(
+            meal,
+            payload,
+            unverified=verification.unverified + confirmed_flags,
+            cautioned=verification.cautioned,
+        )
+        return meal
 
     async def apply_edit(
         self,

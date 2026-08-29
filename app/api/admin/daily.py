@@ -11,18 +11,27 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.admin.edits import ensure_safe, verify_edit
 from app.dependencies import get_daily_service, get_ingredient_service, require_admin
-from app.enums import ApprovalStatus
 from app.models import DailySuggestion
 from app.models.user import User
 from app.schemas.admin import AdminDailyRead, AdminDailyUpdate, QueuedDay
 from app.services.daily_service import DailyService
 from app.services.ingredient_service import IngredientService
+from app.services.meal_edit import EditTargetMissing, EditTargetNotPending, UnsafeMealEdit
 
 router = APIRouter(prefix="/admin/daily", tags=["admin"])
 
-_NOT_PENDING = "Only a pending suggestion can be edited."
+
+def _refused(exc: UnsafeMealEdit) -> HTTPException:
+    """The index gate's refusal, with the flagged items the form has to show."""
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={
+            "message": exc.message,
+            "blockers": exc.blockers,
+            "can_confirm": exc.can_confirm,
+        },
+    )
 
 
 @router.get("/queue", response_model=list[QueuedDay])
@@ -48,20 +57,14 @@ async def update_suggestion(
     index gate, so an introduced flagged ingredient is a 422 the admin can confirm past
     with ``confirm_flagged``, and the not-indexed list is re-derived.
     """
-    suggestion = await service.get(suggestion_id)
-    if suggestion is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Suggestion not found.")
-    if suggestion.approval_status is not ApprovalStatus.PENDING:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NOT_PENDING)
-    verification = await verify_edit(ingredient_service, payload)
-    confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
-    service.apply_edit(
-        suggestion,
-        payload,
-        unverified=verification.unverified + confirmed_flags,
-        cautioned=verification.cautioned,
-    )
-    return suggestion
+    try:
+        return await service.edit_pending(suggestion_id, payload, ingredients=ingredient_service)
+    except EditTargetMissing as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except EditTargetNotPending as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except UnsafeMealEdit as exc:
+        raise _refused(exc) from exc
 
 
 @router.patch("/{suggestion_id}/approve", response_model=AdminDailyRead)
