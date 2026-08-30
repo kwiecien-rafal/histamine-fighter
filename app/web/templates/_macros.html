@@ -244,7 +244,7 @@
         {% for ingredient in meal.ingredients %}
           {% set caution = meal.cautioned_ingredients | selectattr("name", "equalto", ingredient.name) | first %}
           <li class="chip{% if caution %} chip--caution{% endif %}"{% if caution %} title="{{ caution.note }}"{% endif %}>
-            {{ ingredient.name }}{% if ingredient.category %} <span class="muted">· {{ ingredient.category }}</span>{% endif %}
+            {{ ingredient.name }}
           </li>
         {% endfor %}
       </ul>
@@ -309,4 +309,48 @@
          data-output="{{ call.usage.output_tokens }}"
          data-unreported="{{ call.usage.steps | rejectattr("reported") | list | length }}"></div>
   {% endif %}
+{%- endmacro %}
+
+
+{# The ingredient editor, shared by the dish lookup, a saved copy, and the admin meal
+   form. One text input per ingredient, because a textarea makes a person responsible
+   for a format, and a format is a thing to get wrong.
+
+   Categories are deliberately absent from the markup: they are an index-matching hint,
+   not a field anyone should vet, so they ride in one hidden map and are re-attached
+   server-side to whatever name comes back unchanged.
+
+   Everything works before the script does. Each row edits, clearing a name deletes it,
+   and the trailing blank row adds one. The remove and add controls are enhancements —
+   the add button stays hidden until app.js unhides it, so nothing inert is ever shown. #}
+{% macro ingredient_editor(ingredients, known="", hint="") -%}
+  <fieldset class="field field--wide ingredients" data-ingredients data-max="{{ MAX_INGREDIENTS }}">
+    <legend>
+      Ingredients <span class="muted" data-ingredients-count>up to {{ MAX_INGREDIENTS }}</span>
+    </legend>
+    {% if hint %}<p class="small muted">{{ hint }}</p>{% endif %}
+    <ol class="ingredients__list plain-list">
+      {% for item in ingredients %}
+        {{ ingredient_row(item.name, loop.index) }}
+      {% endfor %}
+      {{ ingredient_row("", ingredients | length + 1) }}
+    </ol>
+    <button class="ingredients__add" type="button" data-ingredients-add hidden>
+      + Add ingredient
+    </button>
+    <input type="hidden" name="ingredient_categories" value="{{ known }}" />
+  </fieldset>
+{%- endmacro %}
+
+
+{# One row of the editor, also the template app.js clones for a new one. #}
+{% macro ingredient_row(name, position) -%}
+  <li class="ingredients__row">
+    <input type="text" name="ingredient" value="{{ name }}"
+           maxlength="{{ MAX_INGREDIENT_CHARS }}" autocomplete="off"
+           aria-label="Ingredient {{ position }}"
+           {% if not name %}placeholder="Add an ingredient"{% endif %} />
+    <button class="ingredients__remove" type="button" data-ingredients-remove
+            aria-label="Remove ingredient {{ position }}" hidden>&times;</button>
+  </li>
 {%- endmacro %}

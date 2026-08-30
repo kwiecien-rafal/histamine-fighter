@@ -9,11 +9,14 @@ The signed-in account is resolved once per request by ``bind_current_user`` and 
 to every template by a context processor, so the masthead can render the account slot
 without each page passing it through.
 
-The ingredient editor is the one form shape two pages share — the saved copy and the
-dish lookup both let a visitor rewrite an ingredient list — so its line format is
-written and read here rather than in each of them.
+The ingredient editor is the one form shape three pages share — the dish lookup, the
+saved copy, and the admin meal form all let someone rewrite an ingredient list — so
+the rows are read back and their categories re-attached here rather than in each of
+them.
 """
 
+import json
+from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -24,7 +27,12 @@ from app.config import settings
 from app.dependencies import get_current_user_optional
 from app.llm.providers import DEFAULT_MODELS
 from app.models.user import User
-from app.schemas.meal import ProposedIngredient
+from app.schemas.meal import (
+    MAX_CONFIRMED_INGREDIENTS,
+    MAX_INGREDIENT_CHARS,
+    ProposedIngredient,
+    normalize_ingredients,
+)
 from app.services.meal_service import MANUAL_MODEL
 
 _WEB_DIR = Path(__file__).resolve().parent
@@ -97,6 +105,11 @@ templates.env.globals["MANUAL_MODEL"] = MANUAL_MODEL
 # resolver rather than re-typed as copy, so the hint cannot drift from what is used.
 templates.env.globals["DEFAULT_MODELS"] = DEFAULT_MODELS
 
+# The editor macro enforces its own limits rather than having every route that renders
+# it pass the same two caps through its template context.
+templates.env.globals["MAX_INGREDIENTS"] = MAX_CONFIRMED_INGREDIENTS
+templates.env.globals["MAX_INGREDIENT_CHARS"] = MAX_INGREDIENT_CHARS
+
 
 def board_date(value: date) -> str:
     """A board's calendar date, as 'Friday, 28 August 2026'."""
@@ -126,28 +139,58 @@ templates.env.filters["utc_time"] = utc_time
 templates.env.filters["countdown"] = countdown
 
 
-# What separates an ingredient's name from its category on a line of the editor.
-INGREDIENT_SEPARATOR = "|"
+# An ingredient's category never appears in the editor: it is a matching hint for the
+# curated index ("aged hard cheese" catches parmesan, which the index holds only as an
+# umbrella row), not something a person should have to write or vet. So the rows carry
+# names alone, and the categories the page was rendered with ride along beside them to
+# be re-attached to whatever comes back unchanged.
+
+# Bounds on that map, derived from the row limit so they can never be what refuses a
+# legitimate list. A map past either one is discarded whole rather than truncated to an
+# arbitrary half. The character bound is checked before parsing, so an oversized field
+# is dropped rather than decoded.
+MAX_KNOWN_CATEGORIES = MAX_CONFIRMED_INGREDIENTS * 2
+MAX_KNOWN_CHARS = MAX_KNOWN_CATEGORIES * (MAX_INGREDIENT_CHARS * 2 + 8)
 
 
-def ingredient_lines(ingredients: list[ProposedIngredient]) -> str:
-    """An ingredient list as editable text, one ``name | category`` per line."""
-    return "\n".join(
-        f"{item.name} {INGREDIENT_SEPARATOR} {item.category}" if item.category else item.name
-        for item in ingredients
-    )
+def known_categories(ingredients: Iterable[ProposedIngredient]) -> str:
+    """The rendered rows' categories, keyed by name, as the editor's hidden field."""
+    known = {item.name.casefold(): item.category for item in ingredients if item.category}
+    return json.dumps(known, separators=(",", ":")) if known else ""
 
 
-def parse_ingredient_lines(text: str) -> list[dict[str, str]]:
-    """Read the editor's lines back; the category after the separator is optional.
+def read_known_categories(raw: str) -> dict[str, str]:
+    """Read that map back, degrading anything unreadable to no categories at all.
 
-    Blank lines are dropped here and the schema each caller validates against does
-    the trimming, deduping, and capping, so a page edit can only produce what that
-    schema would accept from the API.
+    On the lookup path the map round-trips through the browser, so it is parsed as
+    hostile input. Losing it is safe in one direction only, which is why this may
+    give up on the whole map: a category can only widen the search to an umbrella
+    row, and a name that matches nothing already reads as no known concern, so the
+    worst an empty map costs is grounding — never caution.
     """
-    parsed: list[dict[str, str]] = []
-    for line in text.splitlines():
-        name, _, category = line.partition(INGREDIENT_SEPARATOR)
-        if name.strip():
-            parsed.append({"name": name, "category": category})
-    return parsed
+    if not raw or len(raw) > MAX_KNOWN_CHARS:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return {}
+    if not isinstance(parsed, dict) or len(parsed) > MAX_KNOWN_CATEGORIES:
+        return {}
+    return {
+        name: category
+        for name, category in parsed.items()
+        if isinstance(name, str) and isinstance(category, str)
+    }
+
+
+def confirmed_ingredients(
+    names: Iterable[str], known: Mapping[str, str]
+) -> list[ProposedIngredient]:
+    """The editor's rows as a normalized list, categories kept only for unchanged names.
+
+    A row that was renamed, typed by hand, or split out of another matches nothing
+    in the map and so carries no category. That is the whole guard against a stale
+    descriptor: it is not that a wrong category is detected, it is that an edited
+    name cannot carry one at all.
+    """
+    return normalize_ingredients((name, known.get(name.strip().casefold())) for name in names)

@@ -218,9 +218,80 @@
     });
   }
 
+  /* The ingredient editor. The rows already work without any of this — each one edits,
+     clearing a name drops it, and the trailing blank row adds one — so everything here
+     is the convenience layer: the remove buttons, an add button, and a live count.
+     Both controls are markup-hidden until now, so a visitor without the script is never
+     shown a button that would do nothing. */
+
+  function ingredientRows(editor) {
+    return Array.prototype.slice.call(editor.querySelectorAll(".ingredients__row"));
+  }
+
+  /* The count reports what would actually be submitted, so a trailing blank row does
+     not read as an ingredient the person has not typed yet. */
+  function renderIngredients(editor) {
+    var rows = ingredientRows(editor);
+    var max = Number(editor.dataset.max);
+    var filled = rows.filter(function (row) {
+      return row.querySelector("input").value.trim() !== "";
+    }).length;
+
+    editor.querySelector("[data-ingredients-count]").textContent = filled + " of " + max;
+    rows.forEach(function (row, index) {
+      var remove = row.querySelector("[data-ingredients-remove]");
+      remove.hidden = false;
+      remove.setAttribute("aria-label", "Remove ingredient " + (index + 1));
+      row.querySelector("input").setAttribute("aria-label", "Ingredient " + (index + 1));
+    });
+
+    var add = editor.querySelector("[data-ingredients-add]");
+    add.hidden = false;
+    add.disabled = rows.length >= max;
+  }
+
+  /* Cloned from a row already on the page rather than built here, so the row's markup
+     has exactly one definition and it is the one the server rendered. */
+  function addIngredientRow(editor) {
+    var rows = ingredientRows(editor);
+    if (rows.length >= Number(editor.dataset.max)) return;
+    var row = rows[rows.length - 1].cloneNode(true);
+    var input = row.querySelector("input");
+    input.value = "";
+    rows[rows.length - 1].parentNode.appendChild(row);
+    renderIngredients(editor);
+    input.focus();
+  }
+
+  function removeIngredientRow(editor, row) {
+    /* Never leave the editor with nothing to type into: the last row empties instead
+       of vanishing, which is also what clearing it by hand would have done. */
+    if (ingredientRows(editor).length === 1) row.querySelector("input").value = "";
+    else row.remove();
+    renderIngredients(editor);
+  }
+
+  function bindIngredients() {
+    document.querySelectorAll("[data-ingredients]").forEach(function (editor) {
+      if (editor.dataset.bound) return;
+      editor.dataset.bound = "true";
+
+      editor.addEventListener("click", function (event) {
+        var remove = event.target.closest("[data-ingredients-remove]");
+        if (remove) removeIngredientRow(editor, remove.closest(".ingredients__row"));
+        else if (event.target.closest("[data-ingredients-add]")) addIngredientRow(editor);
+      });
+      editor.addEventListener("input", function () {
+        renderIngredients(editor);
+      });
+      renderIngredients(editor);
+    });
+  }
+
   function start() {
     bindSettings();
     bindUsage();
+    bindIngredients();
     renderSettings();
     renderUsage();
   }

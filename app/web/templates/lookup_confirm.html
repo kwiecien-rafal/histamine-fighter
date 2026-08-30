@@ -39,20 +39,10 @@
         </label>
       {% endif %}
 
-      <label class="field field--wide">
-        <span>
-          Ingredients, one per line, as <code>name {{ separator }} category</code>.
-          The category is optional and only helps when the index has no entry for the name.
-        </span>
-        <textarea name="ingredients" rows="12" required
-                  {% if not model %}placeholder="courgette {{ separator }} fresh vegetable&#10;olive oil"{% endif %}
-        >{{ ingredients }}</textarea>
-      </label>
-
-      <p class="small muted">
-        Up to {{ max_ingredients }} ingredients.
-        {% if not model %}List at least {{ manual_minimum }} before checking.{% endif %}
-      </p>
+      {{ ui.ingredient_editor(
+           ingredients,
+           known=known_categories,
+           hint="" if model else "List at least %d before checking." % manual_minimum) }}
 
       <p class="row">
         <button class="button" type="submit">Check this dish</button>

@@ -45,7 +45,6 @@ from app.llm.errors import LLMError, LLMInvocationError, LLMRejectedError
 from app.llm.request import RequestLLM
 from app.models.user import User
 from app.schemas.meal import (
-    MAX_CONFIRMED_INGREDIENTS,
     MAX_DISH_CHARS,
     ConfirmedIngredient,
     DishAlternativesRequest,
@@ -54,8 +53,8 @@ from app.schemas.meal import (
     DishAssessmentResponse,
     DishLookupRequest,
     LookupRecipeRequest,
+    ProposedIngredient,
     RecipeGeneration,
-    normalize_ingredients,
 )
 from app.schemas.saved import SaveFromLookup
 from app.schemas.usage import LLMUsage
@@ -66,9 +65,9 @@ from app.services.meal_service import MealService
 from app.services.quota_service import QuotaExceededError, QuotaService
 from app.services.saved_meal_service import SavedMealService, SaveLimitReached
 from app.web.deps import (
-    INGREDIENT_SEPARATOR,
-    ingredient_lines,
-    parse_ingredient_lines,
+    confirmed_ingredients,
+    known_categories,
+    read_known_categories,
     require_user,
     templates,
 )
@@ -129,7 +128,7 @@ async def manual_entry(
     No model call: the propose step exists to save typing, and skipping it costs
     only the dish name, which the editor asks for instead.
     """
-    return _confirm_page(request, dish=dish.strip()[:MAX_DISH_CHARS], ingredients="", model="")
+    return _confirm_page(request, dish=dish.strip()[:MAX_DISH_CHARS], ingredients=[], model="")
 
 
 @router.post("/propose", response_class=HTMLResponse)
@@ -162,7 +161,8 @@ async def propose(
     return _confirm_page(
         request,
         dish=proposal.dish,
-        ingredients=ingredient_lines(proposal.ingredients),
+        ingredients=proposal.ingredients,
+        known=known_categories(proposal.ingredients),
         model=proposal.model,
         cached=proposal.cached,
         call=None if proposal.cached else ModelCall("propose", proposal.model, proposal.usage),
@@ -173,7 +173,8 @@ async def propose(
 async def assess(
     request: Request,
     dish: str = Form(),
-    ingredients: str = Form(),
+    ingredient: list[str] = Form(default=[]),
+    ingredient_categories: str = Form(default=""),
     model: str = Form(default=""),
     user: User | None = Depends(get_current_user_optional),
     quota: QuotaService = Depends(get_quota_service),
@@ -188,18 +189,29 @@ async def assess(
     dish name is still editable.
     """
     dish = dish.strip()
-    confirmed = _confirmed_ingredients(ingredients)
+    confirmed = confirmed_ingredients(ingredient, read_known_categories(ingredient_categories))
     minimum = 1 if model else MANUAL_MIN_INGREDIENTS
 
     def _back(error: str) -> HTMLResponse:
-        return _confirm_page(request, dish=dish, ingredients=ingredients, model=model, error=error)
+        # The rows as normalized, so a refused step shows what would actually be
+        # checked rather than the blanks and repeats the editor lets through.
+        return _confirm_page(
+            request,
+            dish=dish,
+            ingredients=confirmed,
+            known=ingredient_categories,
+            model=model,
+            error=error,
+        )
 
     if not dish:
         return _back("Name the dish before checking it.")
     if len(confirmed) < minimum:
         return _back(f"List at least {minimum} ingredient{'s' if minimum > 1 else ''}.")
     try:
-        payload = DishAssessmentRequest.model_validate({"dish": dish, "ingredients": confirmed})
+        payload = DishAssessmentRequest.model_validate(
+            {"dish": dish, "ingredients": [item.model_dump() for item in confirmed]}
+        )
     except ValidationError:
         return _back(f"Keep the dish name under {MAX_DISH_CHARS} characters.")
 
@@ -348,18 +360,6 @@ async def _lookup_agent(
     return resolved, build_dish_lookup_agent(resolved, ingredients, meals)
 
 
-def _confirmed_ingredients(text: str) -> list[dict[str, str | None]]:
-    """The editor's lines as a confirmed list: trimmed, deduped, and capped.
-
-    The same normalization the propose step's own output goes through, so a list
-    rewritten by hand can never be worse-formed than the one it started as.
-    """
-    normalized = normalize_ingredients(
-        (line["name"], line["category"]) for line in parse_ingredient_lines(text)
-    )
-    return [item.model_dump() for item in normalized]
-
-
 def _read_state(raw: str) -> LookupState:
     """The result the page carried back, re-validated here.
 
@@ -417,8 +417,9 @@ def _confirm_page(
     request: Request,
     *,
     dish: str,
-    ingredients: str,
+    ingredients: list[ProposedIngredient],
     model: str,
+    known: str = "",
     cached: bool = False,
     error: str | None = None,
     call: ModelCall | None = None,
@@ -430,13 +431,12 @@ def _confirm_page(
         {
             "dish": dish,
             "ingredients": ingredients,
+            "known_categories": known,
             "model": model,
             "cached": cached,
             "error": error,
             "call": call,
-            "separator": INGREDIENT_SEPARATOR,
             "max_dish_chars": MAX_DISH_CHARS,
-            "max_ingredients": MAX_CONFIRMED_INGREDIENTS,
             "manual_minimum": MANUAL_MIN_INGREDIENTS,
         },
     )

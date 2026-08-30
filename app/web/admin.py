@@ -59,7 +59,6 @@ from app.schemas.admin import (
 )
 from app.schemas.daily import DailyMealContent
 from app.schemas.meal import (
-    MAX_CONFIRMED_INGREDIENTS,
     MAX_RECIPE_STEPS,
     MAX_TAGS,
     ProposedIngredient,
@@ -71,7 +70,7 @@ from app.services.meal_edit import UnsafeMealEdit
 from app.services.meal_review_service import MealReviewService
 from app.services.meal_service import MealService
 from app.services.user_service import InvalidCredentials, UserService
-from app.web.deps import INGREDIENT_SEPARATOR, ingredient_lines, parse_ingredient_lines, templates
+from app.web.deps import confirmed_ingredients, known_categories, read_known_categories, templates
 
 router = APIRouter(prefix="/admin")
 
@@ -85,7 +84,15 @@ ReviewedRow = TypeVar("ReviewedRow", CuratedMeal, DailySuggestion)
 _REVIEW_STATES = {state.value for state in ApprovalStatus}
 
 # The blank meal form, so a new entry and a rejected one render through the same fields.
-_EMPTY_FIELDS = {"name": "", "description": "", "ingredients": "", "recipe": "", "tags": ""}
+# The empty ingredient list still renders the editor's one trailing row to type into.
+_EMPTY_FIELDS: dict[str, object] = {
+    "name": "",
+    "description": "",
+    "ingredients": [],
+    "known_categories": "",
+    "recipe": "",
+    "tags": "",
+}
 
 # Plain copy for the first thing a submitted meal got wrong, keyed by the field the
 # schema rejected. Every cap truncates rather than rejects, so only these three can fail.
@@ -113,24 +120,33 @@ class MealForm:
     """The content fields every meal form posts, as one dependency the three writes share.
 
     The curated create, the curated edit, and the daily edit submit an identical shape:
-    ingredients one per line as ``name | category``, the recipe one step per line, tags
-    comma separated. Read back here and handed to the admin schemas, whose normalizers do
-    the trimming, deduping, and capping — so a page edit can only store what the JSON API
-    would have accepted.
+    one text input per ingredient from the shared editor macro, the recipe one step per
+    line, tags comma separated. Read back here and handed to the admin schemas, whose
+    normalizers do the trimming, deduping, and capping — so a page edit can only store
+    what the JSON API would have accepted.
+
+    Ingredient categories ride in the editor's hidden field rather than being re-read
+    from the stored row, so one dependency still serves all three writes — the create
+    has no stored row to read. The weaker source costs nothing: a category only ever
+    widens the index search toward an umbrella row, so the worst a wrong one can do is
+    flag an admin's own meal more cautiously at the compose gate.
     """
 
     def __init__(
         self,
         name: str = Form(),
         description: str = Form(),
-        ingredients: str = Form(),
+        ingredient: list[str] = Form(default=[]),
+        ingredient_categories: str = Form(default=""),
         recipe: str = Form(default=""),
         tags: str = Form(default=""),
         confirm_flagged: bool = Form(default=False),
     ) -> None:
         self.name = name
         self.description = description
-        self.ingredients = ingredients
+        self.ingredients = confirmed_ingredients(
+            ingredient, read_known_categories(ingredient_categories)
+        )
         self.recipe = recipe
         self.tags = tags
         self.confirm_flagged = confirm_flagged
@@ -140,18 +156,19 @@ class MealForm:
         return {
             "name": self.name,
             "description": self.description,
-            "ingredients": parse_ingredient_lines(self.ingredients),
+            "ingredients": self.ingredients,
             "recipe": self.recipe.splitlines(),
             "tags": self.tags.split(","),
             "confirm_flagged": self.confirm_flagged,
         }
 
-    def as_fields(self) -> dict[str, str]:
-        """The submission as its own text, so a refused edit is corrected, not retyped."""
+    def as_fields(self) -> dict[str, object]:
+        """The submission as its own fields, so a refused edit is corrected, not retyped."""
         return {
             "name": self.name,
             "description": self.description,
             "ingredients": self.ingredients,
+            "known_categories": known_categories(self.ingredients),
             "recipe": self.recipe,
             "tags": self.tags,
         }
@@ -485,7 +502,7 @@ def _meal_form_page(
     *,
     heading: str,
     action: str,
-    fields: dict[str, str],
+    fields: dict[str, object],
     subtitle: str = "",
     meal_types: list[MealType] | None = None,
     selected_meal_type: MealType | None = None,
@@ -508,8 +525,6 @@ def _meal_form_page(
                 "meal_types": meal_types,
                 "selected_meal_type": selected_meal_type,
                 "refusal": refusal,
-                "separator": INGREDIENT_SEPARATOR,
-                "max_ingredients": MAX_CONFIRMED_INGREDIENTS,
                 "max_recipe_steps": MAX_RECIPE_STEPS,
                 "max_tags": MAX_TAGS,
             },
@@ -523,12 +538,13 @@ def _stored_fields(
     ingredients: list[ProposedIngredient],
     recipe: list[str] | None,
     tags: list[str],
-) -> dict[str, str]:
-    """A stored meal as the form's text, in the shape the submission is read back from."""
+) -> dict[str, object]:
+    """A stored meal as the form's fields, in the shape the submission is read back from."""
     return {
         "name": name,
         "description": description,
-        "ingredients": ingredient_lines(ingredients),
+        "ingredients": ingredients,
+        "known_categories": known_categories(ingredients),
         "recipe": "\n".join(recipe or []),
         "tags": ", ".join(tags),
     }

@@ -102,6 +102,7 @@ class _StubLookupAgent:
         self._failing = failing
         self._failure = failure or LLMInvocationError("the model would not answer")
         self.alternative_calls: list[AlternativeGoal] = []
+        self.assessed: list[ConfirmedIngredient] = []
 
     async def propose(self, dish: str) -> IngredientProposalResponse:
         if self._failing:
@@ -119,6 +120,7 @@ class _StubLookupAgent:
     ) -> DishAssessmentResponse:
         if self._failing:
             raise self._failure
+        self.assessed = ingredients
         if not self._echo_ingredients:
             return self._result
         return self._result.model_copy(
@@ -189,7 +191,7 @@ async def _assessed(client: AsyncClient, dish: str = "spaghetti bolognese") -> s
     assert editor.status_code == 200
     result = await client.post(
         "/lookup/assess",
-        data={"dish": dish, "ingredients": "tomato | vegetable\nbasil", "model": "stub/model"},
+        data={"dish": dish, "ingredient": ["tomato", "basil"], "model": "stub/model"},
     )
     assert result.status_code == 200
     return result.text
@@ -226,8 +228,10 @@ async def test_propose_hands_the_ingredients_to_the_editor(
     response = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
 
     assert response.status_code == 200
-    assert "tomato | vegetable" in response.text
-    assert "parmesan | aged hard cheese" in response.text
+    assert 'value="tomato"' in response.text
+    assert 'value="parmesan"' in response.text
+    # The categories ride in the hidden field, never as something to read or edit.
+    assert "aged hard cheese" not in response.text.split('name="ingredient_categories"')[0]
     assert 'name="model" value="stub/model"' in response.text
 
 
@@ -339,7 +343,7 @@ async def test_the_editor_normalizes_what_was_typed_into_it(
         "/lookup/assess",
         data={
             "dish": "tomato salad",
-            "ingredients": "tomato | vegetable\n\n  \nTOMATO\nbasil",
+            "ingredient": ["tomato", "", "  ", "TOMATO", "basil"],
             "model": "stub/model",
         },
     )
@@ -350,11 +354,86 @@ async def test_the_editor_normalizes_what_was_typed_into_it(
     assert "TOMATO" not in response.text
 
 
+def _carried_categories(page: str) -> str:
+    """The category map the editor carries in its hidden field, as a form value."""
+    match = re.search(r'name="ingredient_categories" value="([^"]*)"', page)
+    assert match is not None, "the editor carries no category field"
+    return html.unescape(match.group(1))
+
+
+async def test_an_untouched_row_keeps_its_index_grounding(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    """No category is ever a field on the page, yet an unedited one still reaches the index."""
+    editor = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+
+    response = await client.post(
+        "/lookup/assess",
+        data={
+            "dish": "spaghetti bolognese",
+            "ingredient": ["tomato", "parmesan"],
+            "ingredient_categories": _carried_categories(editor.text),
+            "model": "stub/model",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [(item.name, item.category) for item in agent.assessed] == [
+        ("tomato", "vegetable"),
+        ("parmesan", "aged hard cheese"),
+    ]
+
+
+async def test_a_renamed_row_drops_the_category_it_was_rendered_with(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    """A stale descriptor cannot ride along, because an edited name matches nothing."""
+    editor = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+
+    response = await client.post(
+        "/lookup/assess",
+        data={
+            "dish": "spaghetti bolognese",
+            "ingredient": ["tomato", "cheddar"],
+            "ingredient_categories": _carried_categories(editor.text),
+            "model": "stub/model",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [(item.name, item.category) for item in agent.assessed] == [
+        ("tomato", "vegetable"),
+        ("cheddar", None),
+    ]
+
+
+async def test_an_unreadable_category_map_costs_grounding_not_the_check(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    """Junk in the hidden field degrades to no categories, never to a refused step.
+
+    The safe direction: a category only ever widens the search toward an umbrella
+    row, so losing the map can add caution but never remove it.
+    """
+    response = await client.post(
+        "/lookup/assess",
+        data={
+            "dish": "spaghetti bolognese",
+            "ingredient": ["tomato", "parmesan"],
+            "ingredient_categories": "}not json{",
+            "model": "stub/model",
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item.category for item in agent.assessed] == [None, None]
+
+
 async def test_a_hand_typed_list_has_to_clear_the_manual_bar(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
     response = await client.post(
-        "/lookup/assess", data={"dish": "leftovers", "ingredients": "rice", "model": ""}
+        "/lookup/assess", data={"dish": "leftovers", "ingredient": ["rice"], "model": ""}
     )
 
     assert response.status_code == 200
@@ -367,7 +446,7 @@ async def test_assessing_without_a_dish_name_stays_on_the_editor(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
     response = await client.post(
-        "/lookup/assess", data={"dish": " ", "ingredients": "rice\nbeans", "model": ""}
+        "/lookup/assess", data={"dish": " ", "ingredient": ["rice", "beans"], "model": ""}
     )
 
     assert response.status_code == 200

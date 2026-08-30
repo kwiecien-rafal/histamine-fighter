@@ -466,3 +466,63 @@ details[open] summary {
 .busy.htmx-request {
   display: inline;
 }
+
+/* The ingredient editor: one row per ingredient, its remove control sized to the input
+   beside it so a column of rows reads as a list rather than a stack of widgets. */
+.ingredients__list {
+  margin: 0;
+  padding: 0;
+}
+
+.ingredients__row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.ingredients__row + .ingredients__row {
+  margin-top: 0.35rem;
+}
+
+.ingredients__remove {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ingredients__remove:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.ingredients__add {
+  margin-top: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.3rem 0.6rem;
+  background: var(--surface);
+  color: var(--ink-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ingredients__add:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.ingredients__add[disabled] {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ingredients legend .muted {
+  font-weight: normal;
+}

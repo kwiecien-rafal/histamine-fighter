@@ -52,13 +52,13 @@ async def _seed_index(session: AsyncSession) -> None:
     await session.flush()
 
 
-def _meal_form(**overrides: str) -> dict[str, str]:
+def _meal_form(**overrides: object) -> dict[str, object]:
     """A complete meal submission, so a test only states the field it is about."""
     return {
         "meal_type": MealType.LUNCH.value,
         "name": "Courgette ribbon salad",
         "description": "raw courgette ribbons with olive oil and fresh herbs",
-        "ingredients": "courgette | vegetable\nolive oil",
+        "ingredient": ["courgette", "olive oil"],
         "recipe": "Peel into ribbons.\nToss with oil.",
         "tags": "fresh, quick",
     } | overrides
@@ -298,7 +298,7 @@ async def test_a_flagged_ingredient_stops_the_save_once(
     await _seed_index(session)
 
     response = await authenticated_client.post(
-        "/admin/ui/meals", data=_meal_form(ingredients="courgette | vegetable\nparmesan")
+        "/admin/ui/meals", data=_meal_form(ingredient=["courgette", "parmesan"])
     )
 
     assert response.status_code == 200
@@ -314,7 +314,7 @@ async def test_a_flagged_ingredient_can_be_confirmed_past(
 
     response = await authenticated_client.post(
         "/admin/ui/meals",
-        data=_meal_form(ingredients="courgette | vegetable\nparmesan", confirm_flagged="true"),
+        data=_meal_form(ingredient=["courgette", "parmesan"], confirm_flagged="true"),
     )
 
     assert response.status_code == 303
@@ -334,7 +334,7 @@ async def test_the_edit_form_arrives_filled_in(
     response = await authenticated_client.get(f"/admin/ui/meals/{meal.id}")
 
     assert response.status_code == 200
-    assert "courgette | vegetable" in response.text
+    assert 'value="courgette"' in response.text
     assert "Peel into ribbons." in response.text
 
 

@@ -51,13 +51,7 @@
       <textarea name="description" rows="3" required>{{ fields.description }}</textarea>
     </label>
 
-    <label class="field field--wide">
-      <span>
-        Ingredients, one per line, as <code>name {{ separator }} category</code>,
-        up to {{ max_ingredients }}
-      </span>
-      <textarea name="ingredients" rows="10" required>{{ fields.ingredients }}</textarea>
-    </label>
+    {{ ui.ingredient_editor(fields.ingredients, known=fields.known_categories) }}
 
     <label class="field field--wide">
       <span>Recipe, one step per line, up to {{ max_recipe_steps }}. Empty for none</span>

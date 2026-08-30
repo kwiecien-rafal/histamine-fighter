@@ -39,7 +39,7 @@ def _edit_form(**overrides: object) -> dict[str, object]:
     return {
         "name": "Courgette ribbons",
         "description": "ribbons with oil and herbs",
-        "ingredients": "courgette | vegetable\nolive oil",
+        "ingredient": ["courgette", "olive oil"],
         "recipe": "Peel into ribbons.\nToss with oil.",
         "tags": [SavedMealTag.LUNCH.value],
     } | overrides
@@ -265,8 +265,8 @@ async def test_the_saved_copy_renders_the_edit_form(
 
     assert response.status_code == 200
     assert 'name="name"' in response.text
-    assert 'name="ingredients"' in response.text
-    assert "courgette | vegetable" in response.text
+    assert 'name="ingredient"' in response.text
+    assert 'value="courgette"' in response.text
     assert 'name="tags"' in response.text
 
 

@@ -16,8 +16,9 @@ from app.enums import (
 )
 from app.schemas.usage import LLMUsage
 
-# Hard cap on a confirmed ingredient list; the propose step trims to it too.
-MAX_CONFIRMED_INGREDIENTS = 25
+# Hard cap on a confirmed ingredient list; the propose step trims to it too, and the
+# editor macro renders it as the row limit.
+MAX_CONFIRMED_INGREDIENTS = 30
 # Per-item cap, well under the ingredient service's query limit so a schema-valid
 # name is never rejected downstream.
 MAX_INGREDIENT_CHARS = 80

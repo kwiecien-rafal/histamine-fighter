@@ -5,10 +5,10 @@ handlers, so the per-user cap, the approval and reveal gates, the shared-tier
 charge, and the write rate limits keep exactly one implementation. These routes
 turn a form into that call and its refusal into page copy.
 
-The edit form is plain HTML with no editor behind it: ingredients are one per
-line as ``name | category``, and the recipe is one step per line. Both are read
-back and handed to the same schema the JSON API validates, so a page edit can
-only store what an API edit could.
+The edit form is plain HTML: ingredients are one text input each, from the shared
+editor macro, and the recipe is one step per line. Both are read back and handed to
+the same schema the JSON API validates, so a page edit can only store what an API
+edit could.
 """
 
 from typing import Literal
@@ -45,9 +45,7 @@ from app.services.saved_meal_service import (
     saved_detail,
 )
 from app.web.deps import (
-    INGREDIENT_SEPARATOR,
-    ingredient_lines,
-    parse_ingredient_lines,
+    confirmed_ingredients,
     require_user,
     safe_redirect,
     templates,
@@ -130,7 +128,7 @@ async def edit_saved_meal(
     save_id: UUID,
     name: str = Form(),
     description: str = Form(),
-    ingredients: str = Form(),
+    ingredient: list[str] = Form(default=[]),
     recipe: str = Form(default=""),
     tags: list[str] = Form(default=[]),
     user: User = Depends(require_user),
@@ -138,21 +136,28 @@ async def edit_saved_meal(
 ) -> Response:
     """Apply an edit to the visitor's own copy, which drops its verified badge."""
     row = await _owned(service, user, save_id)
+    # The stored copy is the authority on which ingredient carries which category, so
+    # the map is read from it and the editor's hidden field is left empty here — there
+    # is no reason to round-trip through the browser what the row already knows.
+    stored = saved_detail(row).ingredients
+    edited = confirmed_ingredients(
+        ingredient, {item.name.casefold(): item.category for item in stored if item.category}
+    )
     submitted: dict[str, object] = {
         "name": name,
         "description": description,
-        "ingredients": ingredients,
+        "ingredients": edited,
         "recipe": recipe,
         "tags": tags,
     }
     try:
-        # Validated rather than constructed: the fields are raw textarea text, and
-        # the schema's normalizers are what turn them into a storable meal.
+        # Validated rather than constructed: the fields are raw form input, and the
+        # schema's normalizers are what turn them into a storable meal.
         payload = SavedMealUpdate.model_validate(
             {
                 "name": name,
                 "description": description,
-                "ingredients": parse_ingredient_lines(ingredients),
+                "ingredients": edited,
                 "recipe": recipe.splitlines(),
                 "tags": tags,
             }
@@ -258,7 +263,6 @@ def _meal_page(
                 "form": form or _form_fields(meal),
                 "error": error,
                 "saved_tags": list(SavedMealTag),
-                "separator": INGREDIENT_SEPARATOR,
             },
         )
     )
@@ -286,11 +290,11 @@ def _back_to(target: str, fallback: str = "/") -> RedirectResponse:
 
 
 def _form_fields(meal: SavedMealDetail) -> dict[str, object]:
-    """The saved copy as the edit form's text fields."""
+    """The saved copy as the edit form's own fields."""
     return {
         "name": meal.name,
         "description": meal.description,
-        "ingredients": ingredient_lines(meal.ingredients),
+        "ingredients": meal.ingredients,
         "recipe": "\n".join(meal.recipe or []),
         "tags": meal.tags,
     }
