@@ -1,7 +1,7 @@
 """TTL caches for the dish lookup (the cost-control side of the flagship flow).
 
-Two tiers, both keyed by the canonical dish key. The invariant the assessment
-tier holds: cached content is always the output of an operator-trusted model
+Three tiers, all keyed by the canonical dish key. The invariant the assessment
+and rewrite tiers hold: cached content is always the output of an operator-trusted model
 (the routes only store shared-tier responses on public deployments), and it is
 served only when the curated index it was grounded in is provably unchanged.
 That proof is the grounding fingerprint — a hash over every index reading and
@@ -11,6 +11,10 @@ hash stored at write time. Any index drift, however small, reads as a miss and
 a fresh assessment overwrites the row. That is what makes the long TTL safe:
 staleness cannot outlive the data it was grounded in. Never commits; the
 request session owns the transaction.
+
+The rewrite tier fingerprints both sides — the readings its decisions came from
+and the readings that cleared the list it produced — because what it hands back
+is a dish to cook, not a verdict on one already on the plate.
 """
 
 import hashlib
@@ -24,9 +28,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.enums import SafetyLevel
-from app.models import LookupAssessmentCache, LookupProposalCache
+from app.enums import RewriteOutcome, SafetyLevel
+from app.models import LookupAssessmentCache, LookupProposalCache, LookupRewriteCache
 from app.schemas.meal import (
+    AdaptedDish,
     ConfirmedIngredient,
     DishAssessmentResponse,
     IngredientProposalResponse,
@@ -116,7 +121,7 @@ async def compute_grounding(
 
 
 class LookupCacheService:
-    """Reads and writes the dish-lookup proposal and assessment caches."""
+    """Reads and writes the dish-lookup proposal, assessment and rewrite caches."""
 
     def __init__(
         self,
@@ -256,3 +261,102 @@ class LookupCacheService:
             },
         )
         await self._session.execute(stmt)
+
+    async def get_rewrite(
+        self, dish: str, ingredients: Sequence[ConfirmedIngredient]
+    ) -> AdaptedDish | None:
+        """The cached rewrite for this dish and input list, if still grounded.
+
+        Same gate as the assessment tier, over a fingerprint that also covers the
+        rewritten list's own readings: a row is served only while the index still
+        clears the dish it hands back, so an ingredient reclassified to avoid-level
+        after the write can never be served as part of a safe version.
+        """
+        key = lookup_source_key(dish)
+        if not key:
+            return None
+        stmt = select(LookupRewriteCache).where(
+            LookupRewriteCache.dish_key == key,
+            LookupRewriteCache.ingredients_hash == ingredients_hash(ingredients),
+            LookupRewriteCache.expires_at > datetime.now(UTC),
+        )
+        row = (await self._session.execute(stmt)).scalar_one_or_none()
+        if row is None:
+            return None
+
+        response = AdaptedDish.model_validate({**row.response, "cached": True, "usage": {}})
+        grounding = await self._rewrite_grounding(ingredients, response)
+        if grounding is None:
+            log.warning("lookup_cache.rewrite_regrade_incomplete", dish_key=key)
+            return None
+        if grounding != row.grounding_hash:
+            # The index moved under this row; a fresh rewrite will overwrite it.
+            log.info("lookup_cache.rewrite_grounding_moved", cached_verdict=row.verdict.value)
+            return None
+        log.info("lookup_cache.rewrite_hit", verdict=row.verdict.value, model=row.model)
+        return response
+
+    async def store_rewrite(
+        self, dish: str, ingredients: Sequence[ConfirmedIngredient], response: AdaptedDish
+    ) -> None:
+        """Upsert a rewrite that actually produced a dish, fingerprinting both sides.
+
+        Only ``adapted`` is worth a row: the other outcomes are read off the
+        assessment with no model call, so caching them would freeze a decision
+        that costs nothing to make again — and freezing ``exhausted`` would pin one
+        bad run's failure under a dish that a second attempt might well rescue.
+        """
+        if response.outcome is not RewriteOutcome.ADAPTED:
+            return
+        key = lookup_source_key(dish)
+        if not key:
+            return
+        grounding = await self._rewrite_grounding(ingredients, response)
+        if grounding is None:
+            return
+        now = datetime.now(UTC)
+        await self._session.execute(
+            delete(LookupRewriteCache).where(LookupRewriteCache.expires_at <= now)
+        )
+        stmt = insert(LookupRewriteCache).values(
+            dish_key=key,
+            ingredients_hash=ingredients_hash(ingredients),
+            response=response.model_dump(exclude=_SERVE_OVERRIDES),
+            model=response.model,
+            verdict=response.verdict,
+            grounding_hash=grounding,
+            expires_at=now + self._ttl,
+        )
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_lookup_rewrite_cache_dish_ingredients",
+            set_={
+                "response": stmt.excluded.response,
+                "model": stmt.excluded.model,
+                "verdict": stmt.excluded.verdict,
+                "grounding_hash": stmt.excluded.grounding_hash,
+                "expires_at": stmt.excluded.expires_at,
+            },
+        )
+        await self._session.execute(stmt)
+
+    async def _rewrite_grounding(
+        self, ingredients: Sequence[ConfirmedIngredient], response: AdaptedDish
+    ) -> str | None:
+        """Fingerprint both the list the rewrite was asked about and the one it returned.
+
+        The input side is what the adaptations were derived from; the output side is
+        what makes the returned dish safe. Either drifting invalidates the row, and
+        an unreadable index on either side returns None, which reads as a miss on
+        the way in and refuses the write on the way out.
+        """
+        asked = await compute_grounding(self._ingredients, ingredients)
+        produced = await compute_grounding(
+            self._ingredients,
+            [
+                ConfirmedIngredient(name=item.name, category=item.category)
+                for item in response.ingredients
+            ],
+        )
+        if asked is None or produced is None:
+            return None
+        return _stable_hash({"asked": asked, "produced": produced})

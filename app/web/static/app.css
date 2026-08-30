@@ -342,6 +342,16 @@ a:hover {
   resize: vertical;
 }
 
+/* Radios and checkboxes are not text fields, so the field box does not apply. */
+.field input[type="radio"],
+.field input[type="checkbox"] {
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+}
+
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
@@ -372,6 +382,15 @@ fieldset.field legend {
   background: var(--page);
   font-size: 0.875rem;
   cursor: pointer;
+}
+
+/* Radios that are a plain choice, not a control to click like a button. */
+.check--plain {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  font-size: 1rem;
 }
 
 :focus-visible {

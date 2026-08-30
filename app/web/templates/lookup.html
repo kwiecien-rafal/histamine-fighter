@@ -6,17 +6,15 @@
   <header>
     <h1>Check a dish</h1>
     <p class="lede">
-      Name a dish and we will propose what goes into it. You correct that list, and the verdict
-      is then computed from the curated ingredient index rather than guessed by a model.
+      Name it and we work out what goes in, or list the ingredients yourself. Either way
+      you get back a version with nothing on the avoid list, and what it took to get there.
     </p>
   </header>
 
   {% if unrecognized %}
-    <div class="notice notice--caution" role="status">
-      <p><strong>We couldn't place “{{ dish }}”.</strong></p>
-      <p>Try another name, or list the ingredients yourself and skip straight to the verdict.</p>
-      <p><a class="button" href="/lookup/manual?dish={{ dish | urlencode }}">Enter the ingredients myself</a></p>
-    </div>
+    <p class="notice notice--caution" role="status">
+      We couldn't place “{{ dish }}”. Try another name, or list the ingredients yourself.
+    </p>
   {% elif error %}
     <p class="notice notice--error" role="alert">{{ error }}</p>
   {% endif %}
@@ -24,23 +22,48 @@
   {# Boosted so the AI settings ride along as request headers; without JavaScript this
      posts as an ordinary form and falls back to the server's own provider. #}
   <div hx-boost="true">
-    <form class="stack" method="post" action="/lookup/propose" hx-disabled-elt="find button">
+    <form class="stack" method="post" action="/lookup/check" hx-disabled-elt="find button">
       <label class="field field--wide">
         <span>Dish name</span>
         <input type="text" name="dish" value="{{ dish }}" maxlength="{{ max_dish_chars }}"
                placeholder="e.g. spaghetti bolognese" autocomplete="off" required autofocus />
       </label>
+
+      {# Radios, not two submit buttons: the choice is then part of the form's values,
+         so it survives a boosted post and a plain one identically. #}
+      <fieldset class="field field--wide">
+        <legend>Ingredients</legend>
+        <ul class="plain-list stack">
+          <li>
+            <label class="check check--plain">
+              <input type="radio" name="mode" value="" {% if not own %}checked{% endif %} />
+              Work them out for me
+            </label>
+          </li>
+          <li>
+            <label class="check check--plain">
+              <input type="radio" name="mode" value="{{ mode_own }}"
+                     data-ingredients-toggle {% if own %}checked{% endif %} />
+              I'll list them myself
+            </label>
+            {# Rendered open and hidden by the script, never the other way round:
+               without JavaScript both halves are simply on the page, sat under the
+               option they belong to, and the radio alone decides which one the
+               server reads. #}
+            <div data-ingredients-panel>
+              {{ ui.ingredient_editor(ingredients, known=known_categories,
+                                      hint="List at least %d." % manual_minimum) }}
+            </div>
+          </li>
+        </ul>
+      </fieldset>
+
       <p class="row">
-        <button class="button" type="submit">Find the ingredients</button>
-        <span class="busy small muted">Working out the ingredients…</span>
+        <button class="button" type="submit">Check this dish</button>
+        <span class="busy small muted">Working on it — this can take a moment…</span>
       </p>
     </form>
   </div>
-
-  <p class="small muted">
-    Already know what is in it? <a href="/lookup/manual">List the ingredients yourself</a>.
-    That step costs no model call at all.
-  </p>
 
   {{ ui.medical_note() }}
 {% endblock %}

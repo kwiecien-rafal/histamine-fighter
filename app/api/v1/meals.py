@@ -15,11 +15,13 @@ from app.dependencies import (
 from app.enums import MealType
 from app.llm.request import RequestLLM
 from app.schemas.meal import (
+    AdaptedDish,
     DishAlternativesRequest,
     DishAlternativesResponse,
     DishAssessmentRequest,
     DishAssessmentResponse,
     DishLookupRequest,
+    DishRewriteRequest,
     IngredientProposalResponse,
     LookupRecipeRequest,
     PublicMealDetail,
@@ -99,6 +101,26 @@ async def assess_dish(
 ) -> DishAssessmentResponse:
     """Step 2 — the verdict for the confirmed ingredient list."""
     return await lookup.assess(payload, agent=agent, resolved=resolved)
+
+
+@router.post("/adapt", response_model=AdaptedDish)
+@limiter.limit(llm_rate_limit)
+async def adapt_dish(
+    request: Request,
+    payload: DishRewriteRequest,
+    agent: DishLookupAgent = Depends(build_dish_lookup_agent),
+    resolved: RequestLLM = Depends(get_request_llm_config),
+    lookup: DishLookupService = Depends(get_dish_lookup_service),
+) -> AdaptedDish:
+    """A version of the dish its ingredient list can support, or why there is none.
+
+    The assessment behind it is recomputed from the same two fields rather than
+    accepted from the caller, and is dropped here: this endpoint answers "what can
+    I cook instead", and a client that wants the verdict too asks ``/assess``,
+    which serves the very row this call just wrote.
+    """
+    _, adapted = await lookup.adapt(payload, agent=agent, resolved=resolved)
+    return adapted
 
 
 @router.post("/recipe", response_model=RecipeGeneration)

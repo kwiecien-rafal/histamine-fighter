@@ -26,6 +26,7 @@ from app.enums import (
     CulinaryRole,
     DishIntegrity,
     HistamineMechanism,
+    RewriteOutcome,
     SafetyLevel,
 )
 from app.llm.config import LLMRequestConfig
@@ -36,6 +37,7 @@ from app.schemas.meal import (
     MAX_DISH_CHARS,
     MAX_INGREDIENT_CHARS,
     Adaptation,
+    AdaptedDish,
     Advisory,
     CautionedIngredient,
     ConfirmedIngredient,
@@ -44,6 +46,7 @@ from app.schemas.meal import (
     DishAlternativesResponse,
     DishAssessmentResponse,
     IngredientAssessment,
+    IngredientChange,
     IngredientProposalResponse,
     ProposedIngredient,
     RecipeGeneration,
@@ -103,6 +106,29 @@ class _StubAgent:
             usage=LLMUsage(),
         )
 
+    async def adapt(
+        self,
+        dish: str,
+        ingredients: list[ConfirmedIngredient],
+        assessment: DishAssessmentResponse,
+    ) -> AdaptedDish:
+        return AdaptedDish(
+            dish=assessment.dish,
+            name="Courgette Pasta",
+            outcome=RewriteOutcome.ADAPTED,
+            explanation="Courgette carries the sauce.",
+            ingredients=[ProposedIngredient(name="courgette", category="vegetable")],
+            changes=[
+                IngredientChange(
+                    original="tomato", replacement="courgette", reason="Same body, no histamine."
+                )
+            ],
+            trade_off="You lose the tomato depth.",
+            verdict=SafetyLevel.SAFE,
+            model="stub/model",
+            usage=LLMUsage(),
+        )
+
     async def alternatives(
         self,
         dish: str,
@@ -138,6 +164,12 @@ class _MissLookupCache:
     async def store_assessment(self, dish: str, ingredients: object, response: object) -> None:
         return None
 
+    async def get_rewrite(self, dish: str, ingredients: object) -> None:
+        return None
+
+    async def store_rewrite(self, dish: str, ingredients: object, response: object) -> None:
+        return None
+
 
 class _RecordingCache(_MissLookupCache):
     """A miss cache that remembers which store methods the routes invoked."""
@@ -150,6 +182,9 @@ class _RecordingCache(_MissLookupCache):
 
     async def store_assessment(self, dish: str, ingredients: object, response: object) -> None:
         self.stored.append("assessment")
+
+    async def store_rewrite(self, dish: str, ingredients: object, response: object) -> None:
+        self.stored.append("rewrite")
 
 
 def _probe_llm(shared: bool, charges: list[str]) -> RequestLLM:
@@ -299,6 +334,35 @@ async def test_cache_writes_are_gated_to_trusted_models(
 
     assert cache.stored == expect_stored
     assert charges == ["charged", "charged"]  # misses always charge, gated or not
+
+
+@pytest.mark.parametrize(
+    ("public", "shared", "expect_stored"),
+    [
+        (True, True, ["assessment", "rewrite"]),
+        (True, False, []),
+        (False, False, ["assessment", "rewrite"]),
+    ],
+)
+async def test_a_rewrite_reaches_the_shared_cache_only_from_a_trusted_model(
+    monkeypatch: pytest.MonkeyPatch, public: bool, shared: bool, expect_stored: list[str]
+) -> None:
+    # The gate matters most here: a cached assessment is a verdict on food someone
+    # already has, but a cached rewrite is a dish every later visitor is told to cook.
+    monkeypatch.setattr(settings, "public_deployment", public)
+    cache = _RecordingCache()
+    charges: list[str] = []
+    overrides = {
+        get_lookup_cache_service: lambda: cache,
+        get_request_llm_config: lambda: _probe_llm(shared=shared, charges=charges),
+    }
+    async with _lookup_client(overrides) as http_client:
+        await http_client.post(
+            "/api/v1/meals/adapt",
+            json={"dish": "pasta", "ingredients": [{"name": "tomato"}]},
+        )
+
+    assert cache.stored == expect_stored
 
 
 async def test_propose_without_a_dish_is_422(client: AsyncClient) -> None:
@@ -519,6 +583,143 @@ def test_alternatives_request_dedupes_repeated_names() -> None:
     )
 
     assert request.avoid_ingredients == ["Tomato", "parmesan"]
+
+
+# --- POST /api/v1/meals/adapt -------------------------------------------------------
+
+
+async def test_adapt_returns_the_version_shape(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/v1/meals/adapt",
+        json={"dish": "spaghetti bolognese", "ingredients": [{"name": "tomato"}]},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "dish": "spaghetti bolognese",
+        "name": "Courgette Pasta",
+        "outcome": "adapted",
+        "explanation": "Courgette carries the sauce.",
+        "ingredients": [{"name": "courgette", "category": "vegetable"}],
+        "changes": [
+            {
+                "original": "tomato",
+                "replacement": "courgette",
+                "reason": "Same body, no histamine.",
+            }
+        ],
+        "trade_off": "You lose the tomato depth.",
+        "verdict": "safe",
+        "unverified_ingredients": [],
+        "cautioned_ingredients": [],
+        "blocked_ingredients": [],
+        "model": "stub/model",
+        "cached": False,
+        "usage": _EMPTY_USAGE,
+    }
+
+
+async def test_adapt_charges_once_for_the_assessment_and_the_rewrite() -> None:
+    # Two model steps behind one request, and the shared-tier charge is one-shot:
+    # someone pays for asking, never for each step the answer happened to take.
+    charges: list[str] = []
+    resolved = _probe_llm(shared=True, charges=charges)
+    async with _lookup_client({get_request_llm_config: lambda: resolved}) as http_client:
+        resp = await http_client.post(
+            "/api/v1/meals/adapt",
+            json={"dish": "spaghetti bolognese", "ingredients": [{"name": "tomato"}]},
+        )
+
+    assert resp.status_code == 200
+    assert charges == ["charged"]
+
+
+async def test_a_cached_assessment_does_not_buy_a_free_rewrite() -> None:
+    """The charge is one-shot and cannot be re-armed once waived.
+
+    Assess waives on its own cache hit, so a dish whose assessment is cached but
+    whose rewrite is not must still charge for the rewrite it is about to run —
+    otherwise the shared tier hands out free model calls for every popular dish.
+    """
+    hit = DishAssessmentResponse(
+        dish="pasta",
+        verdict=SafetyLevel.AVOID,
+        explanation="Tomato is recorded as incompatible.",
+        adaptations=[],
+        advisories=[],
+        integrity=DishIntegrity.PRESERVED,
+        ingredients=[IngredientAssessment(name="tomato", safety=SafetyLevel.AVOID, found=True)],
+        model="earlier/model",
+        cached=True,
+        usage=LLMUsage(),
+    )
+
+    class _AssessmentOnlyCache(_MissLookupCache):
+        async def get_assessment(self, dish: str, ingredients: object) -> DishAssessmentResponse:
+            return hit
+
+    charges: list[str] = []
+    resolved = _probe_llm(shared=True, charges=charges)
+    overrides = {
+        get_lookup_cache_service: _AssessmentOnlyCache,
+        get_request_llm_config: lambda: resolved,
+    }
+    async with _lookup_client(overrides) as http_client:
+        resp = await http_client.post(
+            "/api/v1/meals/adapt",
+            json={"dish": "pasta", "ingredients": [{"name": "tomato"}]},
+        )
+
+    assert resp.status_code == 200
+    assert charges == ["charged"]
+
+
+async def test_adapt_serves_a_cached_version_uncharged() -> None:
+    hit = AdaptedDish(
+        dish="Spaghetti Bolognese",
+        name="Spaghetti with Courgette",
+        outcome=RewriteOutcome.ADAPTED,
+        explanation="From an earlier run.",
+        ingredients=[ProposedIngredient(name="courgette")],
+        verdict=SafetyLevel.SAFE,
+        model="earlier/model",
+        cached=True,
+        usage=LLMUsage(),
+    )
+
+    class _HitCache(_MissLookupCache):
+        async def get_assessment(self, dish: str, ingredients: object) -> None:
+            return None
+
+        async def get_rewrite(self, dish: str, ingredients: object) -> AdaptedDish:
+            return hit
+
+    charges: list[str] = []
+    resolved = _probe_llm(shared=True, charges=charges)
+    overrides = {get_lookup_cache_service: _HitCache, get_request_llm_config: lambda: resolved}
+    async with _lookup_client(overrides) as http_client:
+        resp = await http_client.post(
+            "/api/v1/meals/adapt",
+            json={"dish": "spaghetti bolognese", "ingredients": [{"name": "tomato"}]},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["cached"] is True
+    assert resp.json()["model"] == "earlier/model"
+    # The assessment behind it still ran and charged; the rewrite itself did not.
+    assert charges == ["charged"]
+
+
+async def test_adapt_with_an_empty_list_is_422(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/meals/adapt", json={"dish": "pasta", "ingredients": []})
+
+    assert resp.status_code == 422
+
+
+async def test_adapt_without_a_dish_is_422(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/meals/adapt", json={"ingredients": [{"name": "rice"}]})
+
+    assert resp.status_code == 422
 
 
 # --- POST /api/v1/meals/recipe ------------------------------------------------------

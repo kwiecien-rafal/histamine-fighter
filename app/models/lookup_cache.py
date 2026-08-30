@@ -1,11 +1,16 @@
 """ORM models for the dish-lookup caches.
 
-Two tiers, both keyed by the canonical dish key (``lookup_source_key``). Writes
+Three tiers, all keyed by the canonical dish key (``lookup_source_key``). Writes
 are gated to operator-trusted models at the route (shared tier on public
 deployments); the human confirm step reviews a cached proposal anyway, and a
-cached assessment is only served while its grounding fingerprint still matches
-the live index. The stored ``model`` keeps the transparency badge truthful on a
-hit. TTLs are garbage collection, not correctness.
+cached assessment or rewrite is only served while its grounding fingerprint still
+matches the live index. The stored ``model`` keeps the transparency badge truthful
+on a hit. TTLs are garbage collection, not correctness.
+
+The rewrite tier holds the one outcome that cost model calls. The other three —
+a dish with nothing to replace, a dish whose core cannot be replaced, and a run
+that gave up — are all derived from the assessment without a call, so caching
+them would freeze a decision that is free to make again.
 """
 
 from datetime import datetime
@@ -70,3 +75,46 @@ class LookupAssessmentCache(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     def __repr__(self) -> str:
         return f"<LookupAssessmentCache {self.dish_key!r} ({self.verdict})>"
+
+
+class LookupRewriteCache(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One cached rewrite for a dish key and the ingredient set it was asked about.
+
+    Keyed on the *input* list, since that plus the dish is the whole question. The
+    fingerprint covers both sides — the readings the rewrite decisions were drawn
+    from and the readings that cleared the list it produced — so a row is served
+    only while the index still supports the dish it hands back. That matters more
+    here than on the other tiers: this row is not a verdict about food someone
+    already has, it is a dish we are telling them to cook.
+    """
+
+    __tablename__ = "lookup_rewrite_cache"
+
+    dish_key: Mapped[str]
+    ingredients_hash: Mapped[str]
+    response: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    model: Mapped[str]
+    grounding_hash: Mapped[str]
+    # The verdict the rewritten list grounded to, denormalized for observability;
+    # the fingerprint, not the verdict, decides serving.
+    verdict: Mapped[SafetyLevel] = mapped_column(
+        Enum(
+            SafetyLevel,
+            native_enum=False,
+            length=16,
+            name="safety_level",
+            create_constraint=True,
+            values_callable=enum_values,
+        )
+    )
+    # Indexed: the store-time GC delete filters on it.
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "dish_key", "ingredients_hash", name="uq_lookup_rewrite_cache_dish_ingredients"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<LookupRewriteCache {self.dish_key!r} ({self.verdict})>"

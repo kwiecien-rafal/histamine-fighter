@@ -42,6 +42,7 @@ import structlog
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from app.agents.base import BaseAgent, loggable_messages
+from app.agents.meal_verification import MealVerification, verify_meal
 from app.agents.prompting import load_prompt, render_prompt, strip_region_tags
 from app.enums import (
     AdaptationAction,
@@ -49,6 +50,7 @@ from app.enums import (
     CulinaryRole,
     DishIntegrity,
     HistamineMechanism,
+    RewriteOutcome,
     SafetyLevel,
 )
 from app.llm.errors import LLMInvocationError
@@ -58,13 +60,17 @@ from app.schemas.meal import (
     MAX_ADVISORY_CHARS,
     MAX_ALTERNATIVES,
     MAX_CONFIRMED_INGREDIENTS,
+    MAX_DESCRIPTION_CHARS,
     MAX_DISH_CHARS,
     MAX_DISH_STYLE_CHARS,
     MAX_INGREDIENT_CHARS,
     MAX_PITCH_CHARS,
     MAX_REASON_CHARS,
+    MAX_TRADE_OFF_CHARS,
     Adaptation,
     AdaptationDraft,
+    AdaptedDish,
+    AdaptedDishDraft,
     Advisory,
     AdvisoryDraft,
     AlternativeDraft,
@@ -76,6 +82,8 @@ from app.schemas.meal import (
     DishAssessmentResponse,
     DishExplanationDraft,
     IngredientAssessment,
+    IngredientChange,
+    IngredientChangeDraft,
     IngredientProposalResponse,
     ProposedIngredient,
     ProposedIngredientDraft,
@@ -128,6 +136,21 @@ _SYNTHESIS_TAGS = (
 )
 _ALTERNATIVES_TAGS = ("dish_text", "excluded_ingredients", "safe_anchors", "already_suggested")
 _DISAMBIGUATE_TAGS = ("dish_text", "ingredients")
+_ADAPT_TAGS = ("dish_text", "original_ingredients", "problems", "feedback")
+
+# How many times the rewrite may be sent back before the attempt is abandoned. Two
+# is deliberate: the first list is the model's real answer and the second is it
+# acting on named blockers, while a third mostly buys latency on a request a person
+# is waiting through. Giving up is not a dead end — the alternatives pivot follows.
+_MAX_ADAPT_ROUNDS = 2
+
+# Stands in for a removal the model listed no reason for, and for an original
+# ingredient it dropped without accounting for at all.
+_DROPPED_REASON = "Left out of this version."
+_NO_INGREDIENTS_FEEDBACK = (
+    "Your last answer listed no usable ingredients. Return the new version's complete "
+    "ingredient list, one ingredient per entry."
+)
 
 
 def _goal_line(goal: AlternativeGoal) -> str:
@@ -501,6 +524,90 @@ def _take_alternatives(
         kept.append(item)
 
 
+def _format_problems(adaptations: list[Adaptation]) -> str:
+    """The grounded adaptations as labelled lines for the rewrite prompt.
+
+    Prose-shaped like the synthesis sections, and carrying the decisions already
+    made rather than the raw index readings: each entry's role, the action code
+    vetted (a swap here has passed ``_swap_is_safe``), and the reason. The model
+    builds the new dish from these instead of re-deciding what to do about each
+    ingredient.
+    """
+    lines: list[str] = []
+    for entry in adaptations:
+        match entry.action:
+            case AdaptationAction.SWAP:
+                action = f"swap for {entry.swap}"
+            case AdaptationAction.OMIT:
+                action = "leave it out"
+            case AdaptationAction.NO_SAFE_SWAP:
+                action = "no safe replacement — build the dish without it"
+            case _:
+                assert_never(entry.action)
+        names = " + ".join(entry.ingredients)
+        lines.append(f"- {names} — {entry.role.value}; {action}; {entry.reason}")
+    return "\n".join(lines) if lines else "None."
+
+
+def _normalized_changes(
+    drafts: list[IngredientChangeDraft],
+    original: list[ConfirmedIngredient],
+    adapted: list[ProposedIngredient],
+) -> list[IngredientChange]:
+    """Degrade the model's change lines into a diff that cannot misdescribe the dish.
+
+    Membership is code's: an ``original`` not on the assessed list is dropped, a
+    ``replacement`` not on the rewritten list reads as a plain removal, and a line
+    for an ingredient that is still in the dish is not a change at all. Whatever
+    the model leaves unaccounted for is appended, so every ingredient that
+    disappeared is visible — the same "surface the gap" rule the adaptations use.
+    The model's words survive only as ``reason``.
+    """
+    originals = {item.name.casefold(): item.name for item in original}
+    kept = {item.name.casefold() for item in adapted}
+    replacements = {item.name.casefold(): item.name for item in adapted}
+    changes: list[IngredientChange] = []
+    covered: set[str] = set()
+    for draft in drafts:
+        key = _clipped(draft.original).casefold()
+        if key not in originals or key in kept or key in covered:
+            continue
+        covered.add(key)
+        changes.append(
+            IngredientChange(
+                original=originals[key],
+                replacement=replacements.get(_clipped(draft.replacement).casefold()),
+                reason=_clipped(draft.reason, MAX_REASON_CHARS) or _DROPPED_REASON,
+            )
+        )
+    changes.extend(
+        IngredientChange(original=name, replacement=None, reason=_DROPPED_REASON)
+        for key, name in originals.items()
+        if key not in kept and key not in covered
+    )
+    return changes
+
+
+def _adapt_feedback(verification: MealVerification) -> str:
+    """What to send back when a rewritten list did not clear the index."""
+    listed = "; ".join(f"{name} ({reading})" for name, reading in verification.blockers)
+    return (
+        f"These ingredients on your last list could not be cleared against the index: "
+        f"{listed}. Replace exactly those with well-tolerated alternatives, keep the rest "
+        "of the list as it was, and return the complete list again."
+    )
+
+
+def _blocking_ingredients(adaptations: list[Adaptation]) -> list[str]:
+    """The core ingredients that cost the dish its identity, for the dead-end page."""
+    return [
+        name
+        for entry in adaptations
+        if entry.role is CulinaryRole.CORE and entry.action is AdaptationAction.NO_SAFE_SWAP
+        for name in entry.ingredients
+    ]
+
+
 def _integrity(adaptations: list[Adaptation]) -> DishIntegrity:
     """Grade what the adaptations do to the dish's identity.
 
@@ -557,6 +664,12 @@ class DishLookupAgent(BaseAgent):
             input_tag="<dish_text>",
         )
         self._disambiguate_user_template = load_prompt("dish_lookup/disambiguate_user")
+        self._adapt_prompt = render_prompt(
+            load_prompt("dish_lookup/adapt_system"),
+            "dish_lookup/adapt_system",
+            input_tag="<dish_text>",
+        )
+        self._adapt_user_template = load_prompt("dish_lookup/adapt_user")
 
     def stream(self, dish: str) -> AsyncIterator[str]:
         # Declared, not omitted, so the streaming contract stays explicit; deferred.
@@ -919,6 +1032,198 @@ class DishLookupAgent(BaseAgent):
         """A swap is usable only if the index does not record a concern for it."""
         matches = await self._service.find_candidates(swap)
         return _matches_safety(matches) is SafetyLevel.SAFE
+
+    async def adapt(
+        self,
+        dish: str,
+        ingredients: list[ConfirmedIngredient],
+        assessment: DishAssessmentResponse,
+    ) -> AdaptedDish:
+        """Rewrite the assessed dish into a version the curated index can support.
+
+        Four outcomes, two of them free. A dish with nothing avoid-level in it has
+        nothing to replace (``already_safe``), and one the assessment already graded
+        as having lost its identity has no version to find (``impossible``) — both
+        are read off the assessment before a call is made. Otherwise the model
+        drafts the whole new ingredient list and code reads every name back from
+        the index: anything it flags sends the draft back naming the offenders, up
+        to ``_MAX_ADAPT_ROUNDS`` times, after which the attempt is ``exhausted``.
+
+        Safety is never the model's to assert. A list only ships once the index has
+        cleared it, and the verdict on it is the same ``grounded_verdict`` the
+        assess path computes — so the same ingredients never read two ways.
+
+        Args:
+            dish: The dish text the visitor sent, for the prompt.
+            ingredients: The list the assessment was computed from.
+            assessment: That assessment; its adaptations are the brief.
+
+        Returns:
+            The rewritten dish, or the outcome explaining why there is none.
+        """
+        self._begin_usage()
+        if not assessment.adaptations:
+            return self._unchanged_dish(ingredients, assessment)
+        if assessment.integrity is DishIntegrity.LOST:
+            return self._no_version(assessment, _blocking_ingredients(assessment.adaptations))
+
+        feedback = ""
+        blocked: list[str] = []
+        for attempt in range(_MAX_ADAPT_ROUNDS):
+            draft = await self._draft_adaptation(dish, ingredients, assessment, feedback)
+            proposed = _normalized(draft.ingredients)
+            if not proposed:
+                log.warning("dish_lookup.adapt_empty", attempt=attempt, model=self.model_name)
+                feedback, blocked = _NO_INGREDIENTS_FEEDBACK, []
+                continue
+
+            # One set of lookups serves both the gate and the verdict, so the list
+            # that ships and the level it ships at are read from the same rows.
+            lookups = await lookup_ingredients(
+                self._service, [(item.name, item.category) for item in proposed]
+            )
+            verification = verify_meal(lookups)
+            if verification.is_safe:
+                return self._adapted_dish(
+                    ingredients, assessment, draft, proposed, lookups, verification
+                )
+
+            blocked = [name for name, _ in verification.blockers]
+            feedback = _adapt_feedback(verification)
+            log.warning(
+                "dish_lookup.adapt_rejected",
+                attempt=attempt,
+                blocked=[f"{name} ({reading})" for name, reading in verification.blockers],
+                model=self.model_name,
+            )
+
+        log.warning("dish_lookup.adapt_exhausted", rounds=_MAX_ADAPT_ROUNDS, model=self.model_name)
+        return self._no_version(assessment, blocked, outcome=RewriteOutcome.EXHAUSTED)
+
+    async def _draft_adaptation(
+        self,
+        dish: str,
+        ingredients: list[ConfirmedIngredient],
+        assessment: DishAssessmentResponse,
+        feedback: str,
+    ) -> AdaptedDishDraft:
+        """One rewrite attempt; ``feedback`` is empty first time and names blockers after."""
+        messages: list[BaseMessage] = [
+            SystemMessage(self._adapt_prompt),
+            HumanMessage(
+                render_prompt(
+                    self._adapt_user_template,
+                    "dish_lookup/adapt_user",
+                    # The dish text and the ingredient names are user input, and the
+                    # feedback names ingredients the model itself wrote; none may
+                    # close its own region or forge a sibling's.
+                    dish=strip_region_tags(dish, _ADAPT_TAGS),
+                    ingredients=strip_region_tags(
+                        ", ".join(item.name for item in ingredients), _ADAPT_TAGS
+                    ),
+                    problems=strip_region_tags(
+                        _format_problems(assessment.adaptations), _ADAPT_TAGS
+                    ),
+                    feedback=strip_region_tags(feedback or "None.", _ADAPT_TAGS),
+                )
+            ),
+        ]
+        log.debug("dish_lookup.adapt_request", messages=loggable_messages(messages))
+        draft = await self._structured_invoke(AdaptedDishDraft, messages, step="adapt")
+        log.debug("dish_lookup.adapt_reply", draft=draft.model_dump())
+        return draft
+
+    def _adapted_dish(
+        self,
+        ingredients: list[ConfirmedIngredient],
+        assessment: DishAssessmentResponse,
+        draft: AdaptedDishDraft,
+        proposed: list[ProposedIngredient],
+        lookups: list[LookupResult],
+        verification: MealVerification,
+    ) -> AdaptedDish:
+        """Assemble a cleared rewrite: the model's prose over code's own readings."""
+        verdict = grounded_verdict(lookups)
+        # Counts and the index's own names only; the model's dish name is derived
+        # from user input and is the single such field here, as on the assess path.
+        log.info(
+            "dish_lookup.adapted",
+            dish=assessment.dish,
+            verdict=verdict.value,
+            ingredients=len(proposed),
+            unverified=len(verification.unverified),
+            cautioned=len(verification.cautioned),
+            model=self.model_name,
+        )
+        return AdaptedDish(
+            dish=assessment.dish,
+            name=_clipped(draft.name, MAX_DISH_CHARS) or assessment.dish,
+            outcome=RewriteOutcome.ADAPTED,
+            explanation=_clipped(draft.explanation, MAX_DESCRIPTION_CHARS),
+            ingredients=proposed,
+            changes=_normalized_changes(draft.changes, ingredients, proposed),
+            trade_off=_clipped(draft.trade_off, MAX_TRADE_OFF_CHARS) or None,
+            verdict=verdict,
+            unverified_ingredients=verification.unverified,
+            cautioned_ingredients=verification.cautioned,
+            model=self.model_name,
+            usage=self._collect_usage(),
+        )
+
+    def _unchanged_dish(
+        self, ingredients: list[ConfirmedIngredient], assessment: DishAssessmentResponse
+    ) -> AdaptedDish:
+        """The dish as it stands, when the index flags nothing avoid-level to replace.
+
+        Costs no model call, so it credits no model: the badge is left empty rather
+        than attributing an answer the index alone produced. The assessment's own
+        verdict travels, so a depends-level dish still reads as one.
+        """
+        return AdaptedDish(
+            dish=assessment.dish,
+            name=assessment.dish,
+            outcome=RewriteOutcome.ALREADY_SAFE,
+            explanation=assessment.explanation,
+            ingredients=[
+                ProposedIngredient(name=item.name, category=item.category) for item in ingredients
+            ],
+            verdict=assessment.verdict,
+            model="",
+            usage=self._collect_usage(),
+        )
+
+    def _no_version(
+        self,
+        assessment: DishAssessmentResponse,
+        blocked: list[str],
+        outcome: RewriteOutcome = RewriteOutcome.IMPOSSIBLE,
+    ) -> AdaptedDish:
+        """A dead end, and which kind it is.
+
+        ``impossible`` is a claim about the dish — a core ingredient the index has
+        no replacement for, read straight off the assessment. ``exhausted`` is only
+        a claim about this run, so its wording never tells anyone the dish cannot
+        be made. The two are kept apart here rather than in the page, so the JSON
+        API cannot report one as the other.
+        """
+        if outcome is RewriteOutcome.IMPOSSIBLE:
+            listed = ", ".join(blocked) or "what makes it itself"
+            explanation = (
+                f"This dish rests on {listed}, and the index has nothing that replaces it "
+                "without turning the dish into something else."
+            )
+        else:
+            explanation = "We could not put together a version of this dish that clears the index."
+        return AdaptedDish(
+            dish=assessment.dish,
+            name=assessment.dish,
+            outcome=outcome,
+            explanation=explanation,
+            verdict=assessment.verdict,
+            blocked_ingredients=blocked,
+            model=self.model_name if outcome is RewriteOutcome.EXHAUSTED else "",
+            usage=self._collect_usage(),
+        )
 
     async def _safe_anchors(
         self, avoid_ingredients: list[str], prefer_ingredients: list[str]

@@ -12,7 +12,12 @@ from pathlib import Path
 import pytest
 
 from app.agents import prompting
-from app.agents.dish_lookup import _ALTERNATIVES_TAGS, _PROPOSE_TAGS, _SYNTHESIS_TAGS
+from app.agents.dish_lookup import (
+    _ADAPT_TAGS,
+    _ALTERNATIVES_TAGS,
+    _PROPOSE_TAGS,
+    _SYNTHESIS_TAGS,
+)
 from app.agents.learn import _LEARN_TAGS
 from app.agents.prompting import PromptRenderError, load_prompt, render_prompt, strip_region_tags
 
@@ -24,6 +29,8 @@ _TEMPLATES = [
     "dish_lookup/propose_user",
     "dish_lookup/synthesis_system",
     "dish_lookup/synthesis_user",
+    "dish_lookup/adapt_system",
+    "dish_lookup/adapt_user",
     "learn/system",
     "learn/user",
 ]
@@ -98,6 +105,7 @@ def test_strip_region_tags_with_no_tags_is_a_passthrough() -> None:
         ("dish_lookup/propose_user", _PROPOSE_TAGS),
         ("dish_lookup/synthesis_user", _SYNTHESIS_TAGS),
         ("dish_lookup/alternatives_user", _ALTERNATIVES_TAGS),
+        ("dish_lookup/adapt_user", _ADAPT_TAGS),
         ("learn/user", _LEARN_TAGS),
     ],
 )
@@ -144,7 +152,12 @@ def test_real_templates_load_with_includes_resolved(name: str) -> None:
 
 @pytest.mark.parametrize(
     "name",
-    ["dish_lookup/propose_system", "dish_lookup/synthesis_system", "learn/system"],
+    [
+        "dish_lookup/propose_system",
+        "dish_lookup/synthesis_system",
+        "dish_lookup/adapt_system",
+        "learn/system",
+    ],
 )
 def test_system_prompts_assemble_with_shared_identity(name: str) -> None:
     rendered = render_prompt(load_prompt(name), name, input_tag="<x>")

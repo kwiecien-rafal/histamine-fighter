@@ -55,10 +55,11 @@
   "similar_flavours": "Similar flavours",
 } %}
 
-{% set PIVOT_COPY = {
-  "lost": "These changes would take away what makes the dish itself. Another dish is the better bet.",
-  "altered": "Adapting this changes a core part of the dish, so you may prefer something closer to the original.",
-  "unresolved": "Part of this dish has no safe fix. Worth looking at something else.",
+{% set REWRITE_OUTCOME_LABELS = {
+  "adapted": {"label": "Adapted", "tone": "badge--ok"},
+  "already_safe": {"label": "Nothing to change", "tone": "badge--ok"},
+  "impossible": {"label": "Can't be adapted", "tone": "badge--danger"},
+  "exhausted": {"label": "No version found", "tone": "badge--caution"},
 } %}
 
 {% set TRACE_KIND_LABELS = {
@@ -105,9 +106,13 @@
 {%- endmacro %}
 
 
-{# Why a pivot to other dishes is being offered, in the tone the drift deserves. #}
-{% macro pivot_note(tone) -%}
-  {{ PIVOT_COPY.get(tone, "") }}
+{# How an attempt to rewrite a dish ended. Four outcomes, and the page's own copy
+   differs in structure for each, so only the badge label is mapped here. #}
+{% macro rewrite_outcome_badge(value) -%}
+  {% set display = REWRITE_OUTCOME_LABELS.get(value) %}
+  {% if display %}
+    <span class="badge {{ display.tone }}">{{ display.label }}</span>
+  {% endif %}
 {%- endmacro %}
 
 
@@ -294,6 +299,68 @@
     {% set tone, note = SAFETY_LABELS[item.safety.value].tone, "" %}
   {% endif %}
   <li class="{{ ('badge ' ~ tone) | trim }}">{{ item.name }}{% if note %} · {{ note }}{% endif %}</li>
+{%- endmacro %}
+
+
+{#
+  The pivot panel: pick a goal, then the suggestions that came back. Offered when the
+  dish cannot be kept, so the page writes its own heading and intro and everything
+  below that is identical wherever it appears.
+#}
+{% macro alternatives_panel(state_json, goals, goal, suggestions, cta="Check this one instead") -%}
+  {# The goal is a radio rather than one submit button per goal, so the assessment
+     travels once instead of once per choice. #}
+  <form class="stack" method="post" action="/lookup/alternatives" hx-disabled-elt="find button">
+    <input type="hidden" name="state" value="{{ state_json }}" />
+    <fieldset class="field field--wide">
+      <legend>What are you after?</legend>
+      <ul class="chips plain-list">
+        {% for option in goals %}
+          <li>
+            <label class="check">
+              <input type="radio" name="goal" value="{{ option.value }}"
+                     {% if option == goal or (goal is none and loop.first) %}checked{% endif %} />
+              {{ alternative_goal_label(option.value) }}
+            </label>
+          </li>
+        {% endfor %}
+      </ul>
+    </fieldset>
+    <p class="row">
+      <button class="button" type="submit">Suggest dishes</button>
+      <span class="busy small muted">Looking for ideas…</span>
+    </p>
+  </form>
+
+  {% if suggestions is not none %}
+    {% if suggestions.alternatives %}
+      <ul class="stack plain-list">
+        {% for item in suggestions.alternatives %}
+          <li class="notice stack">
+            <div class="row">
+              <strong>{{ item.name }}</strong>
+              {% if item.source == 'verified' %}
+                <span class="badge badge--ok" title="One of the meals composed from the index and approved by a human.">
+                  From our kitchen
+                </span>
+              {% endif %}
+            </div>
+            {% if item.pitch %}<p class="small muted">{{ item.pitch }}</p>{% endif %}
+            {# Every suggestion, whatever its source, is re-checked from scratch on
+               the way through — a suggested name is an idea, never a verdict. #}
+            <form method="post" action="/lookup/check" hx-disabled-elt="find button">
+              <input type="hidden" name="dish" value="{{ item.name }}" />
+              <button class="button" type="submit">{{ cta }}</button>
+              <span class="busy small muted">Working on it…</span>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="small muted">Suggested by <span class="badge">{{ suggestions.model }}</span></p>
+    {% else %}
+      <p class="notice">Nothing came back for that goal. Try another one.</p>
+    {% endif %}
+  {% endif %}
 {%- endmacro %}
 
 

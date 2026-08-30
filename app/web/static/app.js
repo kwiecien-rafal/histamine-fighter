@@ -288,9 +288,28 @@
     });
   }
 
+  /* The entry form asks for the ingredients only when the visitor said they would
+     list them. The panel is served open, so a page without this script is a form with
+     both halves on it rather than one with an editor nobody can reach. */
+  function bindMode() {
+    var panel = document.querySelector("[data-ingredients-panel]");
+    if (!panel || panel.dataset.bound) return;
+    panel.dataset.bound = "true";
+
+    var toggle = document.querySelector("[data-ingredients-toggle]");
+    function sync() {
+      panel.hidden = !toggle.checked;
+    }
+    document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
+      radio.addEventListener("change", sync);
+    });
+    sync();
+  }
+
   function start() {
     bindSettings();
     bindUsage();
+    bindMode();
     bindIngredients();
     renderSettings();
     renderUsage();

@@ -4,14 +4,24 @@ The assessment tier's contract is the interesting one: a hit is only served
 while its grounding fingerprint still matches the live index — any index drift,
 even one that leaves the dish verdict unchanged, reads as a miss, so a seed
 change can never surface a stale badge, note, or swap suggestion.
+
+The rewrite tier holds that on both sides at once. Its row hands back a dish to
+cook, so it stops being served when the index moves under either the list it was
+asked about or the list it produced.
 """
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.enums import Compatibility, SafetyLevel
-from app.models import HistamineIngredient, LookupAssessmentCache, LookupProposalCache
+from app.enums import Compatibility, RewriteOutcome, SafetyLevel
+from app.models import (
+    HistamineIngredient,
+    LookupAssessmentCache,
+    LookupProposalCache,
+    LookupRewriteCache,
+)
 from app.schemas.meal import (
+    AdaptedDish,
     ConfirmedIngredient,
     DishAssessmentResponse,
     IngredientAssessment,
@@ -274,3 +284,95 @@ def test_ingredients_hash_cannot_collide_on_delimiter_characters() -> None:
     second = ingredients_hash([_confirmed("a", "b|c")])
 
     assert first != second
+
+
+# --- rewrite tier ------------------------------------------------------------------
+
+
+def _adapted(
+    outcome: RewriteOutcome = RewriteOutcome.ADAPTED,
+    ingredients: list[str] = ["courgette"],
+) -> AdaptedDish:
+    return AdaptedDish(
+        dish="Spaghetti Bolognese",
+        name="Spaghetti with Courgette",
+        outcome=outcome,
+        explanation="Courgette carries the sauce.",
+        ingredients=[ProposedIngredient(name=name) for name in ingredients],
+        verdict=SafetyLevel.SAFE,
+        model="stub/model",
+        usage=LLMUsage(),
+    )
+
+
+async def test_rewrite_round_trip_serves_while_both_sides_hold(session: AsyncSession) -> None:
+    service = _service(session)
+    asked = [_confirmed("tomato"), _confirmed("basil")]
+    await service.store_rewrite("Pasta", asked, _adapted())
+
+    hit = await service.get_rewrite("Pasta", asked)
+
+    assert hit is not None
+    assert hit.cached is True
+    assert hit.name == "Spaghetti with Courgette"
+    assert hit.usage.calls == 0
+
+
+async def test_rewrite_misses_when_the_index_moves_under_the_new_dish(
+    session: AsyncSession,
+) -> None:
+    # Cached while courgette was unindexed; the index then flags it. The row still
+    # describes a dish we would be telling someone to cook, so it must not serve.
+    service = _service(session)
+    asked = [_confirmed("tomato")]
+    await service.store_rewrite("Pasta", asked, _adapted())
+    session.add(
+        HistamineIngredient(
+            name="Courgette", sources=["test"], compatibility=Compatibility.INCOMPATIBLE
+        )
+    )
+    await session.flush()
+
+    assert await service.get_rewrite("Pasta", asked) is None
+
+
+async def test_rewrite_misses_when_the_index_moves_under_the_original(
+    session: AsyncSession,
+) -> None:
+    # The other side of the fingerprint: what the rewrite decisions were drawn from
+    # has changed, so the version it produced is no longer the answer to the question.
+    service = _service(session)
+    asked = [_confirmed("tomato")]
+    await service.store_rewrite("Pasta", asked, _adapted())
+    session.add(
+        HistamineIngredient(
+            name="Tomato", sources=["test"], compatibility=Compatibility.INCOMPATIBLE
+        )
+    )
+    await session.flush()
+
+    assert await service.get_rewrite("Pasta", asked) is None
+
+
+async def test_only_an_adapted_outcome_is_worth_a_row(session: AsyncSession) -> None:
+    service = _service(session)
+    asked = [_confirmed("tomato")]
+
+    for outcome in (
+        RewriteOutcome.ALREADY_SAFE,
+        RewriteOutcome.IMPOSSIBLE,
+        RewriteOutcome.EXHAUSTED,
+    ):
+        await service.store_rewrite("Pasta", asked, _adapted(outcome, ingredients=[]))
+
+    # None of the three cost a model call worth freezing, and pinning an exhausted
+    # run would deny a second attempt that might well succeed.
+    rows = (await session.execute(select(LookupRewriteCache))).scalars().all()
+    assert rows == []
+
+
+async def test_rewrite_keys_on_the_list_it_was_asked_about(session: AsyncSession) -> None:
+    service = _service(session)
+    await service.store_rewrite("Pasta", [_confirmed("tomato")], _adapted())
+
+    assert await service.get_rewrite("Pasta", [_confirmed("tomato"), _confirmed("beef")]) is None

@@ -1,4 +1,4 @@
-"""Page tests for the dish lookup: propose, confirm, assess, pivot, recipe, save.
+"""Page tests for the dish lookup: the two ways in, the version they produce, and saving.
 
 The agent is stubbed, so nothing here calls a model; the lookup rules themselves —
 the cache, the verdict, the grounding — are covered against the JSON API and the
@@ -21,6 +21,7 @@ from app.enums import (
     AlternativeGoal,
     CulinaryRole,
     DishIntegrity,
+    RewriteOutcome,
     SafetyLevel,
     SaveSource,
 )
@@ -29,23 +30,51 @@ from app.models import SavedMeal
 from app.models.user import User
 from app.schemas.meal import (
     Adaptation,
+    AdaptedDish,
     Advisory,
+    CautionedIngredient,
     ConfirmedIngredient,
     DishAlternative,
     DishAlternativesResponse,
     DishAssessmentResponse,
     IngredientAssessment,
+    IngredientChange,
     IngredientProposalResponse,
     ProposedIngredient,
     RecipeGeneration,
 )
-from app.schemas.usage import LLMUsage
+from app.schemas.usage import LLMUsage, StepUsage
 from app.web import lookup
 
 PROPOSED = [
     ProposedIngredient(name="tomato", category="vegetable"),
     ProposedIngredient(name="parmesan", category="aged hard cheese"),
 ]
+
+
+def _usage(step: str, input_tokens: int, output_tokens: int) -> LLMUsage:
+    """One step's usage, itemized the way an agent reports it.
+
+    The steps are what the page's usage line is built from — a response carrying
+    none reads as cached and is not tallied — so a stub that omitted them would
+    never exercise the tally at all.
+    """
+    total = input_tokens + output_tokens
+    return LLMUsage(
+        calls=1,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total,
+        steps=[
+            StepUsage(
+                step=step,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total,
+                reported=True,
+            )
+        ],
+    )
 
 
 def _assessment(
@@ -80,7 +109,43 @@ def _assessment(
             IngredientAssessment(name="basil", safety=SafetyLevel.SAFE, found=True),
         ],
         model="stub/model",
-        usage=LLMUsage(calls=2, input_tokens=900, output_tokens=100, total_tokens=1000),
+        usage=_usage("synthesize", 900, 100),
+    )
+
+
+def _adapted(
+    *,
+    outcome: RewriteOutcome = RewriteOutcome.ADAPTED,
+    name: str = "Spaghetti with Courgette",
+    dish: str = "spaghetti bolognese",
+    ingredients: list[str] | None = None,
+    changes: list[IngredientChange] | None = None,
+    blocked: list[str] | None = None,
+    verdict: SafetyLevel = SafetyLevel.SAFE,
+    cautioned: list[CautionedIngredient] | None = None,
+) -> AdaptedDish:
+    """A rewritten dish, adapted unless a test asks for one of the dead ends."""
+    return AdaptedDish(
+        dish=dish,
+        name=name,
+        outcome=outcome,
+        explanation="Courgette carries the sauce.",
+        ingredients=[ProposedIngredient(name=item) for item in ingredients or ["courgette"]]
+        if outcome in (RewriteOutcome.ADAPTED, RewriteOutcome.ALREADY_SAFE)
+        else [],
+        changes=changes
+        if changes is not None
+        else [
+            IngredientChange(
+                original="tomato", replacement="courgette", reason="Same body, no histamine."
+            )
+        ],
+        trade_off="You lose the tomato depth.",
+        verdict=verdict,
+        cautioned_ingredients=cautioned or [],
+        blocked_ingredients=blocked or [],
+        model="stub/model",
+        usage=_usage("adapt", 500, 60),
     )
 
 
@@ -95,24 +160,29 @@ class _StubLookupAgent:
         echo_ingredients: bool = True,
         failing: bool = False,
         failure: Exception | None = None,
+        adapted: AdaptedDish | None = None,
     ) -> None:
         self._recognized = recognized
         self._result = result or _assessment()
         self._echo_ingredients = echo_ingredients
         self._failing = failing
         self._failure = failure or LLMInvocationError("the model would not answer")
+        self._adapted = adapted
         self.alternative_calls: list[AlternativeGoal] = []
+        self.propose_calls: list[str] = []
         self.assessed: list[ConfirmedIngredient] = []
+        self.adapted_from: list[ConfirmedIngredient] = []
 
     async def propose(self, dish: str) -> IngredientProposalResponse:
         if self._failing:
             raise self._failure
+        self.propose_calls.append(dish)
         return IngredientProposalResponse(
             dish=dish,
             recognized=self._recognized,
             ingredients=PROPOSED if self._recognized else [],
             model="stub/model",
-            usage=LLMUsage(calls=1, input_tokens=400, output_tokens=40, total_tokens=440),
+            usage=_usage("propose", 400, 40),
         )
 
     async def assess(
@@ -133,6 +203,17 @@ class _StubLookupAgent:
             }
         )
 
+    async def adapt(
+        self,
+        dish: str,
+        ingredients: list[ConfirmedIngredient],
+        assessment: DishAssessmentResponse,
+    ) -> AdaptedDish:
+        if self._failing:
+            raise self._failure
+        self.adapted_from = ingredients
+        return self._adapted or _adapted(dish=assessment.dish)
+
     async def alternatives(
         self,
         dish: str,
@@ -146,7 +227,7 @@ class _StubLookupAgent:
             goal=goal,
             alternatives=[DishAlternative(name="Courgette ribbon pasta", pitch="Fresh and herby.")],
             model="stub/model",
-            usage=LLMUsage(calls=1),
+            usage=_usage("alternatives", 200, 20),
         )
 
 
@@ -159,7 +240,9 @@ class _StubRecipeAgent:
     async def run(self, **kwargs: object) -> RecipeGeneration:
         if self._steps is None:
             raise LLMInvocationError("the model would not answer")
-        return RecipeGeneration(steps=self._steps, model="recipe/model", usage=LLMUsage(calls=1))
+        return RecipeGeneration(
+            steps=self._steps, model="recipe/model", usage=_usage("recipe", 300, 80)
+        )
 
 
 def _stub_agent(monkeypatch: pytest.MonkeyPatch, agent: _StubLookupAgent) -> _StubLookupAgent:
@@ -185,16 +268,31 @@ def _carried_state(page: str) -> str:
     return html.unescape(match.group(1))
 
 
-async def _assessed(client: AsyncClient, dish: str = "spaghetti bolognese") -> str:
-    """Drive propose and assess, and hand back the rendered result page."""
-    editor = await client.post("/lookup/propose", data={"dish": dish})
-    assert editor.status_code == 200
-    result = await client.post(
-        "/lookup/assess",
-        data={"dish": dish, "ingredient": ["tomato", "basil"], "model": "stub/model"},
+async def _named(client: AsyncClient, dish: str = "spaghetti bolognese") -> str:
+    """Check a dish by name, and hand back the rendered version page."""
+    response = await client.post("/lookup/check", data={"dish": dish})
+    assert response.status_code == 200
+    return response.text
+
+
+async def _listed(
+    client: AsyncClient,
+    dish: str = "spaghetti bolognese",
+    ingredients: list[str] | None = None,
+    **extra: str,
+) -> str:
+    """Check a dish from a hand-typed list, and hand back the same page."""
+    response = await client.post(
+        "/lookup/check",
+        data={
+            "dish": dish,
+            "mode": lookup.MODE_OWN,
+            "ingredient": ingredients if ingredients is not None else ["tomato", "basil"],
+            **extra,
+        },
     )
-    assert result.status_code == 200
-    return result.text
+    assert response.status_code == 200
+    return response.text
 
 
 # --- getting started --------------------------------------------------------------
@@ -204,91 +302,82 @@ async def test_the_entry_page_offers_both_ways_in(client: AsyncClient) -> None:
     response = await client.get("/lookup")
 
     assert response.status_code == 200
-    assert 'action="/lookup/propose"' in response.text
-    assert 'href="/lookup/manual"' in response.text
+    assert 'action="/lookup/check"' in response.text
+    # The choice rides in the form's values, so it survives a plain post as well as
+    # a boosted one, and the editor is served open for a visitor without the script.
+    assert 'name="mode" value=""' in response.text
+    assert f'name="mode" value="{lookup.MODE_OWN}"' in response.text
+    assert 'name="ingredient"' in response.text
 
 
-async def test_manual_entry_opens_an_empty_editor_with_the_dish_kept(
-    client: AsyncClient,
-) -> None:
-    response = await client.get("/lookup/manual?dish=leftover%20risotto")
+async def test_the_entry_page_opens_on_the_editor_when_asked(client: AsyncClient) -> None:
+    response = await client.get(f"/lookup?dish=leftover%20risotto&mode={lookup.MODE_OWN}")
 
     assert response.status_code == 200
     assert 'value="leftover risotto"' in response.text
-    # No proposing model, so the dish stays editable and the list starts blank.
-    assert 'name="model" value=""' in response.text
+    assert "data-ingredients-toggle checked" in response.text
 
 
-# --- proposing --------------------------------------------------------------------
+# --- checking a dish by name ------------------------------------------------------
 
 
-async def test_propose_hands_the_ingredients_to_the_editor(
+async def test_a_named_dish_goes_straight_to_a_version(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    response = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+    page = await _named(client)
 
-    assert response.status_code == 200
-    assert 'value="tomato"' in response.text
-    assert 'value="parmesan"' in response.text
-    # The categories ride in the hidden field, never as something to read or edit.
-    assert "aged hard cheese" not in response.text.split('name="ingredient_categories"')[0]
-    assert 'name="model" value="stub/model"' in response.text
+    assert "Spaghetti with Courgette" in page
+    # No list was put in front of anyone on the way; the model's own guess is what
+    # got assessed and reworked.
+    assert [item.name for item in agent.adapted_from] == ["tomato", "parmesan"]
 
 
-async def test_propose_reports_the_call_for_the_usage_tally(
+async def test_a_named_dish_reports_every_call_behind_the_page(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    response = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+    """Propose, assess and the rewrite ran behind one post, so one line covers them all."""
+    page = await _named(client)
 
-    assert 'data-step="propose"' in response.text
-    assert 'data-input="400"' in response.text
-
-
-async def test_a_cached_proposal_is_flagged_and_costs_nothing(
-    client: AsyncClient, agent: _StubLookupAgent
-) -> None:
-    """A second look at the same dish is served from the cache, so it is not tallied."""
-    await client.post("/lookup/propose", data={"dish": "courgette ribbons"})
-
-    response = await client.post("/lookup/propose", data={"dish": "courgette ribbons"})
-
-    assert "shown from an earlier check" in response.text
-    assert 'id="llm-call"' not in response.text
+    assert 'data-step="safe"' in page
+    assert 'data-input="1800"' in page
 
 
-async def test_an_unrecognized_dish_is_announced_not_edited(
+async def test_an_unrecognized_dish_is_announced_not_rewritten(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stub_agent(monkeypatch, _StubLookupAgent(recognized=False))
 
-    response = await client.post("/lookup/propose", data={"dish": "asdfghjkl"})
+    response = await client.post("/lookup/check", data={"dish": "asdfghjkl"})
 
     assert response.status_code == 200
     assert "We couldn't place" in response.text
-    assert "/lookup/manual?dish=asdfghjkl" in response.text
-    # The editor would dead-end on an empty list, so it is never reached.
-    assert 'action="/lookup/assess"' not in response.text
+    # Nothing was rewritten, so no version is claimed for it.
+    assert "Spaghetti with Courgette" not in response.text
+    # Listing it by hand is the only thing left to try, so that half is open.
+    assert "data-ingredients-toggle checked" in response.text
 
 
 async def test_a_blank_dish_never_reaches_the_model(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    response = await client.post("/lookup/propose", data={"dish": "   "})
+    response = await client.post("/lookup/check", data={"dish": "   "})
 
     assert response.status_code == 200
-    assert "Name a dish to check." in response.text
+    assert "Name the dish before checking it." in response.text
 
 
-async def test_a_failed_proposal_is_said_on_the_page(
+async def test_a_failed_check_is_said_on_the_page(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stub_agent(monkeypatch, _StubLookupAgent(failing=True))
 
-    response = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+    response = await client.post("/lookup/check", data={"dish": "spaghetti bolognese"})
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "couldn&#39;t finish that step" in response.text
+    # Back on the form, with what was typed still in it.
+    assert 'value="spaghetti bolognese"' in response.text
 
 
 async def test_a_refused_model_is_named_on_the_page(
@@ -298,7 +387,7 @@ async def test_a_refused_model_is_named_on_the_page(
     refusal = LLMRejectedError("The provider would not run 'openai/gpt-5.6-luna'.")
     _stub_agent(monkeypatch, _StubLookupAgent(failing=True, failure=refusal))
 
-    response = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
+    response = await client.post("/lookup/check", data={"dish": "spaghetti bolognese"})
 
     assert response.status_code == 200
     assert "openai/gpt-5.6-luna" in response.text
@@ -310,7 +399,7 @@ async def test_the_shared_tier_without_a_session_explains_itself_on_the_page(
 ) -> None:
     """The API answers this with a 401 JSON body; a page has to say it in words."""
     response = await client.post(
-        "/lookup/propose",
+        "/lookup/check",
         data={"dish": "spaghetti bolognese"},
         headers={"X-LLM-Provider": "shared"},
     )
@@ -320,38 +409,28 @@ async def test_the_shared_tier_without_a_session_explains_itself_on_the_page(
     assert "Sign in to use the shared free tier" in response.text
 
 
-# --- confirming and assessing -----------------------------------------------------
+# --- checking a list you typed yourself -------------------------------------------
 
 
-async def test_assess_renders_the_verdict_and_every_reading(
+async def test_a_hand_typed_list_costs_no_proposal(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    page = await _assessed(client)
+    """The step that guesses the ingredients has nothing to do when they are given."""
+    page = await _listed(client)
 
-    assert "Avoid" in page
-    assert "Tomato is recorded as incompatible." in page
-    assert "tomato" in page and "basil" in page
-    assert "Tolerated by most when cooked." in page
-    assert "no safe swap" in page
+    assert "Spaghetti with Courgette" in page
+    assert [item.name for item in agent.adapted_from] == ["tomato", "basil"]
+    # Propose never ran, so its 400 input tokens are not in the tally.
+    assert 'data-input="1400"' in page
 
 
 async def test_the_editor_normalizes_what_was_typed_into_it(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
     """Blank lines and repeats are the visitor's own text; they must not reach the agent."""
-    response = await client.post(
-        "/lookup/assess",
-        data={
-            "dish": "tomato salad",
-            "ingredient": ["tomato", "", "  ", "TOMATO", "basil"],
-            "model": "stub/model",
-        },
-    )
+    await _listed(client, "tomato salad", ["tomato", "", "  ", "TOMATO", "basil"])
 
-    assert response.status_code == 200
-    # The stub echoes the confirmed list back as its readings, so the page shows it.
-    assert response.text.count("basil") >= 1
-    assert "TOMATO" not in response.text
+    assert [item.name for item in agent.assessed] == ["tomato", "basil"]
 
 
 def _carried_categories(page: str) -> str:
@@ -365,22 +444,20 @@ async def test_an_untouched_row_keeps_its_index_grounding(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
     """No category is ever a field on the page, yet an unedited one still reaches the index."""
-    editor = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
-
-    response = await client.post(
-        "/lookup/assess",
-        data={
-            "dish": "spaghetti bolognese",
-            "ingredient": ["tomato", "parmesan"],
-            "ingredient_categories": _carried_categories(editor.text),
-            "model": "stub/model",
-        },
+    editor = await client.post(
+        "/lookup/check", data={"dish": "spaghetti bolognese", "mode": lookup.MODE_OWN}
     )
 
-    assert response.status_code == 200
+    await _listed(
+        client,
+        "spaghetti bolognese",
+        ["tomato", "parmesan"],
+        ingredient_categories=_carried_categories(editor.text),
+    )
+
     assert [(item.name, item.category) for item in agent.assessed] == [
-        ("tomato", "vegetable"),
-        ("parmesan", "aged hard cheese"),
+        ("tomato", None),
+        ("parmesan", None),
     ]
 
 
@@ -388,21 +465,19 @@ async def test_a_renamed_row_drops_the_category_it_was_rendered_with(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
     """A stale descriptor cannot ride along, because an edited name matches nothing."""
-    editor = await client.post("/lookup/propose", data={"dish": "spaghetti bolognese"})
-
-    response = await client.post(
-        "/lookup/assess",
-        data={
-            "dish": "spaghetti bolognese",
-            "ingredient": ["tomato", "cheddar"],
-            "ingredient_categories": _carried_categories(editor.text),
-            "model": "stub/model",
-        },
+    editor = await client.post(
+        "/lookup/refine", data={"state": _carried_state(await _named(client))}
     )
 
-    assert response.status_code == 200
+    await _listed(
+        client,
+        "spaghetti bolognese",
+        ["courgette", "cheddar"],
+        ingredient_categories=_carried_categories(editor.text),
+    )
+
     assert [(item.name, item.category) for item in agent.assessed] == [
-        ("tomato", "vegetable"),
+        ("courgette", None),
         ("cheddar", None),
     ]
 
@@ -415,42 +490,32 @@ async def test_an_unreadable_category_map_costs_grounding_not_the_check(
     The safe direction: a category only ever widens the search toward an umbrella
     row, so losing the map can add caution but never remove it.
     """
-    response = await client.post(
-        "/lookup/assess",
-        data={
-            "dish": "spaghetti bolognese",
-            "ingredient": ["tomato", "parmesan"],
-            "ingredient_categories": "}not json{",
-            "model": "stub/model",
-        },
+    await _listed(
+        client, "spaghetti bolognese", ["tomato", "parmesan"], ingredient_categories="}not json{"
     )
 
-    assert response.status_code == 200
     assert [item.category for item in agent.assessed] == [None, None]
 
 
 async def test_a_hand_typed_list_has_to_clear_the_manual_bar(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    response = await client.post(
-        "/lookup/assess", data={"dish": "leftovers", "ingredient": ["rice"], "model": ""}
-    )
+    page = await _listed(client, "leftovers", ["rice"])
 
-    assert response.status_code == 200
-    assert f"List at least {lookup.MANUAL_MIN_INGREDIENTS} ingredients." in response.text
-    # Back on the editor with the list intact, not thrown away.
-    assert "rice" in response.text
+    assert f"List at least {lookup.MANUAL_MIN_INGREDIENTS} ingredients." in page
+    # Back on the form with the list intact, not thrown away.
+    assert 'value="rice"' in page
 
 
-async def test_assessing_without_a_dish_name_stays_on_the_editor(
+async def test_a_list_left_over_from_the_other_half_is_never_read(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    response = await client.post(
-        "/lookup/assess", data={"dish": " ", "ingredient": ["rice", "beans"], "model": ""}
+    """The radio decides which half to read, not whether the editor happens to hold rows."""
+    await client.post(
+        "/lookup/check", data={"dish": "spaghetti bolognese", "ingredient": ["rice", "beans"]}
     )
 
-    assert response.status_code == 200
-    assert "Name the dish before checking it." in response.text
+    assert [item.name for item in agent.assessed] == ["tomato", "parmesan"]
 
 
 async def test_a_reading_the_index_could_not_make_is_never_shown_as_safe(
@@ -475,32 +540,224 @@ async def test_a_reading_the_index_could_not_make_is_never_shown_as_safe(
         ),
     )
 
-    page = await _assessed(client)
+    page = await _named(client)
 
     assert "samphire · no known concern" in page
     assert "kimchi · check failed" in page
 
 
-# --- the pivot to other dishes ----------------------------------------------------
+# --- the version that comes back --------------------------------------------------
 
 
-async def test_a_dish_that_survives_its_adaptations_is_offered_no_pivot(
+async def test_the_version_shows_what_changed_and_what_it_costs(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    page = await _named(client)
+
+    assert "What changed" in page
+    assert "courgette" in page
+    assert "You lose the tomato depth." in page
+
+
+async def test_the_original_is_kept_as_the_reason_the_version_looks_this_way(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    page = await _named(client)
+
+    # Folded away, but there: the index's reading of the dish that was asked about
+    # is what the version is answering.
+    assert "Why spaghetti bolognese needed changing" in page
+    assert "Tomato is recorded as incompatible." in page
+    assert "no safe swap" in page
+
+
+async def test_an_adapted_dish_is_offered_no_pivot(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    page = await _named(client)
+
+    # There is a dish to cook, so suggesting other ones would only be noise.
+    assert "Find something else" not in page
+
+
+async def test_a_dish_that_cannot_be_adapted_offers_close_dishes_unprompted(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub = _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(
+            adapted=_adapted(outcome=RewriteOutcome.IMPOSSIBLE, blocked=["tomato"], changes=[])
+        ),
+    )
+
+    page = await _named(client)
+
+    # The dead end cost no rewrite call, so the suggestions are fetched for them
+    # rather than leaving the page with nothing to do next.
+    assert stub.alternative_calls == [AlternativeGoal.SAME_STYLE]
+    assert "Courgette ribbon pasta" in page
+    assert "tomato" in page
+
+
+async def test_an_exhausted_run_offers_a_retry_and_claims_nothing(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub = _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(adapted=_adapted(outcome=RewriteOutcome.EXHAUSTED, changes=[])),
+    )
+
+    page = await _named(client)
+
+    # Running out of attempts is not the same claim as the dish being impossible,
+    # so the page says so and spends nothing more on it.
+    assert "Try again" in page
+    assert "There is no version of this dish" not in page
+    assert stub.alternative_calls == []
+
+
+async def test_an_already_safe_dish_invents_no_changes(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stub_agent(
         monkeypatch,
-        _StubLookupAgent(result=_assessment(integrity=DishIntegrity.PRESERVED, adaptations=[])),
+        _StubLookupAgent(
+            adapted=_adapted(
+                outcome=RewriteOutcome.ALREADY_SAFE,
+                name="Spaghetti Bolognese",
+                ingredients=["tomato", "basil"],
+                changes=[],
+            )
+        ),
     )
 
-    page = await _assessed(client)
+    page = await _named(client)
 
-    assert "Find something else" not in page
+    assert "Nothing to change" in page
+    assert "What changed" not in page
+    # Nothing was wrong with it, so there is no fold explaining what was.
+    assert "needed changing" not in page
+
+
+# --- retrying a run that came up short --------------------------------------------
+
+
+async def test_a_retry_reworks_the_same_confirmed_list(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub = _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(adapted=_adapted(outcome=RewriteOutcome.EXHAUSTED, changes=[])),
+    )
+    state = _carried_state(await _named(client))
+
+    response = await client.post("/lookup/adapt", data={"state": state})
+
+    assert response.status_code == 200
+    # The list the assessment was computed over, not a fresh guess at the dish.
+    assert [item.name for item in stub.adapted_from] == ["tomato", "parmesan"]
+    assert stub.propose_calls == ["spaghetti bolognese"]
+
+
+class _FailsOnRetry(_StubLookupAgent):
+    """Rewrites once, then refuses — the exhausted page's Try again pressed in vain."""
+
+    async def adapt(
+        self,
+        dish: str,
+        ingredients: list[ConfirmedIngredient],
+        assessment: DishAssessmentResponse,
+    ) -> AdaptedDish:
+        if self.adapted_from:
+            raise LLMInvocationError("the model would not answer")
+        return await super().adapt(dish, ingredients, assessment)
+
+
+async def test_a_failed_retry_stays_on_the_page_it_was_pressed_from(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_agent(
+        monkeypatch,
+        _FailsOnRetry(adapted=_adapted(outcome=RewriteOutcome.EXHAUSTED, changes=[])),
+    )
+    state = _carried_state(await _named(client))
+
+    response = await client.post("/lookup/adapt", data={"state": state})
+
+    assert response.status_code == 200
+    assert "couldn&#39;t finish that step" in response.text
+    # Still the version page, with its retry still on it.
+    assert "Try again" in response.text
+
+
+# --- editing the version and checking it again ------------------------------------
+
+
+async def test_refining_reopens_the_version_in_the_entry_editor(
+    client: AsyncClient, agent: _StubLookupAgent
+) -> None:
+    state = _carried_state(await _named(client))
+
+    response = await client.post("/lookup/refine", data={"state": state})
+
+    assert response.status_code == 200
+    assert 'value="courgette"' in response.text
+    # The same form a visitor typing their own list uses, opened on its editor.
+    assert 'action="/lookup/check"' in response.text
+    assert "data-ingredients-toggle checked" in response.text
+
+
+async def test_an_edited_version_keeps_the_grounding_of_rows_left_alone(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No category is ever a field on the page, yet an unedited row still reaches the index."""
+    stub = _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(
+            adapted=_adapted().model_copy(
+                update={
+                    "ingredients": [
+                        ProposedIngredient(name="courgette", category="vegetable"),
+                        ProposedIngredient(name="basil", category="fresh herb"),
+                    ]
+                }
+            )
+        ),
+    )
+    state = _carried_state(await _named(client))
+    editor = await client.post("/lookup/refine", data={"state": state})
+
+    await _listed(
+        client,
+        "Spaghetti with Courgette",
+        ["courgette", "cheddar"],
+        ingredient_categories=_carried_categories(editor.text),
+    )
+
+    # The untouched row keeps its descriptor; the renamed one can carry none, which
+    # is the whole guard against a stale category riding along.
+    assert [(item.name, item.category) for item in stub.assessed] == [
+        ("courgette", "vegetable"),
+        ("cheddar", None),
+    ]
+
+
+# --- the pivot to other dishes ----------------------------------------------------
+
+
+@pytest.fixture
+def dead_end(monkeypatch: pytest.MonkeyPatch) -> _StubLookupAgent:
+    """A run that came up short, which is when the pivot panel is offered."""
+    return _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(adapted=_adapted(outcome=RewriteOutcome.EXHAUSTED, changes=[])),
+    )
 
 
 async def test_choosing_a_goal_renders_suggestions(
-    client: AsyncClient, agent: _StubLookupAgent
+    client: AsyncClient, dead_end: _StubLookupAgent
 ) -> None:
-    state = _carried_state(await _assessed(client))
+    state = _carried_state(await _named(client))
 
     response = await client.post(
         "/lookup/alternatives",
@@ -510,13 +767,13 @@ async def test_choosing_a_goal_renders_suggestions(
     assert response.status_code == 200
     assert "Courgette ribbon pasta" in response.text
     # Picking one re-enters the flow, so it is checked from scratch like any dish.
-    assert 'action="/lookup/propose"' in response.text
+    assert 'action="/lookup/check"' in response.text
 
 
 async def test_a_goal_already_fetched_costs_no_second_call(
-    client: AsyncClient, agent: _StubLookupAgent
+    client: AsyncClient, dead_end: _StubLookupAgent
 ) -> None:
-    state = _carried_state(await _assessed(client))
+    state = _carried_state(await _named(client))
     first = await client.post(
         "/lookup/alternatives",
         data={"state": state, "goal": AlternativeGoal.SAME_STYLE.value},
@@ -530,38 +787,54 @@ async def test_a_goal_already_fetched_costs_no_second_call(
         },
     )
 
-    assert agent.alternative_calls == [AlternativeGoal.SAME_STYLE]
+    assert dead_end.alternative_calls == [AlternativeGoal.SAME_STYLE]
 
 
 # --- the recipe -------------------------------------------------------------------
 
 
-async def test_writing_a_recipe_renders_its_steps(
+async def test_the_recipe_is_written_for_the_version_not_the_original(
     client: AsyncClient, agent: _StubLookupAgent, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        lookup, "build_recipe_agent", lambda *args: _StubRecipeAgent(["Boil.", "Toss."])
-    )
-    state = _carried_state(await _assessed(client))
+    recipe = _StubRecipeAgent(["Slice the courgette.", "Toss."])
+    monkeypatch.setattr(lookup, "build_recipe_agent", lambda *args: recipe)
+    state = _carried_state(await _named(client))
 
     response = await client.post("/lookup/recipe", data={"state": state})
 
     assert response.status_code == 200
-    assert "Boil." in response.text
+    assert "Slice the courgette." in response.text
     assert "recipe/model" in response.text
+    assert "Spaghetti with Courgette" in response.text
 
 
-async def test_a_failed_recipe_leaves_the_verdict_standing(
+async def test_a_failed_recipe_leaves_the_version_standing(
     client: AsyncClient, agent: _StubLookupAgent, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(lookup, "build_recipe_agent", lambda *args: _StubRecipeAgent(None))
-    state = _carried_state(await _assessed(client))
+    state = _carried_state(await _named(client))
 
     response = await client.post("/lookup/recipe", data={"state": state})
 
     assert response.status_code == 200
     assert "couldn&#39;t finish that step" in response.text
-    assert "Tomato is recorded as incompatible." in response.text
+    assert "Courgette carries the sauce." in response.text
+
+
+async def test_a_dead_end_has_nothing_to_save_or_cook(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(
+            adapted=_adapted(outcome=RewriteOutcome.IMPOSSIBLE, blocked=["tomato"], changes=[])
+        ),
+    )
+
+    page = await _named(client)
+
+    assert 'action="/lookup/recipe"' not in page
+    assert 'action="/lookup/save"' not in page
 
 
 # --- saving -----------------------------------------------------------------------
@@ -570,13 +843,13 @@ async def test_a_failed_recipe_leaves_the_verdict_standing(
 async def test_an_anonymous_visitor_is_offered_the_account_not_the_save(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    page = await _assessed(client)
+    page = await _named(client)
 
     assert "Sign in to save this" in page
     assert 'action="/lookup/save"' not in page
 
 
-async def test_saving_stores_the_dish_and_opens_the_copy(
+async def test_saving_stores_the_version_and_opens_the_copy(
     user_client: AsyncClient,
     public_user: User,
     session: AsyncSession,
@@ -587,7 +860,7 @@ async def test_saving_stores_the_dish_and_opens_the_copy(
         lookup, "build_recipe_agent", lambda *args: _StubRecipeAgent(["Boil.", "Toss."])
     )
     with_recipe = await user_client.post(
-        "/lookup/recipe", data={"state": _carried_state(await _assessed(user_client))}
+        "/lookup/recipe", data={"state": _carried_state(await _named(user_client))}
     )
 
     response = await user_client.post(
@@ -600,7 +873,10 @@ async def test_saving_stores_the_dish_and_opens_the_copy(
     ).scalar_one()
     assert response.headers["location"] == f"/profile/meals/{saved.id}"
     assert saved.source is SaveSource.LOOKUP
-    assert saved.verdict is SafetyLevel.AVOID
+    # Its own name, its own list, its own verdict — that is what will be cooked.
+    assert saved.name == "Spaghetti with Courgette"
+    assert saved.verdict is SafetyLevel.SAFE
+    assert [item["name"] for item in saved.ingredients] == ["courgette"]
     # The recipe written on the result card rides into the save with it.
     assert saved.recipe == ["Boil.", "Toss."]
 
@@ -611,7 +887,7 @@ async def test_saving_the_same_result_twice_keeps_one_copy(
     session: AsyncSession,
     agent: _StubLookupAgent,
 ) -> None:
-    state = _carried_state(await _assessed(user_client))
+    state = _carried_state(await _named(user_client))
 
     await user_client.post("/lookup/save", data={"state": state})
     await user_client.post("/lookup/save", data={"state": state})

@@ -1,4 +1,4 @@
-"""Orchestration for the four dish-lookup steps, shared by the API and the pages.
+"""Orchestration for the dish-lookup steps, shared by the API and the pages.
 
 The order of each step is a cost contract, not an implementation detail: the cache is
 read before the shared-tier allowance is charged, so a hit is free; the charge lands at
@@ -12,12 +12,14 @@ from app.agents.recipe import RecipeAgent
 from app.config import settings
 from app.llm.request import RequestLLM
 from app.schemas.meal import (
+    AdaptedDish,
     CautionedIngredient,
     DishAlternativesRequest,
     DishAlternativesResponse,
     DishAssessmentRequest,
     DishAssessmentResponse,
     DishLookupRequest,
+    DishRewriteRequest,
     IngredientProposalResponse,
     LookupRecipeRequest,
     ProposedIngredient,
@@ -38,7 +40,7 @@ def _cache_writes_allowed(resolved: RequestLLM) -> bool:
 
 
 class DishLookupService:
-    """The dish-lookup flow: propose, assess, recipe, alternatives."""
+    """The dish-lookup flow: propose, assess, adapt, recipe, alternatives."""
 
     def __init__(self, cache: LookupCacheService) -> None:
         self._cache = cache
@@ -86,6 +88,51 @@ class DishLookupService:
         if _cache_writes_allowed(resolved):
             await self._cache.store_assessment(payload.dish, payload.ingredients, response)
         return response
+
+    async def adapt(
+        self,
+        payload: DishRewriteRequest,
+        *,
+        agent: DishLookupAgent,
+        resolved: RequestLLM,
+    ) -> tuple[DishAssessmentResponse, AdaptedDish]:
+        """Assess the dish, then rewrite it into a version the index supports.
+
+        The assessment is recomputed here rather than accepted from the caller, so
+        no client can steer a rewrite with a verdict it made up; it is normally a
+        cache hit, since the list being adapted is the one just assessed. Both
+        halves are returned because the flow genuinely produces both — the pages
+        show why the original was a problem beside the version that fixes it.
+
+        Cost is bounded by the request, not by this method: ``charge`` is a
+        one-shot per resolved config, so the assessment, the rewrite, and every
+        revision round the model needs together spend at most one shared-tier
+        allowance. Someone pays for asking, never for the model's retries.
+
+        Which is exactly why the rewrite cache is read *first*. The charge is also
+        one-shot in the other direction: once waived it cannot be re-armed. Assess
+        waives on its own cache hit, so had it run first, a dish whose assessment
+        was cached but whose rewrite was not would call the model for free.
+        Deciding here that a rewrite is going to happen, and charging before the
+        inner step can waive, is what closes that.
+        """
+        cached = await self._cache.get_rewrite(payload.dish, payload.ingredients)
+        if cached is None:
+            await resolved.charge()
+        assessment = await self.assess(
+            DishAssessmentRequest(dish=payload.dish, ingredients=payload.ingredients),
+            agent=agent,
+            resolved=resolved,
+        )
+        if cached is not None:
+            # Nothing to rewrite. The assess above already settled the charge either
+            # way, so this only releases one it left pending — a hit on both tiers.
+            resolved.waive()
+            return assessment, cached
+        adapted = await agent.adapt(payload.dish, payload.ingredients, assessment)
+        if _cache_writes_allowed(resolved):
+            await self._cache.store_rewrite(payload.dish, payload.ingredients, adapted)
+        return assessment, adapted
 
     async def recipe(
         self,

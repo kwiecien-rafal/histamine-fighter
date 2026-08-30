@@ -11,6 +11,7 @@ from app.enums import (
     DishIntegrity,
     HistamineMechanism,
     MealType,
+    RewriteOutcome,
     SafetyLevel,
     TraceReading,
 )
@@ -31,6 +32,8 @@ MAX_TAGS = 8
 MAX_TAG_CHARS = 40
 MAX_REASON_CHARS = 240
 MAX_ADVISORY_CHARS = 200
+# The one line a rewritten dish gets to admit what it gave up.
+MAX_TRADE_OFF_CHARS = 200
 # An alternative's pitch; its name shares MAX_DISH_CHARS so a suggestion always
 # fits back into DishLookupRequest when the user picks it. The alternatives
 # prompt's inputs are free text, so these output-side caps — not the prompt — are
@@ -355,6 +358,19 @@ class Advisory(BaseModel):
     note: str = Field(max_length=MAX_ADVISORY_CHARS)
 
 
+class CautionedIngredient(BaseModel):
+    """A moderately compatible ingredient kept in a meal, with the index's guidance.
+
+    The note is the curated index's own wording ("fresh only", "small amounts"),
+    never model-written: the model may keep the ingredient, but only the index says
+    how. A stable domain value pair (CLAUDE section 19); the frontend derives its
+    caution styling from the field's presence.
+    """
+
+    name: str
+    note: str
+
+
 class LookupRecipeRequest(BaseModel):
     """Recipe request for an assessed dish the user has not saved.
 
@@ -492,6 +508,119 @@ class DishAlternativesResponse(BaseModel):
     usage: LLMUsage = Field(description="Token usage of the model call behind this response.")
 
 
+class DishRewriteRequest(BaseModel):
+    """Ask for a version of this dish its ingredient list can actually support.
+
+    Deliberately the same shape as :class:`DishAssessmentRequest`: the rewrite is
+    always assessed first, so the caller states the dish and what is in it and
+    nothing else. An assessment is never accepted from the client — it is
+    recomputed (and cache-served) from these two fields, so a rewrite can never be
+    steered by a verdict the caller made up.
+    """
+
+    dish: str = Field(min_length=1, max_length=MAX_DISH_CHARS)
+    ingredients: list[ConfirmedIngredient] = Field(
+        min_length=1, max_length=MAX_CONFIRMED_INGREDIENTS
+    )
+
+
+class IngredientChangeDraft(BaseModel):
+    """One swap or removal as the model reports it; normalized into :class:`IngredientChange`."""
+
+    original: str = Field(default="", description="The original ingredient this line accounts for.")
+    replacement: str = Field(
+        default="", description="What takes its place; empty when it is simply left out."
+    )
+    reason: str = Field(default="", description="One line the cook can act on.")
+
+
+class AdaptedDishDraft(BaseModel):
+    """The rewrite call's structured output: a whole dish, not a list of edits.
+
+    The model returns the finished ingredient list because that is what code can
+    check — every name is read from the index before any of this is shown, and a
+    list of edits would have to be applied first to be checkable at all.
+    """
+
+    name: str = Field(default="", description="What to call this version of the dish.")
+    explanation: str = Field(default="", description="Two or three sentences on the version.")
+    ingredients: list[ProposedIngredientDraft] = Field(
+        default_factory=list, description="The complete ingredient list of the new version."
+    )
+    changes: list[IngredientChangeDraft] = Field(
+        default_factory=list, description="One line per original ingredient that changed or went."
+    )
+    trade_off: str = Field(
+        default="", description="One honest line on what is lost. Empty when nothing is."
+    )
+
+
+class IngredientChange(BaseModel):
+    """One grounded line of the diff: what left the dish, and what took its place.
+
+    Membership is code-owned: ``original`` is always a name from the list that was
+    assessed and ``replacement``, when set, is always a name on the rewritten list.
+    The model supplies only ``reason``, so the diff cannot claim a substitution
+    that is not actually in the dish.
+    """
+
+    original: str = Field(max_length=MAX_INGREDIENT_CHARS)
+    replacement: str | None = Field(
+        default=None,
+        max_length=MAX_INGREDIENT_CHARS,
+        description="The ingredient that replaced it, or null when it was dropped.",
+    )
+    reason: str = Field(default="", max_length=MAX_REASON_CHARS)
+
+
+class AdaptedDish(BaseModel):
+    """A version of a dish that the curated index can support, or why there is none.
+
+    ``verdict`` is ``grounded_verdict`` over this response's own ingredient list —
+    the identical rule the assess path applies, so the same list never reads two
+    ways. It is not floored for ``unverified_ingredients``: an ingredient the index
+    has no entry for carries no recorded risk anywhere else in the app, and those
+    names are listed here instead of being folded into a verdict that would hide
+    them. Nothing the index flags as avoid can appear at all — that is what the
+    rewrite loop verifies before an outcome of ``adapted`` is possible.
+    """
+
+    dish: str = Field(description="The dish the visitor asked about.")
+    name: str = Field(description="What to call this version; the original when unchanged.")
+    outcome: RewriteOutcome = Field(description="How the attempt ended.")
+    explanation: str = Field(description="Short reason for what came back.")
+    ingredients: list[ProposedIngredient] = Field(
+        default_factory=list, description="The new version's ingredients; empty when there is none."
+    )
+    changes: list[IngredientChange] = Field(
+        default_factory=list, description="What changed, one line per original ingredient."
+    )
+    trade_off: str | None = Field(
+        default=None,
+        max_length=MAX_TRADE_OFF_CHARS,
+        description="What the new version gives up, when it gives up anything.",
+    )
+    verdict: SafetyLevel = Field(description="The rewritten list's own grounded verdict.")
+    unverified_ingredients: list[str] = Field(
+        default_factory=list,
+        description="Ingredients the index has no rating for: unknown, not safe.",
+    )
+    cautioned_ingredients: list[CautionedIngredient] = Field(
+        default_factory=list,
+        description="Depends-level ingredients kept, each with the index's own note.",
+    )
+    blocked_ingredients: list[str] = Field(
+        default_factory=list,
+        description="Why no version exists: the ingredients nothing could replace.",
+    )
+    model: str = Field(description="Which model wrote the version.")
+    cached: bool = Field(
+        default=False,
+        description="True when served from the rewrite cache after re-grounding identically.",
+    )
+    usage: LLMUsage = Field(description="Token usage of the model call(s) behind this response.")
+
+
 # --- Composer: the agentic meal-composition loop --------------------------------
 
 
@@ -527,19 +656,6 @@ def public_trace(events: Iterable[TraceEvent]) -> list[TraceEvent]:
     which never makes a safety claim to a visitor. The admin views keep the full trace.
     """
     return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]
-
-
-class CautionedIngredient(BaseModel):
-    """A moderately compatible ingredient kept in a meal, with the index's guidance.
-
-    The note is the curated index's own wording ("fresh only", "small amounts"),
-    never model-written: the model may keep the ingredient, but only the index says
-    how. A stable domain value pair (CLAUDE section 19); the frontend derives its
-    caution styling from the field's presence.
-    """
-
-    name: str
-    note: str
 
 
 class PublicMealView(BaseModel):
