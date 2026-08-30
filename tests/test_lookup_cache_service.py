@@ -359,7 +359,7 @@ async def test_only_an_adapted_outcome_is_worth_a_row(session: AsyncSession) -> 
     asked = [_confirmed("tomato")]
 
     for outcome in (
-        RewriteOutcome.ALREADY_SAFE,
+        RewriteOutcome.UNCHANGED,
         RewriteOutcome.IMPOSSIBLE,
         RewriteOutcome.EXHAUSTED,
     ):

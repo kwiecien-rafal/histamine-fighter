@@ -14,4 +14,4 @@
 {{feedback}}
 </feedback>
 
-Write the complete ingredient list of a version of this dish that avoids every problem above, plus `name`, `changes`, `explanation`, and `trade_off`.
+Write the complete ingredient list of a version of this dish that avoids every problem above, plus `changes` and `explanation`.

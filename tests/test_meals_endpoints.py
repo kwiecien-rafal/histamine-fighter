@@ -123,7 +123,6 @@ class _StubAgent:
                     original="tomato", replacement="courgette", reason="Same body, no histamine."
                 )
             ],
-            trade_off="You lose the tomato depth.",
             verdict=SafetyLevel.SAFE,
             model="stub/model",
             usage=LLMUsage(),
@@ -608,7 +607,6 @@ async def test_adapt_returns_the_version_shape(client: AsyncClient) -> None:
                 "reason": "Same body, no histamine.",
             }
         ],
-        "trade_off": "You lose the tomato depth.",
         "verdict": "safe",
         "unverified_ingredients": [],
         "cautioned_ingredients": [],

@@ -80,14 +80,14 @@ class DishIntegrity(StrEnum):
 class RewriteOutcome(StrEnum):
     """How an attempt to rewrite a dish into a tolerable version ended.
 
-    ``already_safe`` and ``impossible`` are both read off the assessment before
-    any rewrite is attempted, so neither costs a model call. ``exhausted`` is the
-    loop giving up, which is not the same claim as ``impossible``: one says the
-    dish cannot be saved, the other only that this run did not manage it.
+    ``unchanged`` and ``impossible`` are both read off the assessment before any
+    rewrite is attempted, so neither costs a model call. ``exhausted`` is the loop
+    giving up, which is not the same claim as ``impossible``: one says the dish
+    cannot be saved, the other only that this run did not manage it.
     """
 
     ADAPTED = "adapted"
-    ALREADY_SAFE = "already_safe"
+    UNCHANGED = "unchanged"
     IMPOSSIBLE = "impossible"
     EXHAUSTED = "exhausted"
 

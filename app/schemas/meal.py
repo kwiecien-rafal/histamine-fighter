@@ -32,8 +32,6 @@ MAX_TAGS = 8
 MAX_TAG_CHARS = 40
 MAX_REASON_CHARS = 240
 MAX_ADVISORY_CHARS = 200
-# The one line a rewritten dish gets to admit what it gave up.
-MAX_TRADE_OFF_CHARS = 200
 # An alternative's pitch; its name shares MAX_DISH_CHARS so a suggestion always
 # fits back into DishLookupRequest when the user picks it. The alternatives
 # prompt's inputs are free text, so these output-side caps — not the prompt — are
@@ -351,6 +349,33 @@ class Adaptation(BaseModel):
         return self
 
 
+def apply_adaptations(
+    ingredients: list[ConfirmedIngredient],
+    adaptations: list[Adaptation],
+) -> list[ProposedIngredient]:
+    """The dish with every fixable problem fixed and the rest kept as it is.
+
+    A ``swap`` puts its index-vetted replacement where the ingredients it covers
+    were, an ``omit`` drops them, and a ``no_safe_swap`` keeps them — the dish
+    stays cookable and the page badges what that costs.
+
+    Deliberately not what :attr:`AdaptedDish.ingredients` holds: that field's
+    contract is a list the index cleared, and this one is best effort — it may
+    still carry the name nothing could replace, so it must never be read as one.
+    """
+    covered: dict[str, Adaptation] = {
+        name.casefold(): entry for entry in adaptations for name in entry.ingredients
+    }
+    applied: list[tuple[str, str | None]] = []
+    for item in ingredients:
+        entry = covered.get(item.name.casefold())
+        if entry is None or entry.action is AdaptationAction.NO_SAFE_SWAP:
+            applied.append((item.name, item.category))
+        elif entry.swap is not None:
+            applied.append((entry.swap, None))
+    return normalize_ingredients(applied)
+
+
 class Advisory(BaseModel):
     """One depends-level ingredient's 'worth watching' note."""
 
@@ -542,16 +567,12 @@ class AdaptedDishDraft(BaseModel):
     list of edits would have to be applied first to be checkable at all.
     """
 
-    name: str = Field(default="", description="What to call this version of the dish.")
     explanation: str = Field(default="", description="Two or three sentences on the version.")
     ingredients: list[ProposedIngredientDraft] = Field(
         default_factory=list, description="The complete ingredient list of the new version."
     )
     changes: list[IngredientChangeDraft] = Field(
         default_factory=list, description="One line per original ingredient that changed or went."
-    )
-    trade_off: str = Field(
-        default="", description="One honest line on what is lost. Empty when nothing is."
     )
 
 
@@ -586,7 +607,7 @@ class AdaptedDish(BaseModel):
     """
 
     dish: str = Field(description="The dish the visitor asked about.")
-    name: str = Field(description="What to call this version; the original when unchanged.")
+    name: str = Field(description="The dish the visitor named; code-set, never model-written.")
     outcome: RewriteOutcome = Field(description="How the attempt ended.")
     explanation: str = Field(description="Short reason for what came back.")
     ingredients: list[ProposedIngredient] = Field(
@@ -594,11 +615,6 @@ class AdaptedDish(BaseModel):
     )
     changes: list[IngredientChange] = Field(
         default_factory=list, description="What changed, one line per original ingredient."
-    )
-    trade_off: str | None = Field(
-        default=None,
-        max_length=MAX_TRADE_OFF_CHARS,
-        description="What the new version gives up, when it gives up anything.",
     )
     verdict: SafetyLevel = Field(description="The rewritten list's own grounded verdict.")
     unverified_ingredients: list[str] = Field(

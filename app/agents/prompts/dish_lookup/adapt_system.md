@@ -15,11 +15,9 @@ Return the **complete ingredient list** of the new version, not a list of edits.
 
 Write:
 
-- `name`: what to call this version. Keep the original name when the dish still is that dish. Qualify it plainly when it has drifted ("Spaghetti Bolognese, fresh-tomato version"). Never invent marketing wording, and never claim safety in the name.
 - `ingredients`: every ingredient of the new version, including the ones that never had a problem. Carry the untouched ingredients over from `<original_ingredients>` unchanged — dropping a safe ingredient silently makes the dish worse for no reason. `name` is one ingredient ("parmesan"), never a phrase. `category` is a short food-group descriptor ("aged hard cheese", "citrus fruit") so the index can catch a food it only knows as a group. At most 25 ingredients.
-- `changes`: one line per original ingredient that is gone or different. `original` must be copied exactly from `<original_ingredients>`; `replacement` must be a name you put on your new `ingredients` list, or empty when the ingredient is simply left out. `reason` is one plain line the cook can act on. An ingredient you kept unchanged needs no line.
+- `changes`: one line per original ingredient that is gone or different. `original` must be copied exactly from `<original_ingredients>`; `replacement` must be a name you put on your new `ingredients` list, or empty when the ingredient is simply left out. `reason` is one plain line the cook can act on, and it must be honest about what the change costs — the depth, the tang, the richness that goes with it. Do not reassure; a cook would rather know. An ingredient you kept unchanged needs no line.
 - `explanation`: two or three sentences on what this version is and how it cooks, in everyday language. Describe the food, not the histamine reasoning.
-- `trade_off`: one honest line on what is lost against the original — the depth, the tang, the richness. Leave it empty only when genuinely nothing is lost. Do not reassure; a cook would rather know.
 
 ## Rules
 

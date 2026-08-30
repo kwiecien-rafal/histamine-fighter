@@ -150,7 +150,7 @@ class LookupState(BaseModel):
         nothing was rewritten in keeps the assessment's own notes: there is no
         second reading of it to prefer.
         """
-        if self.adapted.outcome is RewriteOutcome.ALREADY_SAFE:
+        if self.adapted.outcome is RewriteOutcome.UNCHANGED:
             return self.result.advisories
         return [
             Advisory(ingredient=item.name, note=item.note)

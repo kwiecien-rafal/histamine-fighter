@@ -131,7 +131,7 @@ def _adapted(
         outcome=outcome,
         explanation="Courgette carries the sauce.",
         ingredients=[ProposedIngredient(name=item) for item in ingredients or ["courgette"]]
-        if outcome in (RewriteOutcome.ADAPTED, RewriteOutcome.ALREADY_SAFE)
+        if outcome in (RewriteOutcome.ADAPTED, RewriteOutcome.UNCHANGED)
         else [],
         changes=changes
         if changes is not None
@@ -140,7 +140,6 @@ def _adapted(
                 original="tomato", replacement="courgette", reason="Same body, no histamine."
             )
         ],
-        trade_off="You lose the tomato depth.",
         verdict=verdict,
         cautioned_ingredients=cautioned or [],
         blocked_ingredients=blocked or [],
@@ -549,14 +548,14 @@ async def test_a_reading_the_index_could_not_make_is_never_shown_as_safe(
 # --- the version that comes back --------------------------------------------------
 
 
-async def test_the_version_shows_what_changed_and_what_it_costs(
+async def test_the_version_shows_what_changed_and_why(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
     page = await _named(client)
 
     assert "What changed" in page
     assert "courgette" in page
-    assert "You lose the tomato depth." in page
+    assert "Same body, no histamine." in page
 
 
 async def test_the_original_is_kept_as_the_reason_the_version_looks_this_way(
@@ -616,14 +615,14 @@ async def test_an_exhausted_run_offers_a_retry_and_claims_nothing(
     assert stub.alternative_calls == []
 
 
-async def test_an_already_safe_dish_invents_no_changes(
+async def test_an_unchanged_dish_invents_no_changes(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stub_agent(
         monkeypatch,
         _StubLookupAgent(
             adapted=_adapted(
-                outcome=RewriteOutcome.ALREADY_SAFE,
+                outcome=RewriteOutcome.UNCHANGED,
                 name="Spaghetti Bolognese",
                 ingredients=["tomato", "basil"],
                 changes=[],

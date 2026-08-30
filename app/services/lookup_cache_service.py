@@ -21,8 +21,10 @@ import hashlib
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any, TypeVar
 
 import structlog
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,6 +48,25 @@ from app.services.ingredient_lookup import (
 from app.services.ingredient_service import IngredientService
 
 log = structlog.get_logger(__name__)
+
+CachedResponseT = TypeVar("CachedResponseT", bound=BaseModel)
+
+
+def _parsed(
+    model: type[CachedResponseT], payload: dict[str, Any], *, tier: str
+) -> CachedResponseT | None:
+    """Parse a stored row, reading one the current schema cannot load as a miss.
+
+    Rows outlive the schema that wrote them: a renamed enum value or a tightened
+    field would otherwise raise out of a cache read, turning a stale row into a
+    500 on a path whose whole job is to be skippable.
+    """
+    try:
+        return model.model_validate(payload)
+    except ValidationError:
+        log.warning("lookup_cache.unreadable_row", tier=tier)
+        return None
+
 
 # The response fields that never come from the cache row: usage is zero on a
 # hit, cached is set by the serving side, and dish echoes the caller's text.
@@ -146,10 +167,15 @@ class LookupCacheService:
         payload = (await self._session.execute(stmt)).scalar_one_or_none()
         if payload is None:
             return None
-        log.info("lookup_cache.proposal_hit", model=payload.get("model"))
-        return IngredientProposalResponse.model_validate(
-            {**payload, "dish": dish, "cached": True, "usage": {}}
+        proposal = _parsed(
+            IngredientProposalResponse,
+            {**payload, "dish": dish, "cached": True, "usage": {}},
+            tier="proposal",
         )
+        if proposal is None:
+            return None
+        log.info("lookup_cache.proposal_hit", model=payload.get("model"))
+        return proposal
 
     async def store_proposal(self, response: IngredientProposalResponse) -> None:
         """Upsert a recognized, non-empty proposal; junk is never worth freezing.
@@ -212,8 +238,13 @@ class LookupCacheService:
             # The index moved under this row; a fresh assess will overwrite it.
             log.info("lookup_cache.grounding_moved", cached_verdict=row.verdict.value)
             return None
+        assessment = _parsed(
+            DishAssessmentResponse, {**row.response, "cached": True, "usage": {}}, tier="assessment"
+        )
+        if assessment is None:
+            return None
         log.info("lookup_cache.assessment_hit", verdict=row.verdict.value, model=row.model)
-        return DishAssessmentResponse.model_validate({**row.response, "cached": True, "usage": {}})
+        return assessment
 
     async def store_assessment(
         self,
@@ -284,7 +315,11 @@ class LookupCacheService:
         if row is None:
             return None
 
-        response = AdaptedDish.model_validate({**row.response, "cached": True, "usage": {}})
+        response = _parsed(
+            AdaptedDish, {**row.response, "cached": True, "usage": {}}, tier="rewrite"
+        )
+        if response is None:
+            return None
         grounding = await self._rewrite_grounding(ingredients, response)
         if grounding is None:
             log.warning("lookup_cache.rewrite_regrade_incomplete", dish_key=key)

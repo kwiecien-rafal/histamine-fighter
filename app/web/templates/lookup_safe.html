@@ -78,12 +78,6 @@
         </div>
       {% endif %}
 
-      {% if adapted.trade_off %}
-        <p class="notice notice--caution small">
-          <strong>What you give up:</strong> {{ adapted.trade_off }}
-        </p>
-      {% endif %}
-
       {% if adapted.cautioned_ingredients %}
         <div class="notice notice--caution small">
           <strong>Worth watching:</strong>
@@ -93,7 +87,7 @@
             {% endfor %}
           </ul>
         </div>
-      {% elif outcome == 'already_safe' and result.advisories %}
+      {% elif outcome == 'unchanged' and result.advisories %}
         <div class="notice notice--caution small">
           <strong>Worth watching:</strong>
           <ul>
@@ -135,7 +129,7 @@
     {# The original, kept out of the way. Nobody reaches this page having read a
        verdict on the dish they named, and it is the reason this version looks the
        way it does. Folded shut because the version above is the answer. #}
-    {% if outcome != 'already_safe' %}
+    {% if outcome != 'unchanged' %}
       <details class="card">
         <summary>Why {{ result.dish }} needed changing</summary>
         <div class="stack">

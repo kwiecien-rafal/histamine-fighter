@@ -1999,16 +1999,12 @@ def _assessed(
 def _rewrite(
     ingredients: list[str],
     *,
-    name: str = "Spaghetti with Courgette",
     changes: list[IngredientChangeDraft] | None = None,
-    trade_off: str = "",
 ) -> AdaptedDishDraft:
     return AdaptedDishDraft(
-        name=name,
         explanation="Fresh and quick.",
         ingredients=[ProposedIngredientDraft(name=item) for item in ingredients],
         changes=changes or [],
-        trade_off=trade_off,
     )
 
 
@@ -2049,8 +2045,8 @@ async def test_adapt_returns_a_version_the_index_clears(session: AsyncSession) -
     )
 
     assert result.outcome is RewriteOutcome.ADAPTED
-    assert result.name == "Spaghetti with Courgette"
     assert result.dish == "Spaghetti Bolognese"
+    assert result.name == result.dish
     assert [item.name for item in result.ingredients] == ["courgette", "basil"]
     assert result.verdict is SafetyLevel.SAFE
     assert result.usage.calls == 1
@@ -2133,7 +2129,7 @@ async def test_adapt_changes_nothing_when_nothing_is_flagged(session: AsyncSessi
         "courgette pasta", [_confirmed("courgette"), _confirmed("basil")], assessment
     )
 
-    assert result.outcome is RewriteOutcome.ALREADY_SAFE
+    assert result.outcome is RewriteOutcome.UNCHANGED
     assert [item.name for item in result.ingredients] == ["courgette", "basil"]
     # The dish is unchanged, so it keeps the verdict it was assessed at.
     assert result.verdict is SafetyLevel.DEPENDS

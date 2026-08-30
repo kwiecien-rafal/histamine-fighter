@@ -66,7 +66,6 @@ from app.schemas.meal import (
     MAX_INGREDIENT_CHARS,
     MAX_PITCH_CHARS,
     MAX_REASON_CHARS,
-    MAX_TRADE_OFF_CHARS,
     Adaptation,
     AdaptationDraft,
     AdaptedDish,
@@ -1042,7 +1041,7 @@ class DishLookupAgent(BaseAgent):
         """Rewrite the assessed dish into a version the curated index can support.
 
         Four outcomes, two of them free. A dish with nothing avoid-level in it has
-        nothing to replace (``already_safe``), and one the assessment already graded
+        nothing to replace (``unchanged``), and one the assessment already graded
         as having lost its identity has no version to find (``impossible``) — both
         are read off the assessment before a call is made. Otherwise the model
         drafts the whole new ingredient list and code reads every name back from
@@ -1144,8 +1143,6 @@ class DishLookupAgent(BaseAgent):
     ) -> AdaptedDish:
         """Assemble a cleared rewrite: the model's prose over code's own readings."""
         verdict = grounded_verdict(lookups)
-        # Counts and the index's own names only; the model's dish name is derived
-        # from user input and is the single such field here, as on the assess path.
         log.info(
             "dish_lookup.adapted",
             dish=assessment.dish,
@@ -1157,12 +1154,11 @@ class DishLookupAgent(BaseAgent):
         )
         return AdaptedDish(
             dish=assessment.dish,
-            name=_clipped(draft.name, MAX_DISH_CHARS) or assessment.dish,
+            name=assessment.dish,
             outcome=RewriteOutcome.ADAPTED,
             explanation=_clipped(draft.explanation, MAX_DESCRIPTION_CHARS),
             ingredients=proposed,
             changes=_normalized_changes(draft.changes, ingredients, proposed),
-            trade_off=_clipped(draft.trade_off, MAX_TRADE_OFF_CHARS) or None,
             verdict=verdict,
             unverified_ingredients=verification.unverified,
             cautioned_ingredients=verification.cautioned,
@@ -1182,7 +1178,7 @@ class DishLookupAgent(BaseAgent):
         return AdaptedDish(
             dish=assessment.dish,
             name=assessment.dish,
-            outcome=RewriteOutcome.ALREADY_SAFE,
+            outcome=RewriteOutcome.UNCHANGED,
             explanation=assessment.explanation,
             ingredients=[
                 ProposedIngredient(name=item.name, category=item.category) for item in ingredients
