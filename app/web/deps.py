@@ -9,6 +9,10 @@ The signed-in account is resolved once per request by ``bind_current_user`` and 
 to every template by a context processor, so the masthead can render the account slot
 without each page passing it through.
 
+The dish lookup's swap advice is joined together here for the same reason: which
+role a change carries is a name-membership test between two lists, which a template
+expresses badly.
+
 The ingredient editor is the one form shape three pages share — the dish lookup, the
 saved copy, and the admin meal form all let someone rewrite an ingredient list — so
 the rows are read back and their categories re-attached here rather than in each of
@@ -19,17 +23,21 @@ import json
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
 from app.dependencies import get_current_user_optional
+from app.enums import AdaptationAction, CulinaryRole, RewriteOutcome
 from app.llm.providers import DEFAULT_MODELS
 from app.models.user import User
 from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,
     MAX_INGREDIENT_CHARS,
+    AdaptedDish,
+    DishAssessmentResponse,
     ProposedIngredient,
     normalize_ingredients,
 )
@@ -137,6 +145,55 @@ def countdown(target: datetime) -> str:
 templates.env.filters["board_date"] = board_date
 templates.env.filters["utc_time"] = utc_time
 templates.env.filters["countdown"] = countdown
+
+
+class SwapRow(NamedTuple):
+    """One line of the lookup card's advice: what to do about one problem ingredient.
+
+    ``kept`` is the honest row — nothing in the index replaces these and the dish
+    holds on to them anyway, so it reads as advice rather than as a fix.
+    """
+
+    ingredients: list[str]
+    replacement: str | None
+    role: CulinaryRole | None
+    reason: str
+    kept: bool
+
+
+def swap_rows(result: DishAssessmentResponse, adapted: AdaptedDish) -> list[SwapRow]:
+    """The swap advice for whichever dish the card is showing.
+
+    A rewrite the index cleared has its own diff, so the rows are its changes and
+    the role is joined back on from the assessment entry that covers the ingredient.
+    Every other outcome has no new dish to diff, so the rows are the assessment's
+    own adaptations — advice on the dish as named, with the ingredients nothing
+    replaces marked as staying.
+    """
+    if adapted.outcome is not RewriteOutcome.ADAPTED:
+        return [
+            SwapRow(
+                ingredients=entry.ingredients,
+                replacement=entry.swap,
+                role=entry.role,
+                reason=entry.reason,
+                kept=entry.action is AdaptationAction.NO_SAFE_SWAP,
+            )
+            for entry in result.adaptations
+        ]
+    roles = {
+        name.casefold(): entry.role for entry in result.adaptations for name in entry.ingredients
+    }
+    return [
+        SwapRow(
+            ingredients=[change.original],
+            replacement=change.replacement,
+            role=roles.get(change.original.casefold()),
+            reason=change.reason,
+            kept=False,
+        )
+        for change in adapted.changes
+    ]
 
 
 # An ingredient's category never appears in the editor: it is a matching hint for the

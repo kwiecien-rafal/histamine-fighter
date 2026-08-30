@@ -63,6 +63,7 @@ from app.schemas.meal import (
     LookupRecipeRequest,
     ProposedIngredient,
     RecipeGeneration,
+    apply_adaptations,
 )
 from app.schemas.saved import SaveFromLookup
 from app.schemas.usage import LLMUsage
@@ -77,6 +78,7 @@ from app.web.deps import (
     known_categories,
     read_known_categories,
     require_user,
+    swap_rows,
     templates,
 )
 
@@ -138,19 +140,33 @@ class LookupState(BaseModel):
 
     @property
     def ingredients(self) -> list[ProposedIngredient]:
-        """What is actually in the dish being shown."""
-        return self.adapted.ingredients
+        """What is actually in the dish being shown.
+
+        A rewrite the index cleared is the dish. When there is none, the dish is the
+        list that was assessed with every fixable problem fixed and the rest kept —
+        best effort rather than cleared, and badged as such. A dead end is still a
+        dish someone may want to edit, cook or keep: tolerance is personal, and an
+        ingredient the index dislikes is theirs to decide on.
+        """
+        return self.adapted.ingredients or apply_adaptations(
+            self.confirmed, self.result.adaptations
+        )
 
     @property
     def advisories(self) -> list[Advisory]:
         """The keep-an-eye-on notes for the dish on the page.
 
-        A rewritten dish's notes are the index's own wording for the depends-level
-        ingredients it kept, so they carry across as advisories unchanged. A dish
-        nothing was rewritten in keeps the assessment's own notes: there is no
-        second reading of it to prefer.
+        A rewrite's notes are the index's own wording for the depends-level
+        ingredients it kept, computed in code over the new list — so an empty list
+        there means the rewrite kept none, and the assessment's notes would name
+        ingredients that are no longer in the dish.
+
+        Every other outcome shows the assessed list itself, so the assessment's own
+        notes are the ones that apply. None of them can have gone missing on the
+        way: an adaptation only ever covers an avoid-level ingredient, and an
+        advisory only ever names a depends-level one.
         """
-        if self.adapted.outcome is RewriteOutcome.UNCHANGED:
+        if self.adapted.outcome is not RewriteOutcome.ADAPTED:
             return self.result.advisories
         return [
             Advisory(ingredient=item.name, note=item.note)
@@ -254,16 +270,13 @@ async def check(
         )
         assessment, adapted = await lookup.adapt(rewrite, agent=agent, resolved=resolved)
         state = LookupState(result=assessment, confirmed=rewrite.ingredients, adapted=adapted)
-        goal = await _close_dishes(state, lookup=lookup, agent=agent, resolved=resolved)
     except _STEP_FAILURES as exc:
         return _back(_failure_message(exc))
     return _safe_page(
         request,
         state,
-        goal=goal,
         call=_rewrite_call(
-            *_rewrite_usage(state, proposed, goal=goal),
-            model=adapted.model or assessment.model,
+            proposed, assessment.usage, adapted.usage, model=adapted.model or assessment.model
         ),
     )
 
@@ -293,15 +306,13 @@ async def adapt_result(
         # from; taking the fresh one keeps the two halves of the page in step.
         current.result = assessment
         current.adapted = adapted
-        goal = await _close_dishes(current, lookup=lookup, agent=agent, resolved=resolved)
     except _STEP_FAILURES as exc:
         return _safe_page(request, current, error=_failure_message(exc))
     return _safe_page(
         request,
         current,
-        goal=goal,
         call=_rewrite_call(
-            *_rewrite_usage(current, goal=goal), model=adapted.model or assessment.model
+            assessment.usage, adapted.usage, model=adapted.model or assessment.model
         ),
     )
 
@@ -317,10 +328,10 @@ async def refine(request: Request, state: str = Form()) -> HTMLResponse:
     current = _read_state(state)
     return _entry_page(
         request,
-        dish=current.adapted.name,
+        dish=current.dish,
         mode=MODE_OWN,
-        ingredients=current.adapted.ingredients,
-        known=known_categories(current.adapted.ingredients),
+        ingredients=current.ingredients,
+        known=known_categories(current.ingredients),
     )
 
 
@@ -476,46 +487,14 @@ def _alternatives_request(
     )
 
 
-async def _close_dishes(
-    state: LookupState,
-    *,
-    lookup: DishLookupService,
-    agent: DishLookupAgent,
-    resolved: RequestLLM,
-) -> AlternativeGoal | None:
-    """Fetch dishes in the same style when there is no version to offer, best effort.
-
-    Only for ``impossible``, which is read off the assessment and so cost no call
-    of its own: the page would otherwise end on a refusal with nothing to do next.
-    An exhausted run has already spent its rounds and may well succeed on a retry,
-    so it gets the suggestions form to press rather than another call spent for it.
-
-    Failures are swallowed on purpose. The answer the visitor asked for is already
-    in hand, and losing the whole page over an extra courtesy call would be the
-    worse outcome; the form on the page is the fallback.
-    """
-    adapted = state.adapted
-    if adapted is None or adapted.outcome is not RewriteOutcome.IMPOSSIBLE:
-        return None
-    goal = AlternativeGoal.SAME_STYLE
-    try:
-        payload = _alternatives_request(state.result, goal)
-        state.alternatives[goal] = await lookup.alternatives(
-            payload, agent=agent, resolved=resolved
-        )
-    except (*_STEP_FAILURES, ValidationError):
-        return None
-    return goal
-
-
 def _rewrite_call(*parts: LLMUsage, model: str) -> ModelCall | None:
     """One usage line for a page several calls produced, or none when all were cached.
 
-    The rewrite path runs up to four calls behind a single form post — propose,
-    assess, the rewrite itself, and the courtesy suggestions on a dead end — so
-    reporting only the last would understate what the page cost. A cached step
-    contributes no steps and therefore no tokens, and a page of nothing but cached
-    steps reports no call at all rather than one that cost nothing.
+    The rewrite path runs up to three calls behind a single form post — propose,
+    assess, and the rewrite itself — so reporting only the last would understate
+    what the page cost. A cached step contributes no steps and therefore no tokens,
+    and a page of nothing but cached steps reports no call at all rather than one
+    that cost nothing.
     """
     steps = [entry for part in parts for entry in part.steps]
     if not steps:
@@ -531,18 +510,6 @@ def _rewrite_call(*parts: LLMUsage, model: str) -> ModelCall | None:
             steps=steps,
         ),
     )
-
-
-def _rewrite_usage(
-    state: LookupState, *before: LLMUsage, goal: AlternativeGoal | None
-) -> list[LLMUsage]:
-    """Every step behind a rewrite page, in the order it ran."""
-    parts = [*before, state.result.usage]
-    if state.adapted is not None:
-        parts.append(state.adapted.usage)
-    if goal is not None:
-        parts.append(state.alternatives[goal].usage)
-    return parts
 
 
 def _read_state(raw: str) -> LookupState:
@@ -614,6 +581,8 @@ def _safe_page(
             "state_json": state.model_dump_json(),
             "adapted": state.adapted,
             "result": state.result,
+            "ingredients": state.ingredients,
+            "swaps": swap_rows(state.result, state.adapted),
             "recipe": state.recipe,
             "suggestions": state.alternatives.get(goal) if goal else None,
             "goal": goal,

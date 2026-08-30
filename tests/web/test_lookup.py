@@ -231,14 +231,29 @@ class _StubLookupAgent:
 
 
 class _StubRecipeAgent:
-    """Stands in for RecipeAgent; raises when a test says the model will not answer."""
+    """Stands in for RecipeAgent; raises when a test says the model will not answer.
+
+    Keeps what it was asked to cook, because which list reaches it is the whole
+    question on a dish the index has no version of.
+    """
 
     def __init__(self, steps: list[str] | None) -> None:
         self._steps = steps
+        self.cooked: list[str] = []
+        self.cautioned: list[str] = []
 
-    async def run(self, **kwargs: object) -> RecipeGeneration:
+    async def run(
+        self,
+        *,
+        name: str,
+        description: str,
+        ingredients: list[ProposedIngredient],
+        cautions: list[CautionedIngredient],
+    ) -> RecipeGeneration:
         if self._steps is None:
             raise LLMInvocationError("the model would not answer")
+        self.cooked = [item.name for item in ingredients]
+        self.cautioned = [item.name for item in cautions]
         return RecipeGeneration(
             steps=self._steps, model="recipe/model", usage=_usage("recipe", 300, 80)
         )
@@ -579,25 +594,6 @@ async def test_an_adapted_dish_is_offered_no_pivot(
     assert "Find something else" not in page
 
 
-async def test_a_dish_that_cannot_be_adapted_offers_close_dishes_unprompted(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stub = _stub_agent(
-        monkeypatch,
-        _StubLookupAgent(
-            adapted=_adapted(outcome=RewriteOutcome.IMPOSSIBLE, blocked=["tomato"], changes=[])
-        ),
-    )
-
-    page = await _named(client)
-
-    # The dead end cost no rewrite call, so the suggestions are fetched for them
-    # rather than leaving the page with nothing to do next.
-    assert stub.alternative_calls == [AlternativeGoal.SAME_STYLE]
-    assert "Courgette ribbon pasta" in page
-    assert "tomato" in page
-
-
 async def test_an_exhausted_run_offers_a_retry_and_claims_nothing(
     client: AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -636,6 +632,87 @@ async def test_an_unchanged_dish_invents_no_changes(
     assert "What changed" not in page
     # Nothing was wrong with it, so there is no fold explaining what was.
     assert "needed changing" not in page
+
+
+# --- a dish there is no safe version of -------------------------------------------
+
+
+@pytest.fixture
+def no_version(monkeypatch: pytest.MonkeyPatch) -> _StubLookupAgent:
+    """A dish resting on something nothing replaces: the index has no version of it."""
+    return _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(
+            adapted=_adapted(
+                outcome=RewriteOutcome.IMPOSSIBLE,
+                name="spaghetti bolognese",
+                blocked=["tomato"],
+                changes=[],
+                verdict=SafetyLevel.AVOID,
+            )
+        ),
+    )
+
+
+async def test_a_dish_with_no_version_spends_nothing_looking_for_others(
+    client: AsyncClient, no_version: _StubLookupAgent
+) -> None:
+    """Other dishes are a question the visitor asks, not one the page answers unbidden."""
+    page = await _named(client)
+
+    assert no_version.alternative_calls == []
+    # Nothing was spent, but the way to ask is on the page.
+    assert 'action="/lookup/alternatives"' in page
+
+
+async def test_a_dish_with_no_version_reopens_in_the_editor(
+    client: AsyncClient, no_version: _StubLookupAgent
+) -> None:
+    """The dead end is the assessed list with the fixable parts fixed, not nothing at all."""
+    state = _carried_state(await _named(client))
+
+    response = await client.post("/lookup/refine", data={"state": state})
+
+    assert response.status_code == 200
+    # Tomato is what nothing replaces, so the list keeps it and says so elsewhere.
+    assert 'value="tomato"' in response.text
+    assert 'value="parmesan"' in response.text
+
+
+async def test_a_dish_with_no_version_can_still_be_cooked(
+    client: AsyncClient, no_version: _StubLookupAgent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tolerance is personal: a listed ingredient the index dislikes is the visitor's call."""
+    recipe = _StubRecipeAgent(["Simmer the sauce."])
+    monkeypatch.setattr(lookup, "build_recipe_agent", lambda *args: recipe)
+    state = _carried_state(await _named(client))
+
+    response = await client.post("/lookup/recipe", data={"state": state})
+
+    assert response.status_code == 200
+    assert recipe.cooked == ["tomato", "parmesan"]
+    # The assessment's own watch-list travels with it, so the steps can honour it.
+    assert recipe.cautioned == ["onion"]
+
+
+async def test_a_dish_with_no_version_can_still_be_saved(
+    user_client: AsyncClient,
+    public_user: User,
+    session: AsyncSession,
+    no_version: _StubLookupAgent,
+) -> None:
+    state = _carried_state(await _named(user_client))
+
+    response = await user_client.post("/lookup/save", data={"state": state})
+
+    assert response.status_code == 303
+    saved = (
+        await session.execute(select(SavedMeal).where(SavedMeal.user_id == public_user.id))
+    ).scalar_one()
+    # Kept as the dish it is, under the verdict it earned — held, never vouched for.
+    assert saved.name == "spaghetti bolognese"
+    assert saved.verdict is SafetyLevel.AVOID
+    assert [item["name"] for item in saved.ingredients] == ["tomato", "parmesan"]
 
 
 # --- retrying a run that came up short --------------------------------------------
@@ -818,22 +895,6 @@ async def test_a_failed_recipe_leaves_the_version_standing(
     assert response.status_code == 200
     assert "couldn&#39;t finish that step" in response.text
     assert "Courgette carries the sauce." in response.text
-
-
-async def test_a_dead_end_has_nothing_to_save_or_cook(
-    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _stub_agent(
-        monkeypatch,
-        _StubLookupAgent(
-            adapted=_adapted(outcome=RewriteOutcome.IMPOSSIBLE, blocked=["tomato"], changes=[])
-        ),
-    )
-
-    page = await _named(client)
-
-    assert 'action="/lookup/recipe"' not in page
-    assert 'action="/lookup/save"' not in page
 
 
 # --- saving -----------------------------------------------------------------------
