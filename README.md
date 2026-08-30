@@ -1,15 +1,16 @@
 # Histamine Fighter
 
-Agentic meal assistant for histamine intolerance: check if a dish is safe and get a low-histamine swap.
+Agentic meal assistant for histamine intolerance: **get a low-histamine swap of any dish**.
 
-Histamine Fighter is an AI-first web app for people struggling with histamine intolerance, and having to constantly come up with dishes light on histamine.
-> Status: work in progress. The schema, API, and UI still change. Currently only available if you fork the code and run the app yourself locally.
+Histamine Fighter is an AI-first web app for people struggling with histamine intolerance, and having to constantly come up with dishes that are light on histamine.
+
+> Status: work in progress. The schema, API, and UI still change rapidly. Currently only available if you fork the code and run the app yourself locally. I'm keeping this README minimal for now to reduce liability.
 
 Current main functionalities:
-- **Dish lookup.** Input a dish of your choosing and get a verdict (safe / depends / avoid), with per-ingredient, low-histamine swap suggestions.
-- **Daily board.** Every day an AI Composer Agent generates four dishes for the day (breakfast, lunch, dinner, snack) from scratch.
-- **[WIP] Learn.** Retrieval-grounded answers over a curated histamine knowledge base.
-- **Bring your own model.** OpenAI, Anthropic, Gemini, OpenRouter, or local Ollama (available only for local builds), switchable per request from the in-app settings.
+- **Dish lookup:** Input a dish of your choosing and get a low-histamine version suggestion with detailed ingredients.
+- **Daily board:** Every day an AI Composer Agent generates four dishes for the day (breakfast, lunch, dinner, snack) from scratch.
+- **[WIP] Learn:** Retrieval-grounded answers over a curated histamine knowledge base.
+- **Bring your own model:** OpenAI, Anthropic, Gemini, OpenRouter, or local Ollama (available only for local builds), switchable per request from the in-app settings.
 
 ## Table of Contents
 
@@ -31,9 +32,9 @@ The issue at hand is that even if we know a dish ingredient is either heavy on h
 ## Stack
 
 - **Backend.** FastAPI (async), SQLAlchemy 2, Pydantic v2. Business logic lives in a service layer with no HTTP awareness.
-- **AI layer.** LangChain chat models behind one swappable seam; agents return typed Pydantic results. Prompts stored Markdown files.
+- **AI layer.** LangChain chat models behind one swappable seam. Agents return typed Pydantic results. Prompts stored Markdown files.
 - **Retrieval.** Postgres with pgvector and local fastembed embeddings back the Learn answers and meal composition.
-- **Frontend.** Server-rendered Jinja2 pages with htmx for the interactive steps, served by the same FastAPI app. One hand-written stylesheet, no Node and no build step.
+- **Frontend.** Server-rendered Jinja2 pages with htmx for the interactive steps, served by FastAPI app.
 
 Using: Python 3.12, FastAPI, SQLAlchemy (async), Alembic, LangChain, pgvector, fastembed, Jinja2, htmx, Docker Compose, Postgres 16.
 
@@ -51,19 +52,11 @@ just bootstrap
 
 That copies `.env`, starts Postgres and waits for it to be healthy, applies migrations, seeds the factual data, then builds and starts the app. Open http://localhost:8000.
 
-Run `just` to list every task. The common ones:
-
-```bash
-just admin you@example.com   # create an admin account (optional; prompts for a password)
-just test                    # test suite
-just reset                   # wipe the database volume and rebuild from scratch
-```
-
-On Windows the recipes run through PowerShell, so no extra shell is needed.
+Run `just` to list every recipe.
 
 ### Manual setup
 
-Prefer not to install just, or want to run each step yourself:
+If you prefer not to install just, or want to run each step yourself:
 
 ```bash
 cp .env.example .env
@@ -82,8 +75,6 @@ uv run python -m app.scripts.create_admin --email you@example.com
 # 4. Start the app (one service, serving both the pages and the API)
 docker compose up -d --build backend
 ```
-
-Migrations and seeds run on the host, not in the backend container: the image ships only the application code, while Alembic and the seed data live in the repo.
 
 ## Usage
 
@@ -108,19 +99,6 @@ uv run alembic revision --autogenerate -m "describe change"
 uv run alembic upgrade head
 ```
 
-## Configuration
-
-Secrets and per-deployment values live in `.env` at the repo root, listed in `.env.example`. Everything else has a validated default in `app/config.py`. User-supplied LLM keys travel as request headers and are never stored.
-
-## Operations
-
-Production runs on managed Postgres (Supabase). Most state is regenerable: meals can be recomposed by the agent and daily boards re-run from the cron. What cannot be regenerated is the human curation layer, the approvals and any hand-edits to a composed meal. That is the data worth protecting.
-
-- **Backups.** Supabase takes automated daily backups, and supports point-in-time recovery (PITR) on its paid tiers. Enable PITR for the production project so a bad migration or an accidental delete can be rolled back to the minute. Restore from the Supabase dashboard (Database, then Backups), or restore into a fresh project and repoint `DATABASE_URL`.
-- **Migrations.** `alembic upgrade head` runs on every deploy, before the new backend starts. Author and review migrations locally; never edit the schema by hand.
-- **Least privilege.** The application connects with a role that can read and write the app tables but cannot alter the schema. Migrations run under a separate, higher-privilege role at deploy time only.
-- **History retention.** The nightly board cron prunes `daily_suggestions` older than `DAILY_HISTORY_DAYS` (default 7), the same window the public past-board view reads, so the table stays bounded to what can be shown.
-
 ## Maintainers
 
 [Rafał Kwiecień](https://github.com/kwiecien-rafal)
@@ -137,6 +115,3 @@ before sending a large PR.
 ## License
 
 [MIT](LICENSE) (c) 2026 Rafał Kwiecień
-
-Artwork in `app/static/images/` is licensed separately under
-[CC BY 4.0](app/static/images/LICENSE.md) — reuse requires credit.
