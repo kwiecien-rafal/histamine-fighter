@@ -9,9 +9,9 @@ The signed-in account is resolved once per request by ``bind_current_user`` and 
 to every template by a context processor, so the masthead can render the account slot
 without each page passing it through.
 
-The dish lookup's swap advice is joined together here for the same reason: which
-role a change carries is a name-membership test between two lists, which a template
-expresses badly.
+The dish lookup card's two view models are built here for the same reason: both the
+swap advice and the ingredient marks are name-membership tests between lists the
+assessment and the rewrite each hold half of, which a template expresses badly.
 
 The ingredient editor is the one form shape three pages share — the dish lookup, the
 saved copy, and the admin meal form all let someone rewrite an ingredient list — so
@@ -23,7 +23,7 @@ import json
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
@@ -37,6 +37,7 @@ from app.schemas.meal import (
     MAX_CONFIRMED_INGREDIENTS,
     MAX_INGREDIENT_CHARS,
     AdaptedDish,
+    Advisory,
     DishAssessmentResponse,
     ProposedIngredient,
     normalize_ingredients,
@@ -194,6 +195,67 @@ def swap_rows(result: DishAssessmentResponse, adapted: AdaptedDish) -> list[Swap
         )
         for change in adapted.changes
     ]
+
+
+DishChipReading = Literal["clear", "watch", "kept", "unrated", "unreadable"]
+
+
+class DishChip(NamedTuple):
+    """One ingredient of the dish on the card, with the index's reading of it.
+
+    ``reading`` is a neutral value the templates map to their own wording and tone
+    (CLAUDE section 19). ``note`` is the index's own words, carried only when it
+    recorded any.
+    """
+
+    name: str
+    reading: DishChipReading
+    note: str
+
+
+def dish_chips(
+    ingredients: list[ProposedIngredient],
+    advisories: list[Advisory],
+    result: DishAssessmentResponse,
+    adapted: AdaptedDish,
+) -> list[DishChip]:
+    """The dish's own ingredients, each marked with what the index recorded for it.
+
+    One rule for every outcome, so the list somebody is shown is the same list they
+    edit, cook and save. A rewrite the index cleared carries its own readings; every
+    other outcome is the assessed dish, so the assessment's are the ones that apply —
+    an ingredient the index could not read keeps its caution instead of passing as
+    unremarkable, and one nothing replaces is marked as the compromise it is.
+    """
+    watched = {item.ingredient.casefold(): item.note for item in advisories}
+    kept: set[str] = set()
+    unreadable: set[str] = set()
+    if adapted.outcome is RewriteOutcome.ADAPTED:
+        unrated = {name.casefold() for name in adapted.unverified_ingredients}
+    else:
+        kept = {
+            name.casefold()
+            for entry in result.adaptations
+            if entry.action is AdaptationAction.NO_SAFE_SWAP
+            for name in entry.ingredients
+        }
+        unrated = {item.name.casefold() for item in result.ingredients if not item.found}
+        unreadable = {item.name.casefold() for item in result.ingredients if item.error}
+
+    chips: list[DishChip] = []
+    for item in ingredients:
+        name = item.name.casefold()
+        if name in kept:
+            chips.append(DishChip(item.name, "kept", ""))
+        elif name in unreadable:
+            chips.append(DishChip(item.name, "unreadable", ""))
+        elif name in watched:
+            chips.append(DishChip(item.name, "watch", watched[name]))
+        elif name in unrated:
+            chips.append(DishChip(item.name, "unrated", ""))
+        else:
+            chips.append(DishChip(item.name, "clear", ""))
+    return chips
 
 
 # An ingredient's category never appears in the editor: it is a matching hint for the

@@ -55,11 +55,31 @@
   "similar_flavours": "Similar flavours",
 } %}
 
-{% set REWRITE_OUTCOME_LABELS = {
-  "adapted": {"label": "Adapted", "tone": "badge--ok"},
-  "unchanged": {"label": "Nothing to change", "tone": "badge--ok"},
-  "impossible": {"label": "Can't be adapted", "tone": "badge--danger"},
-  "exhausted": {"label": "No version found", "tone": "badge--caution"},
+{#
+  What a rewrite attempt came to, as the one line the result card leads with. Keyed on
+  the outcome and the verdict together, since the same outcome reads differently at
+  each level; an outcome whose story does not turn on the verdict is keyed on the
+  outcome alone and matched by the macro's fallback.
+#}
+{% set VERDICT_LINES = {
+  "unchanged:safe": {"label": "Nothing here needs changing.", "tone": "verdict--ok"},
+  "unchanged:depends": {"label": "Fine as it is, with a few things worth watching.", "tone": "verdict--caution"},
+  "adapted:safe": {"label": "Made histamine-safe.", "tone": "verdict--ok"},
+  "adapted:depends": {"label": "Made safer, with a few things worth watching.", "tone": "verdict--caution"},
+  "impossible": {"label": "This can't be made histamine-safe.", "tone": "verdict--danger"},
+  "exhausted": {"label": "We couldn't put a safe version together this time.", "tone": "verdict--caution"},
+} %}
+
+{#
+  How one ingredient of a checked dish reads. The values are the neutral ones
+  ``dish_chips`` produces; the wording and the tone are this file's alone.
+#}
+{% set CHIP_READINGS = {
+  "clear": {"note": "", "tone": ""},
+  "watch": {"note": "worth watching", "tone": "chip--caution"},
+  "kept": {"note": "no safe swap", "tone": "chip--danger"},
+  "unrated": {"note": "no known concern", "tone": ""},
+  "unreadable": {"note": "check failed", "tone": "chip--caution"},
 } %}
 
 {% set TRACE_KIND_LABELS = {
@@ -106,12 +126,22 @@
 {%- endmacro %}
 
 
-{# How an attempt to rewrite a dish ended. Four outcomes, and the page's own copy
-   differs in structure for each, so only the badge label is mapped here. #}
-{% macro rewrite_outcome_badge(value) -%}
-  {% set display = REWRITE_OUTCOME_LABELS.get(value) %}
+{# The result card's verdict, in words rather than as a badge to decode.
+
+   ``impossible`` names the ingredients nothing replaces: they are the dish's own core,
+   and naming them is the answer. ``exhausted`` must not — there the blocked names are
+   the last draft's offenders rather than the dish's, so naming them would assert
+   something about the dish that is not true. #}
+{% macro verdict_line(outcome, verdict, blocked=[]) -%}
+  {% set display = VERDICT_LINES.get(outcome ~ ":" ~ verdict) or VERDICT_LINES.get(outcome) %}
   {% if display %}
-    <span class="badge {{ display.tone }}">{{ display.label }}</span>
+    <p class="verdict {{ display.tone }}">
+      {{ display.label }}
+      {% if outcome == "impossible" and blocked %}
+        Nothing in the index replaces {{ blocked | join(", ") }}, and the dish rests on
+        {{ "it" if blocked | length == 1 else "them" }}.
+      {% endif %}
+    </p>
   {% endif %}
 {%- endmacro %}
 
@@ -287,6 +317,16 @@
 {%- endmacro %}
 
 
+{# One ingredient of a checked dish, carrying the index's reading of it. The index's
+   own words are the chip's tooltip, since a note is a sentence and a chip is not. #}
+{% macro dish_chip(chip) -%}
+  {% set display = CHIP_READINGS.get(chip.reading, CHIP_READINGS.clear) %}
+  <li class="{{ ("chip " ~ display.tone) | trim }}"{% if chip.note %} title="{{ chip.note }}"{% endif %}>
+    {{ chip.name }}{% if display.note %} · {{ display.note }}{% endif %}
+  </li>
+{%- endmacro %}
+
+
 {# One confirmed ingredient with the index's reading of it. An ingredient the index
    has no entry for is neutral, not "rated safe"; a failed lookup keeps the cautious
    reading it was defaulted to. #}
@@ -308,28 +348,25 @@
   below that is identical wherever it appears.
 #}
 {% macro alternatives_panel(state_json, goals, goal, suggestions, cta="Check this one instead") -%}
-  {# The goal is a radio rather than one submit button per goal, so the assessment
-     travels once instead of once per choice. #}
-  <form class="stack" method="post" action="/lookup/alternatives" hx-disabled-elt="find button">
+  {# One button per goal rather than a picker and a submit: choosing is the whole
+     interaction, so it takes one press. The assessment still travels once — it is the
+     form's own hidden field, and the goal rides along as the pressed button's value.
+     The fieldset is what the request disables, so a second goal cannot be pressed
+     while the first is still being answered, and it leaves the state field alone. #}
+  <form class="stack" method="post" action="/lookup/alternatives" hx-disabled-elt="find fieldset">
     <input type="hidden" name="state" value="{{ state_json }}" />
     <fieldset class="field field--wide">
       <legend>What are you after?</legend>
-      <ul class="chips plain-list">
+      <p class="row">
         {% for option in goals %}
-          <li>
-            <label class="check">
-              <input type="radio" name="goal" value="{{ option.value }}"
-                     {% if option == goal or (goal is none and loop.first) %}checked{% endif %} />
-              {{ alternative_goal_label(option.value) }}
-            </label>
-          </li>
+          <button class="button" type="submit" name="goal" value="{{ option.value }}"
+                  {% if option == goal %}aria-current="true"{% endif %}>
+            {{ alternative_goal_label(option.value) }}
+          </button>
         {% endfor %}
-      </ul>
+        <span class="busy small muted">Looking for ideas…</span>
+      </p>
     </fieldset>
-    <p class="row">
-      <button class="button" type="submit">Suggest dishes</button>
-      <span class="busy small muted">Looking for ideas…</span>
-    </p>
   </form>
 
   {% if suggestions is not none %}
@@ -356,7 +393,6 @@
           </li>
         {% endfor %}
       </ul>
-      <p class="small muted">Suggested by <span class="badge">{{ suggestions.model }}</span></p>
     {% else %}
       <p class="notice">Nothing came back for that goal. Try another one.</p>
     {% endif %}

@@ -22,6 +22,10 @@
       Which model answers your dish checks. Keys stay in this browser and travel only as
       a request header; we never store them.
     </p>
+    {# The choice is fixed when a request is assembled, so changing it mid-call could
+       not reach that call. app.js locks the controls for the duration and unhides this
+       rather than letting somebody set something that will not apply. #}
+    <p class="small muted" data-llm-lock hidden>Locked while a model is answering.</p>
 
     <ul class="plain-list stack">
       {% for row in PROVIDER_ROWS %}

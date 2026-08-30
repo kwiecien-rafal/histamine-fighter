@@ -75,6 +75,7 @@ from app.services.quota_service import QuotaExceededError, QuotaService
 from app.services.saved_meal_service import SavedMealService, SaveLimitReached
 from app.web.deps import (
     confirmed_ingredients,
+    dish_chips,
     known_categories,
     read_known_categories,
     require_user,
@@ -570,9 +571,10 @@ def _safe_page(
 ) -> HTMLResponse:
     """The version of the dish the index can support, or why there is not one.
 
-    The flow's only result page. It carries the assessment alongside the version:
-    what the index had against the original is the reason the new one looks the way
-    it does, and on a dead end it is the whole answer.
+    The flow's only result page, and one shape for all four outcomes. The assessment
+    reaches it already joined to the dish being shown — as the ingredient marks and
+    the swap advice — so the template renders view models rather than deciding which
+    of two dishes each part of the card is about.
     """
     return templates.TemplateResponse(
         request,
@@ -580,9 +582,10 @@ def _safe_page(
         {
             "state_json": state.model_dump_json(),
             "adapted": state.adapted,
-            "result": state.result,
-            "ingredients": state.ingredients,
+            "advisories": state.advisories,
+            "chips": dish_chips(state.ingredients, state.advisories, state.result, state.adapted),
             "swaps": swap_rows(state.result, state.adapted),
+            "model": state.model,
             "recipe": state.recipe,
             "suggestions": state.alternatives.get(goal) if goal else None,
             "goal": goal,

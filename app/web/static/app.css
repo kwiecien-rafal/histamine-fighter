@@ -273,6 +273,30 @@ a:hover {
   color: var(--caution);
 }
 
+.chip--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* The dish lookup's one-line answer. Sized as a heading because it is the card's
+   real title; the tone repeats what the wording already says, never replaces it. */
+.verdict {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.verdict--ok {
+  color: var(--accent);
+}
+
+.verdict--caution {
+  color: var(--caution);
+}
+
+.verdict--danger {
+  color: var(--danger);
+}
+
 .countdown {
   font-variant-numeric: tabular-nums;
   font-size: 1.5rem;

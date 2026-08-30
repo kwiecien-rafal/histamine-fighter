@@ -1,4 +1,4 @@
-"""Tests for the lookup card's swap rows: which advice the card shows, and its role badge."""
+"""Tests for the lookup card's view models: its swap advice and its ingredient marks."""
 
 from app.enums import (
     AdaptationAction,
@@ -10,11 +10,14 @@ from app.enums import (
 from app.schemas.meal import (
     Adaptation,
     AdaptedDish,
+    Advisory,
     DishAssessmentResponse,
+    IngredientAssessment,
     IngredientChange,
+    ProposedIngredient,
 )
 from app.schemas.usage import LLMUsage
-from app.web.deps import swap_rows
+from app.web.deps import dish_chips, swap_rows
 
 
 def _assessed(*adaptations: Adaptation) -> DishAssessmentResponse:
@@ -108,3 +111,61 @@ def test_a_dish_with_no_version_advises_on_the_dish_as_named() -> None:
 
 def test_a_dish_nothing_was_wrong_with_has_no_advice_to_give() -> None:
     assert swap_rows(_assessed(), _rewritten(RewriteOutcome.UNCHANGED)) == []
+
+
+def _readings(*rows: IngredientAssessment) -> list[IngredientAssessment]:
+    return list(rows)
+
+
+def _chips(
+    names: list[str],
+    assessment: DishAssessmentResponse,
+    adapted: AdaptedDish,
+    advisories: list[Advisory] | None = None,
+) -> dict[str, str]:
+    """The card's marks, keyed by ingredient, for the dish those inputs describe."""
+    listed = [ProposedIngredient(name=name) for name in names]
+    return {
+        chip.name: chip.reading
+        for chip in dish_chips(listed, advisories or [], assessment, adapted)
+    }
+
+
+def test_a_rewrite_carries_its_own_readings() -> None:
+    """A cleared version is graded on its own list, so the assessment's marks do not apply."""
+    adapted = _rewritten(RewriteOutcome.ADAPTED)
+    adapted = adapted.model_copy(update={"unverified_ingredients": ["samphire"]})
+    assessed = _assessed(_adaptation("tomato", action=AdaptationAction.NO_SAFE_SWAP)).model_copy(
+        update={"ingredients": _readings()}
+    )
+
+    marks = _chips(
+        ["courgette", "samphire", "basil"],
+        assessed,
+        adapted,
+        [Advisory(ingredient="basil", note="Fresh only.")],
+    )
+
+    assert marks == {"courgette": "clear", "samphire": "unrated", "basil": "watch"}
+
+
+def test_a_dish_with_no_version_marks_what_it_could_not_fix() -> None:
+    """The compromise is on the chip: an ingredient nothing replaces is not left plain."""
+    assessed = _assessed(_adaptation("tomato", action=AdaptationAction.NO_SAFE_SWAP)).model_copy(
+        update={
+            "ingredients": _readings(
+                IngredientAssessment(name="tomato", safety=SafetyLevel.AVOID, found=True),
+                IngredientAssessment(name="samphire", safety=SafetyLevel.SAFE, found=False),
+                IngredientAssessment(
+                    name="kimchi", safety=SafetyLevel.DEPENDS, found=False, error=True
+                ),
+            )
+        }
+    )
+
+    marks = _chips(
+        ["tomato", "samphire", "kimchi"], assessed, _rewritten(RewriteOutcome.IMPOSSIBLE)
+    )
+
+    # A lookup that failed keeps its caution rather than reading as nothing to note.
+    assert marks == {"tomato": "kept", "samphire": "unrated", "kimchi": "unreadable"}

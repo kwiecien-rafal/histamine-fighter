@@ -543,13 +543,20 @@ async def test_a_reading_the_index_could_not_make_is_never_shown_as_safe(
             echo_ingredients=False,
             result=unrated.model_copy(
                 update={
+                    "adaptations": [],
+                    "advisories": [],
                     "ingredients": [
                         IngredientAssessment(name="samphire", safety=SafetyLevel.SAFE, found=False),
                         IngredientAssessment(
                             name="kimchi", safety=SafetyLevel.DEPENDS, found=False, error=True
                         ),
-                    ]
+                    ],
                 }
+            ),
+            adapted=_adapted(
+                outcome=RewriteOutcome.UNCHANGED,
+                ingredients=["samphire", "kimchi"],
+                changes=[],
             ),
         ),
     )
@@ -568,21 +575,34 @@ async def test_the_version_shows_what_changed_and_why(
 ) -> None:
     page = await _named(client)
 
-    assert "What changed" in page
+    assert "Making it safe" in page
     assert "courgette" in page
     assert "Same body, no histamine." in page
 
 
-async def test_the_original_is_kept_as_the_reason_the_version_looks_this_way(
+async def test_a_rewrite_is_titled_as_our_version_of_the_dish_asked_about(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
+    """The card is about the dish the visitor named; a rewrite of it is badged as ours."""
     page = await _named(client)
 
-    # Folded away, but there: the index's reading of the dish that was asked about
-    # is what the version is answering.
-    assert "Why spaghetti bolognese needed changing" in page
-    assert "Tomato is recorded as incompatible." in page
-    assert "no safe swap" in page
+    assert "by HF" in page
+
+
+async def test_a_dish_that_needed_nothing_is_titled_as_itself(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_agent(
+        monkeypatch,
+        _StubLookupAgent(
+            adapted=_adapted(outcome=RewriteOutcome.UNCHANGED, ingredients=["rice"], changes=[])
+        ),
+    )
+
+    page = await _named(client)
+
+    # Nothing was rewritten, so claiming it as our version would be a claim too many.
+    assert "by HF" not in page
 
 
 async def test_an_adapted_dish_is_offered_no_pivot(
@@ -617,21 +637,24 @@ async def test_an_unchanged_dish_invents_no_changes(
     _stub_agent(
         monkeypatch,
         _StubLookupAgent(
+            # An unchanged dish is precisely one the index flagged nothing in, so a
+            # stub carrying adaptations would be a state the agent cannot produce.
+            result=_assessment().model_copy(update={"adaptations": [], "advisories": []}),
             adapted=_adapted(
                 outcome=RewriteOutcome.UNCHANGED,
                 name="Spaghetti Bolognese",
                 ingredients=["tomato", "basil"],
                 changes=[],
-            )
+            ),
         ),
     )
 
     page = await _named(client)
 
-    assert "Nothing to change" in page
-    assert "What changed" not in page
-    # Nothing was wrong with it, so there is no fold explaining what was.
-    assert "needed changing" not in page
+    assert "Nothing here needs changing." in page
+    # Nothing was wrong with it, so there is no advice to give about it either.
+    assert "Making it safe" not in page
+    assert "Taking the edge off" not in page
 
 
 # --- a dish there is no safe version of -------------------------------------------
@@ -828,6 +851,14 @@ def dead_end(monkeypatch: pytest.MonkeyPatch) -> _StubLookupAgent:
         monkeypatch,
         _StubLookupAgent(adapted=_adapted(outcome=RewriteOutcome.EXHAUSTED, changes=[])),
     )
+
+
+async def test_each_goal_is_one_press(client: AsyncClient, dead_end: _StubLookupAgent) -> None:
+    """Choosing is the whole interaction, so every goal submits the form by itself."""
+    page = await _named(client)
+
+    for option in AlternativeGoal:
+        assert f'type="submit" name="goal" value="{option.value}"' in page
 
 
 async def test_choosing_a_goal_renders_suggestions(

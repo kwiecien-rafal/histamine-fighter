@@ -116,6 +116,26 @@
     });
   }
 
+  /* The provider is read off localStorage when a request is assembled and resolved
+     server-side per request, so a change made mid-call could never have reached that
+     call. The panel says as much by locking rather than accepting a setting that will
+     not apply. Only what this locked is unlocked again: a provider this deployment
+     does not offer was disabled by the server and stays that way. */
+  function lockSettings(locked) {
+    var panel = document.getElementById("ai-settings");
+    if (!panel) return;
+    panel.querySelectorAll("input").forEach(function (input) {
+      if (locked && !input.disabled) {
+        input.disabled = true;
+        input.dataset.locked = "true";
+      } else if (!locked && input.dataset.locked) {
+        input.disabled = false;
+        delete input.dataset.locked;
+      }
+    });
+    panel.querySelector("[data-llm-lock]").hidden = !locked;
+  }
+
   function usage() {
     var stored = read(USAGE_KEY, {});
     return { models: stored.models || {} };
@@ -320,8 +340,16 @@
        itself and the panels are re-bound against the markup each swap brings in. */
     document.body.addEventListener("htmx:configRequest", function (event) {
       /* Only the writes spend a model call; a boosted link is a plain page read and
-         has no business carrying somebody's API key. */
-      if (event.detail.verb !== "get") Object.assign(event.detail.headers, llmHeaders());
+         has no business carrying somebody's API key. The same verb decides both the
+         headers and the lock, so the panel is locked for exactly the calls it paid for. */
+      if (event.detail.verb === "get") return;
+      Object.assign(event.detail.headers, llmHeaders());
+      lockSettings(true);
+    });
+    /* The happy path re-renders the panel from the markup the swap brought in, so this
+       is what covers the error path, where nothing is swapped at all. */
+    document.body.addEventListener("htmx:afterRequest", function () {
+      lockSettings(false);
     });
     document.body.addEventListener("htmx:afterSwap", function () {
       recordCall();

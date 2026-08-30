@@ -3,8 +3,17 @@
 {% block wrap %}wrap--narrow{% endblock %}
 
 {% set outcome = adapted.outcome.value %}
-{% set has_dish = adapted.ingredients | length > 0 %}
 
+{#
+  One card for all four outcomes. It is written about the dish the visitor named, not
+  about a version a model invented, and everything on it but the swap advice is
+  code-owned: the verdict line, the ingredient marks and the diff all come from the
+  curated index.
+
+  Nothing is gated on there being a safe version. A dead end is still a dish somebody
+  may want to edit, cook or keep — tolerance is personal, and an ingredient the index
+  dislikes is theirs to decide on — so Edit, Recipe and Save are on every outcome.
+#}
 {% block content %}
   {{ ui.model_call(call) }}
 
@@ -17,101 +26,11 @@
      navigation rather than a swap. #}
   <div hx-boost="true">
     <article class="card stack">
-      <div class="row row--between">
-        <h1>{{ adapted.name }}</h1>
-        {{ ui.rewrite_outcome_badge(outcome) }}
-      </div>
+      {# A rewrite is still the dish that was asked about, so it is badged as ours
+         rather than renamed into something the visitor never typed. #}
+      <h1>{{ adapted.name }}{% if outcome == 'adapted' %} by HF{% endif %}</h1>
 
-      {% if outcome == 'adapted' %}
-        <p class="small muted">
-          A version of {{ adapted.dish }} with nothing on the avoid list in it. What came
-          out of the list, and what took its place, is below.
-        </p>
-      {% endif %}
-
-      {% if adapted.cached %}
-        <p class="small muted">
-          Served from the cache: this dish was adapted before, and nothing the version
-          relies on has changed in the index since.
-        </p>
-      {% endif %}
-
-      <p>{{ adapted.explanation }}</p>
-      {{ ui.medical_note() }}
-
-      {% if has_dish %}
-        <div>
-          <div class="row row--between">
-            <h4>What goes in it</h4>
-            {{ ui.verdict_badge(adapted.verdict.value) }}
-          </div>
-          <ul class="chips">
-            {% for item in adapted.ingredients %}
-              {% set caution = adapted.cautioned_ingredients | selectattr("name", "equalto", item.name) | first %}
-              <li class="chip{% if caution %} chip--caution{% endif %}"{% if caution %} title="{{ caution.note }}"{% endif %}>
-                {{ item.name }}
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
-
-      {% if adapted.changes %}
-        <div>
-          <h4>What changed</h4>
-          <ul class="stack plain-list">
-            {% for change in adapted.changes %}
-              <li class="notice small">
-                <div class="row">
-                  <strong>{{ change.original }}</strong>
-                  <span aria-hidden="true">→</span>
-                  {% if change.replacement %}
-                    <strong>{{ change.replacement }}</strong>
-                  {% else %}
-                    <span class="badge">left out</span>
-                  {% endif %}
-                </div>
-                <p class="muted">{{ change.reason }}</p>
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
-
-      {% if adapted.cautioned_ingredients %}
-        <div class="notice notice--caution small">
-          <strong>Worth watching:</strong>
-          <ul>
-            {% for item in adapted.cautioned_ingredients %}
-              <li><strong>{{ item.name }}</strong>: {{ item.note }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% elif outcome == 'unchanged' and result.advisories %}
-        <div class="notice notice--caution small">
-          <strong>Worth watching:</strong>
-          <ul>
-            {% for advisory in result.advisories %}
-              <li><strong>{{ advisory.ingredient }}</strong>: {{ advisory.note }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-      {% endif %}
-
-      {% if adapted.unverified_ingredients %}
-        <p class="notice small">
-          <strong>Not in the index:</strong>
-          {{ adapted.unverified_ingredients | join(", ") }}.
-          We have no rating for these, so they are unknown rather than cleared.
-        </p>
-      {% endif %}
-
-      {% if adapted.blocked_ingredients %}
-        <p class="notice notice--caution small">
-          <strong>What stood in the way:</strong>
-          {{ adapted.blocked_ingredients | join(", ") }}.
-        </p>
-      {% endif %}
+      {{ ui.verdict_line(outcome, adapted.verdict.value, adapted.blocked_ingredients) }}
 
       {% if outcome == 'exhausted' %}
         <form method="post" action="/lookup/adapt" hx-disabled-elt="find button">
@@ -123,112 +42,102 @@
         </form>
       {% endif %}
 
-      {% if adapted.model %}{{ ui.attribution(adapted.model) }}{% endif %}
-    </article>
-
-    {# The original, kept out of the way. Nobody reaches this page having read a
-       verdict on the dish they named, and it is the reason this version looks the
-       way it does. Folded shut because the version above is the answer. #}
-    {% if outcome != 'unchanged' %}
-      <details class="card">
-        <summary>Why {{ result.dish }} needed changing</summary>
-        <div class="stack">
-          <div class="row row--between">
-            <p class="small muted">The verdict on the list this version was worked out from.</p>
-            {{ ui.verdict_badge(result.verdict.value) }}
-          </div>
-          <p>{{ result.explanation }}</p>
-          <ul class="chips">
-            {% for item in result.ingredients %}{{ ui.ingredient_chip(item) }}{% endfor %}
-          </ul>
-
-          {% for entry in result.adaptations %}
-            <div class="notice small">
-              <div class="row">
-                <strong>{{ entry.ingredients | join(" + ") }}</strong>
-                {% if entry.swap %}
-                  <span aria-hidden="true">→</span>
-                  <strong>{{ entry.swap }}</strong>
-                {% else %}
-                  <span class="badge{% if entry.action.value == 'no_safe_swap' %} badge--danger{% endif %}">
-                    {{ ui.adaptation_label(entry.action.value) }}
-                  </span>
-                {% endif %}
-                <span class="badge">{{ ui.culinary_role_label(entry.role.value) }}</span>
-              </div>
-              <p class="muted">{{ entry.reason }}</p>
-            </div>
-          {% endfor %}
-
-          {{ ui.attribution(result.model) }}
-        </div>
-      </details>
-    {% endif %}
-
-    {% if has_dish %}
-      <section class="card stack">
-        <h2>Not quite it?</h2>
-        <p class="small muted">
-          Open this list in the editor to add, rename or drop anything, then check it
-          again as your dish. Opening it costs no model call.
-        </p>
+      <div class="stack">
+        <h4>What goes in it</h4>
+        <ul class="chips">
+          {% for chip in chips %}{{ ui.dish_chip(chip) }}{% endfor %}
+        </ul>
+        {# Costs no model call: it hands this list back to the form somebody typing
+           their own would have used, so an edited dish re-enters the flow as theirs. #}
         <form method="post" action="/lookup/refine">
           <input type="hidden" name="state" value="{{ state_json }}" />
-          <button class="button" type="submit">Edit ingredients and re-check</button>
+          <button class="button" type="submit">Edit this list and check it again</button>
         </form>
-      </section>
-    {% endif %}
+      </div>
+
+      {% if swaps %}
+        <div class="stack">
+          <h3>{% if outcome == 'adapted' %}Making it safe{% else %}Taking the edge off{% endif %}</h3>
+          <ul class="stack plain-list">
+            {% for row in swaps %}
+              <li class="notice small">
+                <div class="row">
+                  <strong>{{ row.ingredients | join(" + ") }}</strong>
+                  {% if row.replacement %}
+                    <span aria-hidden="true">→</span>
+                    <strong>{{ row.replacement }}</strong>
+                  {% elif row.kept %}
+                    <span class="badge badge--danger">stays</span>
+                  {% else %}
+                    <span class="badge">{{ ui.adaptation_label("omit") }}</span>
+                  {% endif %}
+                  {% if row.role %}
+                    <span class="badge">{{ ui.culinary_role_label(row.role.value) }}</span>
+                  {% endif %}
+                </div>
+                <p class="muted">{{ row.reason }}</p>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      {% if advisories %}
+        <p class="small muted">
+          <strong>Worth watching.</strong>
+          {% for note in advisories %}
+            {{ note.ingredient }}: {{ note.note }}{% if not loop.last %} · {% endif %}
+          {% endfor %}
+        </p>
+      {% endif %}
+
+      {# Credited once, for the whole card. #}
+      <p>{{ ui.attribution(model) }}</p>
+    </article>
 
     {% if outcome in ('impossible', 'exhausted') %}
       <section class="card stack">
         <h2>Find something else</h2>
         <p class="muted">
-          {% if outcome == 'impossible' %}
-            There is no version of this dish that stays this dish. Something close is the
-            better bet.
-          {% else %}
-            We came up short this time. A different dish may get you further.
-          {% endif %}
+          Pick what matters most about this dish and we'll look for others. Each
+          suggestion is an idea, not a verdict — it is checked from scratch on the way
+          through.
         </p>
-
-        {{ ui.alternatives_panel(state_json, goals, goal, suggestions,
-                                 cta='Check this one instead') }}
+        {{ ui.alternatives_panel(state_json, goals, goal, suggestions) }}
       </section>
     {% endif %}
 
-    {% if has_dish %}
-      <section class="card stack">
-        <h2>Recipe</h2>
-        {% if recipe %}
-          <ol>{% for step in recipe.steps %}<li>{{ step }}</li>{% endfor %}</ol>
-          <p class="small muted">Written by <span class="badge">{{ recipe.model }}</span></p>
-        {% else %}
-          <form method="post" action="/lookup/recipe" hx-disabled-elt="find button">
-            <input type="hidden" name="state" value="{{ state_json }}" />
-            <p class="row">
-              <button class="button" type="submit">Write the recipe</button>
-              <span class="busy small muted">Writing the recipe…</span>
-            </p>
-          </form>
-        {% endif %}
-      </section>
-
-      <section class="card stack">
-        <h2>Save it</h2>
-        {% if user %}
-          <p class="small muted">
-            Saved as your own private copy, exactly as it reads here, recipe included.
+    <section class="card stack">
+      <h2>Recipe</h2>
+      {% if recipe %}
+        <ol>{% for step in recipe.steps %}<li>{{ step }}</li>{% endfor %}</ol>
+        <p class="small muted">Written by <span class="badge">{{ recipe.model }}</span></p>
+      {% else %}
+        <form method="post" action="/lookup/recipe" hx-disabled-elt="find button">
+          <input type="hidden" name="state" value="{{ state_json }}" />
+          <p class="row">
+            <button class="button" type="submit">Write the recipe</button>
+            <span class="busy small muted">Writing the recipe…</span>
           </p>
-          <form method="post" action="/lookup/save" hx-boost="false">
-            <input type="hidden" name="state" value="{{ state_json }}" />
-            <button class="button" type="submit">Save this version</button>
-          </form>
-        {% else %}
-          <p class="small muted">A free account keeps the versions you find and their recipes.</p>
-          <p><a class="button" href="/login">Sign in to save this</a></p>
-        {% endif %}
-      </section>
-    {% endif %}
+        </form>
+      {% endif %}
+    </section>
+
+    <section class="card stack">
+      <h2>Save it</h2>
+      {% if user %}
+        <p class="small muted">
+          Saved as your own private copy, exactly as it reads here, recipe included.
+        </p>
+        <form method="post" action="/lookup/save" hx-boost="false">
+          <input type="hidden" name="state" value="{{ state_json }}" />
+          <button class="button" type="submit">Save this dish</button>
+        </form>
+      {% else %}
+        <p class="small muted">A free account keeps the dishes you check and their recipes.</p>
+        <p><a class="button" href="/login">Sign in to save this</a></p>
+      {% endif %}
+    </section>
 
     <p class="small muted"><a href="/lookup">← Start over with another dish</a></p>
   </div>
