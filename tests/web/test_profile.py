@@ -189,7 +189,8 @@ async def test_saving_a_meal_returns_to_the_page_it_was_saved_from(
 async def test_saving_a_revealed_daily_slot_from_the_board(
     user_client: AsyncClient, session: AsyncSession
 ) -> None:
-    slot = await add_daily_suggestion(session, reveal_at=datetime.now(UTC) - timedelta(hours=2))
+    now = datetime.now(UTC)
+    slot = await add_daily_suggestion(session, reveal_at=now - timedelta(hours=2), on=now.date())
 
     response = await user_client.post(
         "/profile/meals",

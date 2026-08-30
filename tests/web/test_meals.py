@@ -17,7 +17,8 @@ from tests.web.factories import add_curated_meal, add_daily_suggestion
 async def test_board_shows_the_full_meal_once_revealed(
     client: AsyncClient, session: AsyncSession
 ) -> None:
-    await add_daily_suggestion(session, reveal_at=datetime.now(UTC) - timedelta(hours=2))
+    now = datetime.now(UTC)
+    await add_daily_suggestion(session, reveal_at=now - timedelta(hours=2), on=now.date())
 
     response = await client.get("/daily")
 
@@ -34,8 +35,9 @@ async def test_board_shows_the_full_meal_once_revealed(
 async def test_board_discloses_nothing_before_its_reveal(
     client: AsyncClient, session: AsyncSession
 ) -> None:
+    now = datetime.now(UTC)
     await add_daily_suggestion(
-        session, reveal_at=datetime.now(UTC) + timedelta(hours=3), name="Still secret"
+        session, reveal_at=now + timedelta(hours=3), on=now.date(), name="Still secret"
     )
 
     response = await client.get("/daily")

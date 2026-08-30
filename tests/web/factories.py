@@ -5,7 +5,7 @@ that still exercise every branch a template has: a recipe, a caution note, and a
 trace all render differently from their absence.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -60,11 +60,12 @@ async def add_daily_suggestion(
     session: AsyncSession,
     *,
     reveal_at: datetime,
+    on: date | None = None,
     meal_type: MealType = MealType.BREAKFAST,
     approval_status: ApprovalStatus = ApprovalStatus.APPROVED,
     name: str = "Courgette ribbon salad",
 ) -> DailySuggestion:
-    """One board slot, revealed or locked depending on the reveal time passed in."""
+    """One board slot on date ``on`` (default: the reveal date), locked or revealed by the clock."""
     content: dict[str, Any] = {
         "name": name,
         "description": "raw courgette ribbons with olive oil and fresh herbs",
@@ -75,7 +76,7 @@ async def add_daily_suggestion(
         "cautioned_ingredients": [],
     }
     row = DailySuggestion(
-        suggestion_date=reveal_at.date(),
+        suggestion_date=on if on is not None else reveal_at.date(),
         meal_type=meal_type,
         content=content,
         model="fake/test",

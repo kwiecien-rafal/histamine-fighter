@@ -66,12 +66,14 @@ async def _add_suggestion(
     *,
     meal_type: MealType = MealType.BREAKFAST,
     reveal_at: datetime,
+    on: date | None = None,
     approval_status: ApprovalStatus = ApprovalStatus.APPROVED,
     name: str = "Courgette ribbon salad",
     unverified: list[str] | None = None,
 ) -> DailySuggestion:
+    """One board slot on date ``on`` (default: the reveal date), locked or revealed by the clock."""
     row = DailySuggestion(
-        suggestion_date=reveal_at.date(),
+        suggestion_date=on if on is not None else reveal_at.date(),
         meal_type=meal_type,
         content=_content(name, unverified=unverified),
         model="fake/test",
@@ -90,8 +92,8 @@ async def _add_suggestion(
 async def test_board_revealed_when_approved_and_past_reveal(
     client: AsyncClient, session: AsyncSession
 ) -> None:
-    reveal_at = datetime.now(UTC) - timedelta(hours=2)
-    await _add_suggestion(session, reveal_at=reveal_at)
+    now = datetime.now(UTC)
+    await _add_suggestion(session, reveal_at=now - timedelta(hours=2), on=now.date())
 
     resp = await client.get("/api/v1/daily/meals")
 
@@ -108,8 +110,8 @@ async def test_board_revealed_when_approved_and_past_reveal(
 
 
 async def test_board_locked_before_reveal_time(client: AsyncClient, session: AsyncSession) -> None:
-    reveal_at = datetime.now(UTC) + timedelta(hours=2)
-    await _add_suggestion(session, reveal_at=reveal_at)
+    now = datetime.now(UTC)
+    await _add_suggestion(session, reveal_at=now + timedelta(hours=2), on=now.date())
 
     resp = await client.get("/api/v1/daily/meals")
 
@@ -133,8 +135,10 @@ async def test_public_card_omits_unverified_ingredients(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     # Unverified ingredients are admin-review context, never shown on the public card.
-    reveal_at = datetime.now(UTC) - timedelta(hours=2)
-    await _add_suggestion(session, reveal_at=reveal_at, unverified=["mystery spice"])
+    now = datetime.now(UTC)
+    await _add_suggestion(
+        session, reveal_at=now - timedelta(hours=2), on=now.date(), unverified=["mystery spice"]
+    )
 
     resp = await client.get("/api/v1/daily/meals")
 
@@ -144,8 +148,8 @@ async def test_public_card_omits_unverified_ingredients(
 
 
 async def test_board_read_sets_cache_control(client: AsyncClient, session: AsyncSession) -> None:
-    reveal_at = datetime.now(UTC) - timedelta(hours=2)
-    await _add_suggestion(session, reveal_at=reveal_at)
+    now = datetime.now(UTC)
+    await _add_suggestion(session, reveal_at=now - timedelta(hours=2), on=now.date())
 
     resp = await client.get("/api/v1/daily/meals")
 
@@ -191,9 +195,9 @@ async def test_dated_board_past_day_with_nothing_approved_is_locked(
 async def test_dated_board_accepts_today_with_the_live_cache(
     client: AsyncClient, session: AsyncSession
 ) -> None:
-    reveal_at = datetime.now(UTC) - timedelta(hours=2)
-    await _add_suggestion(session, reveal_at=reveal_at)
-    today = datetime.now(UTC).date()
+    now = datetime.now(UTC)
+    await _add_suggestion(session, reveal_at=now - timedelta(hours=2), on=now.date())
+    today = now.date()
 
     resp = await client.get(f"/api/v1/daily/meals/{today.isoformat()}")
 

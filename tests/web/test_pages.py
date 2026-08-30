@@ -25,8 +25,9 @@ async def test_home_renders_without_any_data(client: AsyncClient) -> None:
 
 
 async def test_home_shows_the_revealed_board(client: AsyncClient, session: AsyncSession) -> None:
+    now = datetime.now(UTC)
     await add_daily_suggestion(
-        session, reveal_at=datetime.now(UTC) - timedelta(hours=2), name="Courgette ribbons"
+        session, reveal_at=now - timedelta(hours=2), on=now.date(), name="Courgette ribbons"
     )
 
     response = await client.get("/")
@@ -39,8 +40,9 @@ async def test_home_shows_the_revealed_board(client: AsyncClient, session: Async
 async def test_home_counts_down_to_a_locked_board(
     client: AsyncClient, session: AsyncSession
 ) -> None:
+    now = datetime.now(UTC)
     await add_daily_suggestion(
-        session, reveal_at=datetime.now(UTC) + timedelta(hours=3), name="Still secret"
+        session, reveal_at=now + timedelta(hours=3), on=now.date(), name="Still secret"
     )
 
     response = await client.get("/")
