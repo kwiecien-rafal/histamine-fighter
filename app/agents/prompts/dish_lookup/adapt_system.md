@@ -22,5 +22,5 @@ Write:
 ## Rules
 
 - Never use an ingredient named in `<problems>` unless its entry says `swap` and you are naming the replacement, not the original.
-- Prefer the replacement the entry names. Choose a different one only when it plainly does not work here, and never reach for something the index would flag: aged or hard cheese, cured or smoked meat and fish, fermented or pickled foods, tomato, vinegar, wine, soy sauce, and long-matured or leftover proteins are the usual traps.
+- Prefer the replacement the entry names. Choose a different one only when it plainly does not work here, and never reach for something the index would flag: aged or hard cheese, cured or smoked meat and fish, pickled foods and fermented vegetables, tomato, wine, balsamic and wine vinegars, soy sauce, and long-matured or leftover proteins are the usual traps.
 - Do not judge safety, add warnings, or grade the result. The verdict is computed from the index after you answer.
