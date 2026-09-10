@@ -47,12 +47,5 @@ class RequestLLM:
         await charge()
 
     def waive(self) -> None:
-        """Release the pending shared-tier charge without spending it.
-
-        For a caller that resolved the shared config but served the request with no
-        model call (a cache hit): the answer costs nothing, so the daily allowance
-        is untouched and the charge-leak backstop must not read the deliberate skip
-        as a forgotten charge. Unlike a forgotten charge this is an expected
-        outcome, so it stays silent.
-        """
+        """Release the pending shared-tier charge without spending it."""
         self._charge = None

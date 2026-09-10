@@ -63,9 +63,7 @@ OAUTH_STATE_TTL = timedelta(minutes=10)
 
 
 def _state_cookie_name(provider: OAuthProvider) -> str:
-    """One state cookie per provider, so a Google attempt in one tab cannot
-    clobber a GitHub attempt in another. Two concurrent attempts at the *same*
-    provider still last-write-win — accepted; the older tab just retries."""
+    """One state cookie per provider, so one tab's attempt cannot clobber another's."""
     return f"hf_oauth_{provider.name}"
 
 
@@ -75,11 +73,7 @@ _MAGIC_REQUEST_ACCEPTED = {"detail": "If the address is usable, a sign-in email 
 
 
 def _invalid_login() -> HTTPException:
-    """The single 401 for any unusable magic link or code.
-
-    Expired, consumed, tampered, and wrong-code all answer identically, so the
-    response never narrows an attacker's search.
-    """
+    """The single 401 for any unusable magic link or code."""
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="That sign-in link or code is invalid or has expired. Request a new one.",
@@ -93,15 +87,7 @@ async def request_magic_link(
     payload: MagicLinkRequest,
     auth: AuthService = Depends(get_auth_service),
 ) -> dict[str, str]:
-    """Send a sign-in email carrying a single-use link and its 6-digit code.
-
-    Guarded by the burst rate limit and, in the service, by Turnstile, the
-    disposable-domain blocklist, and a per-IP daily send cap. The blocklist is the
-    one refusal that answers 400 rather than the uniform 200: the caller must be
-    told the address cannot work, and disposability is public knowledge, not
-    account state. A capped send answers the same uniform 200, so a hit reveals
-    nothing.
-    """
+    """Send a sign-in email carrying a single-use link and its 6-digit code."""
     try:
         await auth.request_magic_link(payload, ip=client_ip(request))
     except DisposableEmailRefused as exc:
@@ -137,12 +123,7 @@ def _oauth_provider_or_404(name: str) -> OAuthProvider:
 
 
 def _oauth_redirect_uri(provider: OAuthProvider) -> str:
-    """The callback URL registered at the provider.
-
-    Anchored on the SPA origin, not the Host header: in dev the Vite proxy fronts
-    ``/api`` and in production the reverse proxy does, so the browser's whole OAuth
-    round trip stays on one origin, and a spoofed Host can never move it.
-    """
+    """The callback URL registered at the provider."""
     return f"{settings.app_base_url}/api/v1/auth/oauth/{provider.name}/callback"
 
 
@@ -157,13 +138,7 @@ def _clear_oauth_state_cookie(response: Response, provider: OAuthProvider) -> No
 
 
 def _login_error_redirect(reason: str, provider: OAuthProvider) -> RedirectResponse:
-    """Land a failed OAuth round trip back on the login page, mid-navigation.
-
-    The browser is following redirects, not reading JSON, so errors travel as a
-    coarse query flag the login page turns into copy. 303 forces a GET. The state
-    cookie is expired here too so a failed round trip cannot leave a replayable
-    one behind.
-    """
+    """Land a failed OAuth round trip back on the login page, mid-navigation."""
     response = RedirectResponse(
         f"{settings.app_base_url}/login?error={reason}", status_code=status.HTTP_303_SEE_OTHER
     )
@@ -174,12 +149,7 @@ def _login_error_redirect(reason: str, provider: OAuthProvider) -> RedirectRespo
 @router.get("/oauth/{provider_name}/start", name="api.oauth_start")
 @limiter.limit(auth_rate_limit)
 async def oauth_start(request: Request, provider_name: str) -> RedirectResponse:
-    """Send the browser to the provider's consent screen.
-
-    The random ``state`` (and, for Google, the PKCE verifier) rides in a signed,
-    short-lived httpOnly cookie; the callback refuses any response that does not
-    match it, which is the CSRF gate for the whole round trip.
-    """
+    """Send the browser to the provider's consent screen."""
     provider = _oauth_provider_or_404(provider_name)
     creds = credentials(provider)
     if creds is None:
@@ -234,11 +204,7 @@ async def oauth_callback(
     user_service: UserService = Depends(get_user_service),
     quota: QuotaService = Depends(get_quota_service),
 ) -> RedirectResponse:
-    """Finish the provider round trip and open the session.
-
-    Every failure lands back on the login page with a coarse error flag; the
-    fixed redirect targets make an open redirect impossible.
-    """
+    """Finish the provider round trip and open the session."""
     provider = _oauth_provider_or_404(provider_name)
     ip = client_ip(request)
     expected = _consume_state_cookie(request, provider)
@@ -346,12 +312,7 @@ async def logout_all(
     user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service),
 ) -> None:
-    """Sign out everywhere: revoke every outstanding session for the account.
-
-    A plain logout only deletes this browser's cookie; the 30-day tokens on
-    other devices stay valid until they expire. Bumping the token version makes
-    the per-request DB recheck refuse all of them from the next call on.
-    """
+    """Sign out everywhere: revoke every outstanding session for the account."""
     await user_service.revoke_sessions(user)
     clear_session_cookie(response)
 
@@ -362,9 +323,7 @@ async def delete_me(
     user: User = Depends(get_current_user),
     auth: AuthService = Depends(get_auth_service),
 ) -> None:
-    """Erase the account (GDPR): the user row, its saved meals, its quota counters,
-    its magic-link rows, then the cookie.
-    """
+    """Erase the account (GDPR): the user row, everything hanging off it, then the cookie."""
     try:
         await auth.erase_account(user)
     except SelfServeDeletionRefused as exc:

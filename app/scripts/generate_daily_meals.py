@@ -86,11 +86,7 @@ def _build_agent(
 
 
 def _slot_rng(target: date, meal_type: MealType, attempt: int) -> random.Random:
-    """A reproducible entropy source per (date, slot, attempt).
-
-    Re-running the same day redraws the same brief, so a failed cron run can be
-    replayed and debugged; the attempt varies the draw on a resample.
-    """
+    """A reproducible entropy source per (date, slot, attempt)."""
     return random.Random(f"{target.isoformat()}:{meal_type.value}:{attempt}")
 
 
@@ -117,12 +113,7 @@ async def build_board(
     now: datetime | None = None,
     checkpoint: Checkpoint | None = None,
 ) -> int:
-    """Compose the missing meals for a date, persisting each one as it is finished.
-
-    Skips a slot that already holds a pending or approved suggestion; recomposes a
-    rejected slot in place. Each meal is checkpointed on its own so a later failure
-    cannot discard earlier work. Returns how many meals were stored.
-    """
+    """Compose the missing meals for a date, persisting each one as it is finished."""
     persist = checkpoint or session.commit
     daily = DailyService(session)
     moment = now or datetime.now(UTC)
@@ -156,13 +147,7 @@ async def build_boards(
     now: datetime | None = None,
     checkpoint: Checkpoint | None = None,
 ) -> int:
-    """Fill each target date's board, reusing build_board's per-slot predicate.
-
-    The nightly gap-filler over a look-ahead horizon: a covered slot is skipped, a
-    partial day completed, a rejected slot recomposed, and an empty day between two
-    covered days backfilled. Idempotent, so a re-run stores only what is missing. One
-    clock is shared across the dates so the same-day reveal clamp stays consistent.
-    """
+    """Fill each target date's board, reusing build_board's per-slot predicate."""
     moment = now or datetime.now(UTC)
     stored = 0
     for target in targets:
@@ -173,13 +158,7 @@ async def build_boards(
 
 
 def _inspired_compose(agent: ComposerAgent, session: AsyncSession) -> ComposeFn:
-    """Wrap the agent with a per-slot drawn brief, resampling once on exhaustion.
-
-    The brief carries the variety: a hero drawn from the index's well-tolerated
-    rows, a code-sampled direction, and the recent boards as a do-not-repeat list.
-    An exhausted run gets one fresh draw before the slot is given up, since a new
-    direction often converges where the first could not.
-    """
+    """Wrap the agent with a per-slot drawn brief, resampling once on exhaustion."""
     daily = DailyService(session)
     ingredients = IngredientService(session)
 

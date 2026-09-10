@@ -129,12 +129,7 @@ def get_magic_link_service(
 
 
 def get_http_client(request: Request) -> httpx.AsyncClient:
-    """The process-wide outbound HTTP client, created in the lifespan.
-
-    Everything that leaves the backend over plain HTTP (Resend, Turnstile, OAuth
-    token exchange) goes through this one pooled client; tests override this
-    dependency to keep the suite offline.
-    """
+    """The process-wide outbound HTTP client, created in the lifespan."""
     client = request.app.state.http_client
     if not isinstance(client, httpx.AsyncClient):  # pragma: no cover - lifespan contract
         raise RuntimeError("HTTP client not initialised; app started without lifespan.")
@@ -161,14 +156,7 @@ def get_auth_service(
 async def get_composer_streamer(
     session: AsyncSession = Depends(get_session),
 ) -> ComposerStreamer:
-    """Wire the live composer for the admin trigger.
-
-    Board composition is an operator action, not a per-user request, so the provider
-    resolves from the operator-set ``GenerationSettings`` (shared with the cron
-    scripts), never from X-LLM headers. A bad saved config raises here (mapped to
-    400/501 at the boundary) before the stream opens; a tool-incapable model fails
-    later as a stream error.
-    """
+    """Wire the live composer for the admin trigger."""
     gen_settings = await GenerationSettingsService(session).get()
     chat = build_chat_model(
         LLMRequestConfig(
@@ -180,13 +168,7 @@ async def get_composer_streamer(
 
 
 async def _resolve_session_user(token: str | None, user_service: UserService) -> User | None:
-    """Resolve the session cookie to a live user, or None.
-
-    The account is re-read from the database every request, so a token for a user
-    that has since been removed or deactivated stops working, and comparing the
-    token's version against the stored one means a credential reset invalidates
-    older tokens.
-    """
+    """Resolve the session cookie to a live user, or None."""
     if token is None:
         return None
     try:
@@ -204,10 +186,7 @@ async def get_current_user(
     token: str | None = Depends(_cookie_scheme),
     user_service: UserService = Depends(get_user_service),
 ) -> User:
-    """Resolve the current user from the session cookie, or raise 401.
-
-    Authentication only. Authorization (role) is left to require_admin.
-    """
+    """Resolve the current user from the session cookie, or raise 401."""
     user = await _resolve_session_user(token, user_service)
     if user is None:
         raise _unauthorized()
@@ -218,21 +197,12 @@ async def get_current_user_optional(
     token: str | None = Depends(_cookie_scheme),
     user_service: UserService = Depends(get_user_service),
 ) -> User | None:
-    """Resolve the current user if a valid session rides the request, else None.
-
-    For routes that serve both anonymous and signed-in callers (the shared LLM
-    tier); the route decides whether anonymity is a 401 or just a different path.
-    """
+    """Resolve the current user if a valid session rides the request, else None."""
     return await _resolve_session_user(token, user_service)
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Gate a route to admins, running get_current_user (authN) first.
-
-    Authorization only: the user is already authenticated, so a non-admin is a
-    deliberate 403 (authenticated but not allowed), distinct from the 401 an
-    unauthenticated request gets.
-    """
+    """Gate a route to admins, running get_current_user (authN) first."""
     if user.role is not Role.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -263,17 +233,7 @@ async def get_request_llm_config(
     user: User | None = Depends(get_current_user_optional),
     quota: QuotaService = Depends(get_quota_service),
 ) -> RequestLLM:
-    """Resolve the request's LLM config, mediating the shared tier.
-
-    BYO-key and Ollama requests pass through untouched. ``shared`` requires a
-    session (401 anonymous) and a configured server key (501 without one, the
-    self-hoster answer), then pins the server's OpenAI key and model while every
-    other X-LLM header is ignored, so no client input can steer what the operator
-    pays for. The daily quota charge is *deferred* onto the returned object and
-    run by the route at the model-call boundary, so a cache hit, a 422, or a
-    burst-limited 429 never spends it. The result is also stashed on
-    ``request.state`` for the charge-leak backstop middleware.
-    """
+    """Resolve the request's LLM config, mediating the shared tier."""
     cfg = LLMRequestConfig.from_headers(request)
     # Same normalization _parse_provider applies, so "Shared" from a hand-written
     # client behaves like the SPA's "shared".
@@ -306,12 +266,7 @@ def _arm_request_llm(request: Request, resolved: RequestLLM) -> RequestLLM:
 
 
 def stashed_request_llm(request: Request) -> RequestLLM | None:
-    """The request's resolved config, if any route dependency resolved one.
-
-    Read only by the charge-leak backstop middleware in main.py; routes get the
-    same instance through Depends (FastAPI caches the dependency per request)
-    and call ``charge()`` on it directly.
-    """
+    """The request's resolved config, if any route dependency resolved one."""
     resolved = getattr(request.state, _REQUEST_LLM_STATE, None)
     return resolved if isinstance(resolved, RequestLLM) else None
 
@@ -321,15 +276,7 @@ def build_dish_lookup_agent(
     service: IngredientService = Depends(get_ingredient_service),
     meal_service: MealService = Depends(get_meal_service),
 ) -> DishLookupAgent:
-    """Wire a request-scoped dish-lookup agent: chat model, index, and meal pool.
-
-    ``build_chat_model`` resolves the provider from the mediated request config
-    and may raise the LLM domain errors, which the API boundary maps to status
-    codes. On a public deployment the operator's key is reserved for the metered
-    shared tier, so a keyless BYO request is refused rather than billed to it;
-    self-hosted, the operator's configured provider stays the free default. The
-    meal pool feeds the verified tier of the alternatives pivot.
-    """
+    """Wire a request-scoped dish-lookup agent: chat model, index, and meal pool."""
     chat = build_chat_model(resolved.config, allow_server_key=not settings.public_deployment)
     return DishLookupAgent(chat=chat, service=service, meal_service=meal_service)
 
@@ -338,11 +285,7 @@ def build_recipe_agent(
     resolved: RequestLLM = Depends(get_request_llm_config),
     service: IngredientService = Depends(get_ingredient_service),
 ) -> RecipeAgent:
-    """Wire a request-scoped recipe agent; same key rules as the dish lookup.
-
-    The ingredient service powers the code-side scan of the drafted steps for
-    index-avoid terms kept off the list.
-    """
+    """Wire a request-scoped recipe agent; same key rules as the dish lookup."""
     chat = build_chat_model(resolved.config, allow_server_key=not settings.public_deployment)
     return RecipeAgent(chat=chat, service=service)
 
@@ -351,12 +294,7 @@ def build_learn_agent(
     resolved: RequestLLM = Depends(get_request_llm_config),
     service: KnowledgeService = Depends(get_knowledge_service),
 ) -> LearnAgent:
-    """Wire a request-scoped Learn agent: chat model + vector knowledge retrieval.
-
-    A higher temperature than the dish lookup: the answer is readable educational
-    prose, and faithfulness is enforced by the retrieved context and the prompt,
-    not by pinning the sampler.
-    """
+    """Wire a request-scoped Learn agent: chat model + vector knowledge retrieval."""
     chat = build_chat_model(
         resolved.config, temperature=0.3, allow_server_key=not settings.public_deployment
     )

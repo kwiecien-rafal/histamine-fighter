@@ -62,13 +62,7 @@ async def create_meal(
     meal_service: MealService = Depends(get_meal_service),
     ingredient_service: IngredientService = Depends(get_ingredient_service),
 ) -> CuratedMeal:
-    """Author a manual (non-LLM) meal, vetted by the admin index gate.
-
-    A hand-written meal runs the same ingredient re-check an edit does: a flagged
-    ingredient is a 422 the admin can confirm past with ``confirm_flagged`` (recorded
-    for the reviewer), an unverifiable one always blocks. It lands pending, marked with
-    the ``manual`` model sentinel, for the same admin approval a composed meal needs.
-    """
+    """Author a manual (non-LLM) meal, vetted by the admin index gate."""
     try:
         return await meal_service.create_manual(
             payload, actor=admin.email, ingredients=ingredient_service
@@ -85,12 +79,7 @@ async def update_meal(
     meal_service: MealService = Depends(get_meal_service),
     ingredient_service: IngredientService = Depends(get_ingredient_service),
 ) -> CuratedMeal:
-    """Edit a pending curated meal, re-verifying it against the index before saving.
-
-    Allowed only while pending (409 otherwise). The edited list is re-run through the
-    admin index gate, so an introduced flagged ingredient is a 422 the admin can confirm
-    past with ``confirm_flagged``, and the not-indexed list is re-derived.
-    """
+    """Edit a pending curated meal, re-verifying it against the index before saving."""
     try:
         return await meal_service.edit_pending(meal_id, payload, ingredients=ingredient_service)
     except EditTargetMissing as exc:

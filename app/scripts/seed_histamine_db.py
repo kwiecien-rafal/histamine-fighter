@@ -65,11 +65,7 @@ def load_rows(path: Path) -> list[IngredientSeedRow]:
 
 
 def _to_values(rows: list[IngredientSeedRow]) -> list[dict[str, Any]]:
-    """Map validated rows to insert parameters, deriving the normalized keys.
-
-    This is a Core bulk insert, so the model's validators do not run; the same
-    normalization helper is applied here to keep the stored keys in lockstep.
-    """
+    """Map validated rows to insert parameters, deriving the normalized keys."""
     return [
         {
             "name": row.name,

@@ -23,13 +23,7 @@ from app.enums import ApprovalStatus, MealType
 
 
 def meal_embedding_text(name: str, description: str, tags: Sequence[str]) -> str:
-    """The text a meal is embedded from: name, description, and tags joined.
-
-    Stored and query vectors must come from the same model and the same source
-    text, so this pins what the stored side embeds. The writer (composer) and any
-    future re-embed call this rather than reconstructing the string, which keeps a
-    dish-name query comparable to the stored vector.
-    """
+    """The text a meal is embedded from: name, description, and tags joined."""
     return " ".join([name, description, *tags]).strip()
 
 

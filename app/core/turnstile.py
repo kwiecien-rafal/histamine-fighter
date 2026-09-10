@@ -21,11 +21,7 @@ class TurnstileError(Exception):
 
 
 async def verify_turnstile(client: httpx.AsyncClient, token: str | None, ip: str) -> None:
-    """Check a Turnstile response token with Cloudflare, or no-op when unconfigured.
-
-    Raises:
-        TurnstileError: no token was sent, or Cloudflare did not confirm it.
-    """
+    """Check a Turnstile response token with Cloudflare, or no-op when unconfigured."""
     if settings.turnstile_secret_key is None:
         return
     if not token:

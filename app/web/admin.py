@@ -11,7 +11,7 @@ tokens and writes a row, so it belongs behind the same Origin check as every oth
 
 Values are shown as the domain states them — ``pending``, ``breakfast``, the model's own
 name — rather than in the site's branded wording, so admin tooling stays neutral and
-readable (CLAUDE section 19).
+readable.
 
 Pages live at ``/admin`` and their writes under ``/admin/ui/*``, clear of the JSON routers
 at ``/admin/{auth,meals,daily,compose}``.
@@ -175,11 +175,7 @@ class MealForm:
 
 
 def require_admin_page(user: User | None = Depends(get_current_user_optional)) -> User:
-    """The signed-in admin, or a redirect to the panel's own sign-in form.
-
-    A page must not answer a missing session with the API's 401 JSON body. A signed-in
-    non-admin lands on the same page, which tells them the account has no admin access.
-    """
+    """The signed-in admin, or a redirect to the panel's own sign-in form."""
     if user is None or user.role is not Role.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
@@ -508,11 +504,7 @@ def _meal_form_page(
     selected_meal_type: MealType | None = None,
     refusal: Refusal | None = None,
 ) -> HTMLResponse:
-    """One meal's fields as a page of their own: a new entry, or an edit of a pending row.
-
-    ``meal_types`` is set only for a new meal, the one submission that picks a slot; an
-    edit keeps the slot its meal was composed for.
-    """
+    """One meal's fields as a page of their own: a new entry, or an edit of a pending row."""
     return _private(
         templates.TemplateResponse(
             request,
@@ -551,12 +543,7 @@ def _stored_fields(
 
 
 def _editable(row: ReviewedRow | None) -> ReviewedRow:
-    """A row an edit form may open, or a redirect back to the panel.
-
-    Missing and already-decided answer the same way: the panel offers an edit link only
-    while a row is pending, so either case is a hand-typed URL, and the panel is the page
-    that shows how things actually stand.
-    """
+    """A row an edit form may open, or a redirect back to the panel."""
     if row is None or row.approval_status is not ApprovalStatus.PENDING:
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
@@ -567,11 +554,7 @@ def _editable(row: ReviewedRow | None) -> ReviewedRow:
 
 
 def _refusal(exc: Exception) -> Refusal:
-    """A rejected submission as the copy its form shows.
-
-    The admin gate's 422 carries the flagged ingredients and whether they can be confirmed
-    past; every other refusal is a single sentence.
-    """
+    """A rejected submission as the copy its form shows."""
     if isinstance(exc, ValidationError):
         location = exc.errors()[0]["loc"]
         field = str(location[0]) if location else ""
@@ -583,12 +566,7 @@ def _refusal(exc: Exception) -> Refusal:
 
 
 def _default_compose_date(queue: list[QueuedDay], today: date) -> date:
-    """The date a new daily composition most likely targets.
-
-    The first upcoming day still missing a slot, else the day after the last queued one so
-    working further ahead does not land on a full date, kept inside the window the compose
-    route accepts.
-    """
+    """The date a new daily composition most likely targets."""
     incomplete = next((day for day in queue if day.missing_meal_types), None)
     if incomplete is not None:
         return incomplete.date

@@ -39,11 +39,7 @@ class IngredientMatch:
 
 
 def is_ambiguous(matches: list[IngredientMatch]) -> bool:
-    """True when candidates disagree on compatibility (unrated counts as a value).
-
-    Lives with the candidates so the endpoint and the dish agent share one
-    definition of "ambiguous" rather than each computing their own.
-    """
+    """True when candidates disagree on compatibility (unrated counts as a value)."""
     return len({match.ingredient.compatibility for match in matches}) > 1
 
 
@@ -70,11 +66,7 @@ class IngredientService:
         self._session = session
 
     async def find_candidates(self, name: str) -> list[IngredientMatch]:
-        """Return the index's candidate matches for a name, best first.
-
-        An empty list means the ingredient is not in the index. Callers must
-        treat that as "unknown" and never infer that it is safe.
-        """
+        """Return the index's candidate matches for a name, best first."""
         query = normalize_ingredient_name(name)
         if not query or len(query) > self.max_query_length:
             log.debug("ingredient.lookup.rejected_input", chars=len(query), preview=name[:60])
@@ -110,15 +102,7 @@ class IngredientService:
         return result
 
     async def find_candidates_many(self, names: Sequence[str]) -> dict[str, list[IngredientMatch]]:
-        """Resolve a whole confirmed list at once, keyed by input name.
-
-        Same per-name tiering as :meth:`find_candidates` (an exact name wins
-        outright, an alias then suppresses fuzzy), but the common primary path
-        collapses to one exact query and one alias query for the entire set
-        rather than two round-trips per name. Only the residual misses fall back
-        to the per-name fuzzy scan, which stays serial because the rows that
-        reach it are rare. An empty or overlong name maps to an empty list.
-        """
+        """Resolve a whole confirmed list at once, keyed by input name."""
         results: dict[str, list[IngredientMatch]] = {}
         query_by_name: dict[str, str] = {}
         for name in names:
@@ -150,15 +134,7 @@ class IngredientService:
         return results
 
     async def find_category_candidates(self, category: str) -> list[IngredientMatch]:
-        """Resolve a category descriptor against umbrella rows, by exact match only.
-
-        The dish agent's fallback when a specific ingredient misses the index: a
-        descriptor like "aged hard cheese" resolves to the curated umbrella row
-        covering that group. Only rows marked ``is_category`` are eligible, and
-        matching is exact (name or alias) — deliberately no fuzzy, so a free-text
-        descriptor like "meat" cannot drift into specific cured-meat rows. An
-        empty list means the index knows no such category.
-        """
+        """Resolve a category descriptor against umbrella rows, by exact match only."""
         query = normalize_ingredient_name(category)
         if not query or len(query) > self.max_query_length:
             log.debug("ingredient.category.rejected_input", chars=len(query), preview=category[:60])
@@ -191,13 +167,7 @@ class IngredientService:
         return result
 
     async def find_substitutes(self, category: str, limit: int = 3) -> list[HistamineIngredient]:
-        """Return well-tolerated ingredients in a category, as grounded safe swaps.
-
-        Used to keep the dish agent's swap suggestions honest: a proposed
-        replacement should come from the index's known-good rows, not the model's
-        imagination. "Safe" here means explicitly ``well_tolerated`` — an unrated
-        row is not evidence of safety, only the absence of a recorded concern.
-        """
+        """Return well-tolerated ingredients in a category, as grounded safe swaps."""
         stmt = (
             select(HistamineIngredient)
             .where(
@@ -210,11 +180,7 @@ class IngredientService:
         return list((await self._session.scalars(stmt)).all())
 
     async def well_tolerated_pool(self) -> list[str]:
-        """Names of every well-tolerated, non-umbrella row: the inspiration hero pool.
-
-        The composer's brief draws its hero ingredient from here, so an inspiration
-        is verifiable by construction and never sends the model chasing a dead end.
-        """
+        """Names of every well-tolerated, non-umbrella row: the inspiration hero pool."""
         stmt = (
             select(HistamineIngredient.name)
             .where(
@@ -234,12 +200,7 @@ class IngredientService:
     )
 
     async def avoid_terms(self) -> list[str]:
-        """Normalized names and aliases of every index row rated avoid.
-
-        The composer scans a submitted recipe against these so a high-histamine
-        ingredient written into the steps (never added to the verified list) is
-        caught, not just one listed in the ingredients.
-        """
+        """Normalized names and aliases of every index row rated avoid."""
         stmt = select(
             HistamineIngredient.normalized_name, HistamineIngredient.normalized_aliases
         ).where(HistamineIngredient.compatibility.in_(self._AVOID_COMPATIBILITIES))
@@ -286,16 +247,7 @@ class IngredientService:
 
     @staticmethod
     def _fuzzy_floor(query: str) -> float:
-        """Minimum trigram similarity to accept, stricter for short queries.
-
-        A short name shares its handful of trigrams with unrelated words, so a
-        flat floor lets four-letter queries collide ("salt" scores 0.33 against
-        "salami"). The 0.4 short-query floor was chosen to clear the observed
-        collisions and is guarded by the retrieval eval
-        (tests/test_retrieval_eval.py): above the salt/salami collision (0.33),
-        below the genuine egg/egg-white match (0.44). Longer names keep the
-        looser 0.3 so real typos still resolve ("chedar" finds Cheddar).
-        """
+        """Minimum trigram similarity to accept, stricter for short queries."""
         return 0.4 if len(query) <= 6 else 0.3
 
     async def _match_fuzzy(self, query: str) -> list[IngredientMatch]:

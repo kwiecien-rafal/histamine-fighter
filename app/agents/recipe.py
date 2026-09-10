@@ -76,13 +76,7 @@ class RecipeAgent(BaseAgent):
         ingredients: list[ProposedIngredient],
         cautions: list[CautionedIngredient],
     ) -> RecipeGeneration:
-        """Write and normalize the recipe steps for one meal.
-
-        The cautions are the index's own moderation notes for kept ingredients
-        ("fresh only"), passed through so the steps can honour them. A draft
-        whose steps all normalize away is a failed generation, not an empty
-        recipe, and raises the agent's domain error.
-        """
+        """Write and normalize the recipe steps for one meal."""
         self._begin_usage()
         caution_lines = (
             "; ".join(f"{item.name} — {item.note}" for item in cautions) if cautions else "None."
@@ -151,12 +145,7 @@ class RecipeAgent(BaseAgent):
     async def _off_list_risky_terms(
         self, steps: list[str], ingredients: list[ProposedIngredient]
     ) -> list[str]:
-        """Index-avoid terms the steps mention but the ingredient list does not.
-
-        A listed ingredient is the user's own, already-badged call, so terms
-        that match a listed name are allowed — per name, not against the joined
-        list, so a multi-word term cannot assemble itself from two ingredients.
-        """
+        """Index-avoid terms the steps mention but the ingredient list does not."""
         matcher = TermMatcher.from_terms(await self._service.avoid_terms())
         allowed = {term for item in ingredients for term in matcher.found_in(item.name)}
         flagged: list[str] = []

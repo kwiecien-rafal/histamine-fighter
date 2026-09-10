@@ -33,11 +33,7 @@ class TokenClaims:
 
 
 def hash_password(password: str) -> str:
-    """Return a bcrypt hash of the password.
-
-    Raises:
-        ValueError: the password exceeds bcrypt's 72-byte limit.
-    """
+    """Return a bcrypt hash of the password."""
     encoded = password.encode("utf-8")
     if len(encoded) > MAX_PASSWORD_BYTES:
         raise ValueError(f"password cannot be longer than {MAX_PASSWORD_BYTES} bytes")
@@ -45,11 +41,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """Check a password against a stored bcrypt hash.
-
-    An over-length password or a malformed stored hash is a non-match, never an
-    exception, so a bad input is rejected as wrong rather than surfacing as a 500.
-    """
+    """Check a password against a stored bcrypt hash."""
     try:
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
     except ValueError:
@@ -59,15 +51,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_access_token(
     subject: str, *, token_version: int, expires_delta: timedelta | None = None
 ) -> str:
-    """Issue a signed JWT for the given subject.
-
-    The subject is the user's id, not their email: email is mutable profile data
-    and PII that should not ride in a token that may be logged. ``token_version`` is
-    the user's current version. ``get_current_user`` refuses a token whose version
-    no longer matches, which is how a password reset revokes outstanding tokens.
-    ``expires_delta`` overrides the configured TTL; tests use it to mint an
-    already-expired token.
-    """
+    """Issue a signed JWT for the given subject."""
     now = datetime.now(UTC)
     ttl = expires_delta or timedelta(minutes=settings.access_token_expire_minutes)
     payload: dict[str, Any] = {"sub": subject, "ver": token_version, "iat": now, "exp": now + ttl}
@@ -75,11 +59,7 @@ def create_access_token(
 
 
 def decode_access_token(token: str) -> TokenClaims:
-    """Return the verified claims of a token, or raise on any problem.
-
-    Raises:
-        TokenError: the token is expired, tampered with, or missing a claim.
-    """
+    """Return the verified claims of a token, or raise on any problem."""
     try:
         payload = jwt.decode(token, settings.jwt_signing_key, algorithms=[settings.jwt_algorithm])
     except jwt.InvalidTokenError as exc:  # base class: expired, bad signature, malformed
@@ -96,25 +76,14 @@ def decode_access_token(token: str) -> TokenClaims:
 
 
 def create_purpose_token(purpose: str, *, jti: str, ttl: timedelta) -> str:
-    """Issue a short-lived signed token for a single non-session purpose.
-
-    Used for magic-link tokens and OAuth state, where the signature proves the
-    value left this server unmodified. The payload deliberately carries no ``ver``
-    claim, so ``decode_access_token`` rejects a purpose token outright, and
-    ``decode_purpose_token`` requires the ``purpose`` claim, so a session token can
-    never be replayed as a magic link or OAuth state.
-    """
+    """Issue a short-lived signed token for a single non-session purpose."""
     now = datetime.now(UTC)
     payload: dict[str, Any] = {"purpose": purpose, "jti": jti, "iat": now, "exp": now + ttl}
     return jwt.encode(payload, settings.jwt_signing_key, algorithm=settings.jwt_algorithm)
 
 
 def decode_purpose_token(token: str, *, expected_purpose: str) -> str:
-    """Return the ``jti`` of a purpose token, verifying signature, TTL, and purpose.
-
-    Raises:
-        TokenError: the token is expired, tampered with, or for another purpose.
-    """
+    """Return the ``jti`` of a purpose token, verifying signature, TTL, and purpose."""
     try:
         payload = jwt.decode(token, settings.jwt_signing_key, algorithms=[settings.jwt_algorithm])
     except jwt.InvalidTokenError as exc:

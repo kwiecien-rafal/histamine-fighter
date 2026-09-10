@@ -51,12 +51,7 @@ async def update_suggestion(
     service: DailyService = Depends(get_daily_service),
     ingredient_service: IngredientService = Depends(get_ingredient_service),
 ) -> DailySuggestion:
-    """Edit a pending daily suggestion, re-verifying it against the index before saving.
-
-    Allowed only while pending (409 otherwise). The edit is re-run through the admin
-    index gate, so an introduced flagged ingredient is a 422 the admin can confirm past
-    with ``confirm_flagged``, and the not-indexed list is re-derived.
-    """
+    """Edit a pending daily suggestion, re-verifying it against the index before saving."""
     try:
         return await service.edit_pending(suggestion_id, payload, ingredients=ingredient_service)
     except EditTargetMissing as exc:

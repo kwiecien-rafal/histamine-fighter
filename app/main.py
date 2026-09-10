@@ -47,7 +47,7 @@ logger = structlog.get_logger(__name__)
 # are how CORS preflight and simple reads flow, so they pass through untouched.
 _UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-# Hardening headers set on every response (CLAUDE section 20). HSTS is conditional
+# Hardening headers set on every response. HSTS is conditional
 # and added in the middleware, since it only applies once traffic is HTTPS.
 _SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -61,25 +61,12 @@ _JSON_ERROR_PREFIXES = ("/api/", "/admin/", "/static/")
 
 
 def _is_same_origin(request: Request, origin: str) -> bool:
-    """Whether an Origin header names this app's own address.
-
-    The server-rendered pages post their forms back to themselves, so same-origin
-    writes must pass without the app having to list its own address in
-    CORS_ORIGINS. Host and port only: behind a TLS-terminating proxy the app can
-    see http where the browser sent https, and comparing schemes there would
-    refuse its own forms.
-    """
+    """Whether an Origin header names this app's own address."""
     return urlsplit(origin).netloc == request.url.netloc
 
 
 async def _not_found_page(request: Request, exc: Exception) -> Response:
-    """Answer a browser-facing 404 with a page instead of a JSON body.
-
-    Covers the miss no route can: an unrouted path (the commonest 404 a site serves)
-    never reaches a handler of ours. Only 404s outside the API prefixes render a page;
-    every other status keeps FastAPI's own handler, so the JSON error contract and the
-    headers that ride on it (``WWW-Authenticate`` on a 401) are untouched.
-    """
+    """Answer a browser-facing 404 with a page instead of a JSON body."""
     if not isinstance(exc, StarletteHTTPException):  # pragma: no cover - handler contract
         raise exc
     if exc.status_code != 404 or request.url.path.startswith(_JSON_ERROR_PREFIXES):
@@ -93,13 +80,7 @@ async def _not_found_page(request: Request, exc: Exception) -> Response:
 
 
 def _warn_on_risky_deployment() -> None:
-    """Surface production settings that silently weaken the public hardening.
-
-    None can be proven wrong from config alone (a self-hoster may legitimately run
-    without them), so each warns loudly rather than refusing to boot. All are
-    no-ops off a public or production deployment. The proxy-header trust cannot be
-    seen from config, so it is checked per request in client_ip instead.
-    """
+    """Surface production settings that silently weaken the public hardening."""
     if settings.public_deployment and settings.turnstile_secret_key is None:
         logger.warning(
             "startup.turnstile_unconfigured",
@@ -128,13 +109,7 @@ def _domain_error_handler(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Set up logging, check the database, and warm the embedder before serving.
-
-    The embedder is loaded here (off the event loop) so a missing or corrupt
-    model fails the deploy at startup instead of stalling the first user's
-    request on a model download. The shared httpx client serves every outbound
-    call (Resend, Turnstile, OAuth), so connections are pooled process-wide.
-    """
+    """Set up logging, check the database, and warm the embedder before serving."""
     configure_logging()
     try:
         async with engine.connect() as conn:
@@ -212,14 +187,7 @@ def create_app() -> FastAPI:
     async def settle_leaked_shared_charge(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Tripwire for a route that ran the shared tier but never charged it.
-
-        The mechanism is the route calling ``resolved.charge()`` at its model-call
-        boundary; this backstop only catches the forgotten line. A successful
-        response with a still-pending charge is billed here anyway (a coding bug
-        must never open a free tier) and logged as an error so it gets fixed. The
-        late QuotaExceededError is swallowed: the response already went out.
-        """
+        """Tripwire for a route that ran the shared tier but never charged it."""
         response = await call_next(request)
         resolved = stashed_request_llm(request)
         if resolved is not None and resolved.pending and response.status_code < 400:
@@ -234,14 +202,7 @@ def create_app() -> FastAPI:
     async def enforce_origin(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Reject a state-changing request from an Origin we do not trust.
-
-        Defense in depth behind the session cookie's SameSite=Lax: a cross-site
-        browser request carrying an untrusted Origin is refused before it reaches a
-        route. A request with no Origin (a non-browser client) is left to the
-        cookie's SameSite rule. Browsers do send one on a same-origin form post, so
-        the app's own address is trusted alongside the configured origins.
-        """
+        """Reject a state-changing request from an Origin we do not trust."""
         origin = request.headers.get("origin")
         if (
             request.method in _UNSAFE_METHODS
@@ -258,12 +219,7 @@ def create_app() -> FastAPI:
     async def set_security_headers(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Attach baseline hardening headers to every response.
-
-        Defends against clickjacking (X-Frame-Options), MIME sniffing (nosniff), and
-        referrer leakage (Referrer-Policy). HSTS is added only on a public
-        deployment, where TLS is terminated and forcing HTTPS is safe.
-        """
+        """Attach baseline hardening headers to every response."""
         response = await call_next(request)
         response.headers.update(_SECURITY_HEADERS)
         # Every page renders the signed-in account into its masthead, so a shared
@@ -279,10 +235,7 @@ def create_app() -> FastAPI:
     async def log_request(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        """Log each request's start and outcome, with a short id bound into the
-        context so every downstream log line (agent, tools, retrieval) carries it.
-        The id is also returned as ``X-Request-ID`` so an operator handed a failed
-        response can find its log lines."""
+        """Log each request's start and outcome, with a short id bound in for downstream lines."""
         request_id = uuid4().hex[:8]
         structlog.contextvars.bind_contextvars(request_id=request_id)
         warn_if_unproxied(request)

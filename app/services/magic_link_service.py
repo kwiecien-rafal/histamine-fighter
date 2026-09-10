@@ -39,15 +39,7 @@ class MagicLinkService:
         self._session = session
 
     async def issue(self, email: str, *, created_from_ip: str | None) -> tuple[UUID, str]:
-        """Create a pending login and return its jti and plaintext code.
-
-        The code is returned exactly once, for the email being sent; only its
-        bcrypt hash is stored, so a database leak does not leak live logins.
-        Any earlier pending login for the address is invalidated first, so at
-        most one link is live per email: an online guesser gets the attempt cap
-        against the newest code only, bounded overall by the per-IP daily send
-        cap, and a stale emailed link cannot be redeemed after a newer one.
-        """
+        """Create a pending login and return its jti and plaintext code."""
         normalized = normalize_email(email)
         await self._session.execute(
             update(MagicLinkToken)
@@ -70,24 +62,11 @@ class MagicLinkService:
         return row.id, code
 
     async def consume_by_token(self, jti: UUID) -> str | None:
-        """Redeem the link's token: return the email, or None if unusable.
-
-        The JWT signature was already verified by the caller, so the checks left
-        are the ones a signature cannot carry: the row exists, is unexpired, and
-        has not been used before. All three live in one conditional UPDATE, so a
-        concurrent redeem of the same token blocks on the row lock and then
-        matches nothing — single use holds under a race, not just in sequence.
-        """
+        """Redeem the link's token: return the email, or None if unusable."""
         return await self._consume(jti)
 
     async def consume_by_code(self, email: str, code: str) -> str | None:
-        """Redeem a 6-digit code for an email: return the email, or None.
-
-        Checks against the newest pending login for the address, mirroring what
-        the user sees (the latest email). The attempt counter increments before
-        the code is compared, so once the cap is passed even the right code is
-        refused; without that, the cap would not bound an online guesser.
-        """
+        """Redeem a 6-digit code for an email: return the email, or None."""
         normalized = normalize_email(email)
         stmt = (
             select(MagicLinkToken)
@@ -107,12 +86,7 @@ class MagicLinkService:
         return await self._consume(row.id)
 
     async def _consume(self, jti: UUID) -> str | None:
-        """Atomically stamp the row consumed, returning its email; None if lost.
-
-        The WHERE carries the whole single-use contract: a row already consumed
-        (or raced by a parallel redeem, which holds the lock until commit) or
-        expired matches nothing.
-        """
+        """Atomically stamp the row consumed, returning its email; None if lost."""
         stmt = (
             update(MagicLinkToken)
             .where(
@@ -126,13 +100,7 @@ class MagicLinkService:
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def _record_attempt(self, jti: UUID) -> int:
-        """Count one code attempt against the row, durably; return the new total.
-
-        Runs in its own committed transaction (the module docstring's exception):
-        the increment must survive the 401 rollback of the request that carried
-        the wrong code, or the attempt cap could be retried forever. A row that
-        vanished in between counts as over the cap, failing closed.
-        """
+        """Count one code attempt against the row, durably; return the new total."""
         stmt = (
             update(MagicLinkToken)
             .where(MagicLinkToken.id == jti)

@@ -43,10 +43,7 @@ class UserService:
         self._session = session
 
     async def get_by_id(self, user_id: UUID) -> User | None:
-        """Return the account for an id, or None if there is no match.
-
-        The auth gate resolves the JWT subject (the user's id) through here.
-        """
+        """Return the account for an id, or None if there is no match."""
         return await self._session.get(User, user_id)
 
     async def get_by_email(self, email: str) -> User | None:
@@ -72,16 +69,7 @@ class UserService:
         return user
 
     async def authenticate(self, email: str, password: str) -> User | None:
-        """Return the account when the password matches, else None.
-
-        Runs a throwaway hash check on an unknown email so the wrong-password and
-        unknown-email paths cost about the same. A passwordless (public) account
-        takes the same path as an unknown email: it has no password to match, and
-        answering differently would confirm the account exists.
-
-        bcrypt is deliberate CPU; run it off the event loop so concurrent logins
-        (and the constant-time unknown-email path) do not serialize the worker.
-        """
+        """Return the account when the password matches, else None."""
         user = await self.get_by_email(email)
         if user is None or user.password_hash is None:
             await asyncio.to_thread(verify_password, password, _DUMMY_HASH)
@@ -91,15 +79,7 @@ class UserService:
         return user
 
     async def create_or_update(self, email: str, password: str) -> tuple[User, bool]:
-        """Create an admin account, or reset an existing account's password.
-
-        This is the admin-elevation path (the ``create_admin`` CLI), so the account
-        ends up ``role=ADMIN`` whether it is created or updated. Running it for an
-        existing non-admin email therefore both resets the password and grants admin.
-        Returns the account and whether it was newly created. A reset bumps the token
-        version so any token issued under the old password stops working. The caller
-        commits.
-        """
+        """Create an admin account, or reset an existing account's password."""
         password_hash = await asyncio.to_thread(hash_password, password)
         user = await self.get_by_email(email)
         if user is None:
@@ -114,12 +94,7 @@ class UserService:
         return user, False
 
     async def set_active(self, email: str, *, active: bool) -> User | None:
-        """Enable or disable an account, or return None if the email is unknown.
-
-        The auth gate re-reads is_active on every request, so disabling an account
-        locks it out on its next call without waiting for the token to expire. The
-        caller commits.
-        """
+        """Enable or disable an account, or return None if the email is unknown."""
         user = await self.get_by_email(email)
         if user is None:
             return None
@@ -128,17 +103,7 @@ class UserService:
         return user
 
     async def register_public_user(self, email: str, *, created_from_ip: str | None) -> User:
-        """Create a passwordless public account for an already-verified email.
-
-        The public signup path (magic link, OAuth): the caller has already proven
-        control of the email and confirmed no account exists, so possession is the
-        whole credential. New accounts are hardcoded ``role=USER`` with no password,
-        keeping ``create_or_update`` (the CLI) the only path to ADMIN.
-
-        The insert runs inside a savepoint so a lost race — a concurrent signup of
-        the same email — collapses to adopting the winner rather than a 500 on the
-        unique-email constraint. The caller commits.
-        """
+        """Create a passwordless public account for an already-verified email."""
         user = User(email=email, password_hash=None, created_from_ip=created_from_ip)
         self._session.add(user)
         try:
@@ -163,20 +128,11 @@ class UserService:
         user.last_login_at = datetime.now(UTC)
 
     async def revoke_sessions(self, user: User) -> None:
-        """Invalidate every outstanding session token for the account.
-
-        Bumping ``token_version`` makes the per-request DB recheck refuse any
-        token minted before now — "sign out everywhere" for cookie sessions that
-        are otherwise irrevocable until they expire. The caller commits.
-        """
+        """Invalidate every outstanding session token for the account."""
         user.token_version += 1
         log.info("user.sessions_revoked", user_id=str(user.id))
 
     async def delete(self, user: User) -> None:
-        """Hard-delete an account (GDPR erasure). The caller commits.
-
-        Deliberately not the soft ``is_active`` switch: deletion is the user's
-        right to be forgotten, so the row goes away entirely.
-        """
+        """Hard-delete an account (GDPR erasure)."""
         await self._session.delete(user)
         log.info("user.deleted", user_id=str(user.id))

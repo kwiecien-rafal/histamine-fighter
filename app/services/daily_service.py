@@ -45,14 +45,7 @@ class DailyService:
         self._session = session
 
     async def board_for(self, on: date, *, now: datetime) -> LockedBoard | RevealedBoard:
-        """Return the board for a date, locked or revealed.
-
-        Revealed once ``reveal_at`` has passed and the day has at least one
-        approved suggestion; the revealed cards are exactly the approved ones, so a
-        single rejected meal drops out instead of locking the whole board. Locked
-        otherwise, carrying the shared reveal time for the countdown (null when no
-        board is scheduled yet).
-        """
+        """Return the board for a date, locked or revealed."""
         rows = await self._for_date(on)
         reveal_at = min((row.reveal_at for row in rows), default=None)
         approved = [row for row in rows if row.approval_status is ApprovalStatus.APPROVED]
@@ -68,16 +61,7 @@ class DailyService:
         )
 
     async def list_queue(self, *, today: date) -> list[QueuedDay]:
-        """Group the upcoming suggestions (today onward) by date for the admin queue.
-
-        Each day carries its slots in natural meal order, the meal types still missing,
-        and pending/approved counts, so the UI can pick a default generate date and flag
-        an upcoming day that is not yet fully approved.
-
-        Bounded to the furthest date either path can fill (the manual-queue window or the
-        cron horizon), so the response stays a fixed size and a cron-composed day past the
-        manual window still surfaces for approval.
-        """
+        """Group the upcoming suggestions (today onward) by date for the admin queue."""
         horizon = today + timedelta(
             days=max(settings.daily_queue_max_ahead_days, settings.daily_cron_horizon_days)
         )
@@ -114,13 +98,7 @@ class DailyService:
         return days
 
     async def approve(self, suggestion_id: UUID, *, actor: str) -> DailySuggestion | None:
-        """Approve a suggestion for the public board, stamping the actor and time.
-
-        Allowed even after the reveal time: a late approval is additive, joining the
-        day's board the next time it is read.
-
-        Returns the updated row, or None when no suggestion has that id.
-        """
+        """Approve a suggestion for the public board, stamping the actor and time."""
         suggestion = await self._session.get(DailySuggestion, suggestion_id)
         if suggestion is None:
             return None
@@ -131,10 +109,7 @@ class DailyService:
         return suggestion
 
     async def reject(self, suggestion_id: UUID) -> DailySuggestion | None:
-        """Reject a suggestion, clearing any prior approval stamp.
-
-        Returns the updated row, or None when no suggestion has that id.
-        """
+        """Reject a suggestion, clearing any prior approval stamp."""
         suggestion = await self._session.get(DailySuggestion, suggestion_id)
         if suggestion is None:
             return None
@@ -145,12 +120,7 @@ class DailyService:
         return suggestion
 
     async def delete(self, suggestion_id: UUID, *, actor: str) -> bool:
-        """Permanently remove a suggestion, freeing its slot. False when none has that id.
-
-        The hard counterpart to ``reject``: reject keeps the slot filled but off the
-        board, delete empties it so the slot can be composed afresh. The actor is logged
-        because a hard delete leaves nothing on the row to audit afterwards.
-        """
+        """Permanently remove a suggestion, freeing its slot."""
         suggestion = await self._session.get(DailySuggestion, suggestion_id)
         if suggestion is None:
             return False
@@ -159,32 +129,16 @@ class DailyService:
         return True
 
     def earliest_readable_date(self, today: date) -> date:
-        """The oldest board date still readable, and the date the pruner retains from.
-
-        One definition for both halves of the retention rule: the nightly prune deletes
-        everything before it, so a read floor derived anywhere else could offer a day
-        whose rows are already gone.
-        """
+        """The oldest board date still readable, and the date the pruner retains from."""
         return today - timedelta(days=settings.daily_history_days)
 
     def reveal_at_for(self, target: date, *, now: datetime) -> datetime:
-        """The instant the target date's board unlocks.
-
-        A fixed UTC hour on the target date, so the board premieres at the same moment
-        worldwide. A same-day board is the exception: its reveal is clamped to now, so a
-        board generated for today (a dev or fork install, or a late manual run) reveals
-        the moment it is approved instead of waiting for an hour that may already have
-        passed. Future dates keep the hour, preserving the simultaneous premiere.
-        """
+        """The instant the target date's board unlocks."""
         reveal = datetime.combine(target, time(hour=settings.daily_reveal_hour_utc), tzinfo=UTC)
         return min(reveal, now) if target == now.date() else reveal
 
     async def open_meal_types(self, target: date) -> list[MealType]:
-        """The slots of a date a board run may fill: empty or rejected, in meal order.
-
-        Pending and approved slots are excluded, so a full-board run never replaces
-        review work already done or published.
-        """
+        """The slots of a date a board run may fill: empty or rejected, in meal order."""
         rows = await self._for_date(target)
         blocked = {
             row.meal_type for row in rows if row.approval_status is not ApprovalStatus.REJECTED
@@ -210,12 +164,7 @@ class DailyService:
         *,
         ingredients: IngredientService,
     ) -> DailySuggestion:
-        """Rewrite a pending daily slot, re-verified against the index before saving.
-
-        Allowed only while pending. The edit is re-run through the admin index gate, so
-        an introduced flagged ingredient is refused until confirmed past, and the
-        not-indexed list is re-derived.
-        """
+        """Rewrite a pending daily slot, re-verified against the index before saving."""
         suggestion = await self.get(suggestion_id)
         if suggestion is None:
             raise EditTargetMissing("Suggestion not found.")
@@ -239,12 +188,7 @@ class DailyService:
         unverified: list[str],
         cautioned: list[CautionedIngredient],
     ) -> None:
-        """Rewrite a suggestion's content blob from a verified edit (no embedding).
-
-        Daily rows are read by date, not by similarity, so there is no vector to keep in
-        step; only the JSONB content changes. ``unverified`` and ``cautioned`` are the
-        re-derived index lists. The caller commits.
-        """
+        """Rewrite a suggestion's content blob from a verified edit (no embedding)."""
         content = DailyMealContent(
             name=payload.name,
             description=payload.description,
@@ -259,13 +203,7 @@ class DailyService:
     async def store_pending(
         self, meal: ComposedMeal, target: date, *, now: datetime
     ) -> DailySuggestion:
-        """Upsert one composed meal into its (date, meal_type) slot as pending review.
-
-        The pure per-slot write: find-or-create the slot, write the composed content,
-        model, usage and trace, stamp the reveal time, and (re)set it to pending with
-        any prior approval cleared. The skip and replace policy is the caller's, not
-        enforced here, so a slot already holding a row is overwritten in place.
-        """
+        """Upsert one composed meal into its (date, meal_type) slot as pending review."""
         row = await self.slot_for(target, meal.meal_type)
         is_new = row is None
         if row is None:
@@ -294,12 +232,7 @@ class DailyService:
         return row
 
     async def recent_meal_names(self, *, before: date, days: int) -> list[str]:
-        """Dish names on boards up to and including ``before``, newest first.
-
-        The composer's do-not-repeat list. The target date itself is included so a
-        rejected slot is not recomposed into the very dish that was rejected, and
-        the day's other slots are steered apart. ``days <= 0`` disables the list.
-        """
+        """Dish names on boards up to and including ``before``, newest first."""
         if days <= 0:
             return []
         stmt = (
@@ -320,11 +253,7 @@ class DailyService:
         return names
 
     async def prune_before(self, cutoff: date) -> int:
-        """Delete suggestions dated before ``cutoff``, returning how many were removed.
-
-        Run by the nightly cron to bound the table to the history window the public
-        past-board view can still read. The caller commits.
-        """
+        """Delete suggestions dated before ``cutoff``, returning how many were removed."""
         deleted = await self._session.execute(
             delete(DailySuggestion)
             .where(DailySuggestion.suggestion_date < cutoff)
@@ -355,10 +284,7 @@ def _to_card(row: DailySuggestion) -> DailyMealCard:
 
 
 def _total_usage(rows: list[DailySuggestion]) -> LLMUsage:
-    """Token usage of composing the day's board, summed across its meals.
-
-    Rows composed before usage was recorded carry none and simply add nothing.
-    """
+    """Token usage of composing the day's board, summed across its meals."""
     usages = [LLMUsage.model_validate(row.usage) for row in rows if row.usage]
     return LLMUsage(
         calls=sum(usage.calls for usage in usages),

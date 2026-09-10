@@ -54,13 +54,7 @@ class KnowledgeService:
         )
 
     async def search(self, query: str, k: int | None = None) -> list[KnowledgeMatch]:
-        """Return the k most similar chunks above the similarity floor, best first.
-
-        An empty list means nothing relevant was found (or the query was empty);
-        the caller must treat that as "no context", not as an answer. Invalid
-        input — an over-long query or a non-positive k — raises ValueError
-        instead, so a caller's bug never masquerades as "no match".
-        """
+        """Return the k most similar chunks above the similarity floor, best first."""
         if k is not None and k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
         text = query.strip()

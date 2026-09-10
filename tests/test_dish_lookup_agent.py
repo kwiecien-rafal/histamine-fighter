@@ -774,12 +774,7 @@ async def test_disambiguation_prompt_lists_candidate_rows_without_their_safety(
 def _flaky_category(
     service: IngredientService, monkeypatch: pytest.MonkeyPatch, failing_category: str
 ) -> None:
-    """Fail one ingredient's category fallback while the batched primary read succeeds.
-
-    With the batched primary tier a single ingredient can only error on its own
-    per-miss category fallback, so the error floor is exercised through that seam:
-    the failing ingredient misses the primary index and its category lookup raises.
-    """
+    """Fail one ingredient's category fallback while the batched primary read succeeds."""
     real_category = service.find_category_candidates
 
     async def _flaky(category: str) -> list[IngredientMatch]:

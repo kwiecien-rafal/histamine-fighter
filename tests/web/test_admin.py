@@ -122,11 +122,7 @@ async def test_the_panel_shows_every_section(authenticated_client: AsyncClient) 
 
 
 async def test_the_panel_wires_both_compose_triggers(authenticated_client: AsyncClient) -> None:
-    """The one part of the panel a page test can still hold: what admin.js is handed.
-
-    The streams themselves are covered in test_compose_endpoints.py; what the page owes
-    them is the right endpoint on each form and an output region to write into.
-    """
+    """The one part of the panel a page test can still hold: what admin.js is handed."""
     response = await authenticated_client.get("/admin")
 
     assert 'data-url="/admin/compose/curated"' in response.text

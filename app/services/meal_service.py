@@ -125,17 +125,7 @@ class MealService:
         k: int | None = None,
         exclude: Collection[str] = (),
     ) -> list[MealMatch]:
-        """Return the k most similar approved meals above the floor, best first.
-
-        Only ``approved`` meals are eligible. ``meal_type`` narrows to one slot,
-        and ``exclude`` drops any meal that uses a listed term (matched on an
-        ingredient's category exactly, or on its name by word-set containment, so
-        avoiding "tomato sauce" still drops a meal listing "tomato"), so a dish
-        built on what the user is avoiding is never offered back. An empty list
-        means nothing relevant was found (or the query was empty). An over-long
-        query or a non-positive k raises ValueError instead, so a caller's bug
-        never masquerades as "no match".
-        """
+        """Return the k most similar approved meals above the floor, best first."""
         if k is not None and k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
         text = query.strip()
@@ -191,14 +181,7 @@ class MealService:
         k: int | None = None,
         exclude: Collection[str] = (),
     ) -> list[CuratedMeal]:
-        """Return up to k random approved meals, optionally restricted to one slot.
-
-        For the "any meal" alternatives goal (and future variety): there is no query
-        to rank by, so it samples at random. ``exclude`` drops any meal that uses a
-        listed term, matched as in ``search``, so a dish built on what the user is
-        avoiding is never offered back. A non-positive k raises rather than silently
-        falling back to the default.
-        """
+        """Return up to k random approved meals, optionally restricted to one slot."""
         if k is not None and k < 1:
             raise ValueError(f"k must be >= 1, got {k}")
         limit = self.default_k if k is None else k
@@ -223,11 +206,7 @@ class MealService:
         return meals
 
     async def count_approved(self) -> int:
-        """How many meals are in the public pool, for callers that want the size only.
-
-        A plain count, so a page showing the figure without listing anything does not
-        fetch and hydrate a row it throws away. Read-only; never commits.
-        """
+        """How many meals are in the public pool, for callers that want the size only."""
         result = await self._session.execute(
             select(func.count())
             .select_from(CuratedMeal)
@@ -238,13 +217,7 @@ class MealService:
     async def list_approved(
         self, *, meal_type: MealType | None = None, limit: int, offset: int = 0
     ) -> tuple[list[CuratedMeal], int]:
-        """One page of approved meals for the public browse, plus the total that match.
-
-        Ordered newest-composed first (``created_at``); the id breaks ties between rows
-        a batch insert gave one timestamp. The total lets the browse page its way through
-        the pool without guessing where it ends. The embedding column is heavy and unused
-        by a browse card, so it is deferred. Read-only; never commits.
-        """
+        """One page of approved meals for the public browse, plus the total that match."""
         filters = [CuratedMeal.approval_status == ApprovalStatus.APPROVED]
         if meal_type is not None:
             filters.append(CuratedMeal.meal_type == meal_type)
@@ -264,11 +237,7 @@ class MealService:
         return rows, total or 0
 
     async def get_approved(self, meal_id: UUID) -> CuratedMeal | None:
-        """One approved meal by id for the public detail, or None when it is not public.
-
-        Folds the approved filter into the lookup so a pending or rejected row reads as
-        absent, which the endpoint turns into a 404, never disclosing an unapproved meal.
-        """
+        """One approved meal by id for the public detail, or None when it is not public."""
         stmt = (
             select(CuratedMeal)
             .where(
@@ -280,13 +249,7 @@ class MealService:
         return (await self._session.execute(stmt)).scalar_one_or_none()
 
     async def store_pending(self, meal: ComposedMeal) -> CuratedMeal:
-        """Shape a composed meal into a pending curated row and add it to the session.
-
-        Embeds from the same name/description/tags text retrieval queries against, and
-        stores the full reasoning trace, usage, and producing model. Marked pending so
-        it is pool-eligible only once an admin approves. The caller (cron or the admin
-        save) owns the commit.
-        """
+        """Shape a composed meal into a pending curated row and add it to the session."""
         vector = (
             await self._embedder.embed_documents(
                 [meal_embedding_text(meal.name, meal.description, meal.tags)]
@@ -318,18 +281,7 @@ class MealService:
         cautioned: list[CautionedIngredient],
         actor: str,
     ) -> CuratedMeal:
-        """Build a hand-written meal as a pending curated row, no composer involved.
-
-        The manual counterpart to ``store_pending``: it embeds from the same name/
-        description/tags text, so a manual meal ranks in retrieval exactly like a composed
-        one, and lands pending for the same admin approval. Provenance is what differs: the
-        ``manual`` sentinel model, no token usage, and an empty trace, so no replay offers.
-        ``unverified`` is the index gate's not-indexed list and ``cautioned`` its
-        moderately-compatible list, both recorded for the approving
-        admin. ``actor`` is the authoring admin, logged as the only record of who wrote a
-        hand-authored meal (the row keeps no human author, where a composed one keeps its
-        model). The caller commits.
-        """
+        """Build a hand-written meal as a pending curated row, no composer involved."""
         vector = (
             await self._embedder.embed_documents(
                 [meal_embedding_text(fields.name, fields.description, fields.tags)]
@@ -367,14 +319,7 @@ class MealService:
         actor: str,
         ingredients: IngredientService,
     ) -> CuratedMeal:
-        """Store a hand-written meal as pending, once the index gate lets it through.
-
-        A hand-written meal runs the same ingredient re-check an edit does: a flagged
-        ingredient is refused until confirmed past with ``confirm_flagged`` (recorded for
-        the reviewer), an unverifiable one always blocks. It lands pending, marked with
-        the ``manual`` model sentinel, for the same admin approval a composed meal needs.
-        The flush populates the row's id and timestamp; the caller owns the commit.
-        """
+        """Store a hand-written meal as pending, once the index gate lets it through."""
         verification = await verify_edit(ingredients, payload)
         confirmed_flags = ensure_safe(verification, confirmed=payload.confirm_flagged)
         row = await self.store_manual(
@@ -393,12 +338,7 @@ class MealService:
         *,
         ingredients: IngredientService,
     ) -> CuratedMeal:
-        """Rewrite a pending curated meal, re-verified against the index before saving.
-
-        Allowed only while pending. The edited list is re-run through the admin index
-        gate, so an introduced flagged ingredient is refused until confirmed past, and
-        the not-indexed list is re-derived.
-        """
+        """Rewrite a pending curated meal, re-verified against the index before saving."""
         meal = await self.get(meal_id)
         if meal is None:
             raise EditTargetMissing("Meal not found.")
@@ -422,13 +362,7 @@ class MealService:
         unverified: list[str],
         cautioned: list[CautionedIngredient],
     ) -> None:
-        """Apply a verified edit to a curated row, re-embedding only when text changed.
-
-        The embedding is recomputed only when the retrieval text (name, description, or
-        tags) actually changed, so an ingredient or recipe edit does not pay for an embed.
-        ``unverified`` and ``cautioned`` are the re-derived index lists. The caller
-        commits.
-        """
+        """Apply a verified edit to a curated row, re-embedding only when text changed."""
         reembed = (meal.name, meal.description, list(meal.tags)) != (
             payload.name,
             payload.description,

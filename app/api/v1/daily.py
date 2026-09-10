@@ -63,11 +63,7 @@ async def daily_meals(
     response: Response,
     service: DailyService = Depends(get_daily_service),
 ) -> LockedBoard | RevealedBoard:
-    """Return today's board, locked before its reveal or revealed after it.
-
-    "Today" and the reveal comparison are both in UTC, so the board unlocks at the
-    same instant for every visitor regardless of their timezone.
-    """
+    """Return today's board, locked before its reveal or revealed after it."""
     return await _board_response(datetime.now(UTC).date(), response, service)
 
 
@@ -77,12 +73,7 @@ async def daily_meals_on(
     response: Response,
     service: DailyService = Depends(get_daily_service),
 ) -> LockedBoard | RevealedBoard:
-    """Return the board for a past day within the history window.
-
-    Accepts ``today - daily_history_days`` through today (today included, so the route
-    is robust if a client uses it for the current day too); any date outside that range
-    is a 404, since a future board is unpublished and an older one has been pruned.
-    """
+    """Return the board for a past day within the history window."""
     today = datetime.now(UTC).date()
     if not service.earliest_readable_date(today) <= on <= today:
         raise HTTPException(status_code=404, detail="No board is available for that date.")

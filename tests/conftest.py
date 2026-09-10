@@ -81,11 +81,7 @@ def _database_schema() -> None:
 
 @pytest_asyncio.fixture
 async def session(_database_schema: None) -> AsyncIterator[AsyncSession]:
-    """A session bound to a transaction that is rolled back after each test.
-
-    Tests should ``flush`` rather than ``commit`` so the rollback keeps the
-    database empty between tests.
-    """
+    """A session bound to a transaction that is rolled back after each test."""
     engine = create_async_engine(TEST_DATABASE_URL)
     connection = await engine.connect()
     transaction = await connection.begin()
@@ -104,14 +100,7 @@ async def session(_database_schema: None) -> AsyncIterator[AsyncSession]:
 
 @pytest.fixture(autouse=True)
 def _offline_auth_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin every third-party sign-in credential to unconfigured, whatever the
-    operator's .env says.
-
-    The suite runs fully offline (the refusing HTTP client enforces it); a real
-    RESEND_API_KEY in the developer's .env must not flip the app into the send
-    path, and configured OAuth apps must not change which buttons a page renders.
-    Tests that exercise the configured paths monkeypatch these themselves.
-    """
+    """Pin every third-party sign-in credential to unconfigured."""
     monkeypatch.setattr(settings, "resend_api_key", None)
     monkeypatch.setattr(settings, "turnstile_secret_key", None)
     monkeypatch.setattr(settings, "turnstile_site_key", None)
@@ -129,21 +118,13 @@ def fake_embedder() -> FakeEmbedder:
 
 @pytest.fixture
 def fake_quota() -> FakeQuotaService:
-    """The in-memory quota double the test app runs on.
-
-    The real QuotaService commits in its own transactions, which would escape
-    the rollback isolation; its SQL is covered directly in test_quota_service.py.
-    """
+    """The in-memory quota double the test app runs on."""
     return FakeQuotaService()
 
 
 @pytest_asyncio.fixture
 async def test_app(session: AsyncSession, fake_quota: FakeQuotaService) -> AsyncIterator[FastAPI]:
-    """The app wired to the test transaction and offline test doubles.
-
-    Exposed as its own fixture so a test can add further dependency_overrides
-    (e.g. a scripted outbound HTTP client for OAuth) before making requests.
-    """
+    """The app wired to the test transaction and offline test doubles."""
     app = create_app()
 
     async def _use_test_session() -> AsyncIterator[AsyncSession]:
@@ -197,11 +178,7 @@ async def admin_user(session: AsyncSession) -> User:
 
 @pytest_asyncio.fixture
 async def authenticated_client(client: AsyncClient, admin_user: User) -> AsyncClient:
-    """A client that has logged in, so it carries the httpOnly session cookie.
-
-    Goes through the real /login flow rather than minting a header by hand: the
-    server sets the cookie and httpx keeps it in the jar for the rest of the test.
-    """
+    """A client that has logged in, so it carries the httpOnly session cookie."""
     resp = await client.post(
         "/admin/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
     )
@@ -220,11 +197,7 @@ async def public_user(session: AsyncSession) -> User:
 
 @pytest_asyncio.fixture
 async def user_client(client: AsyncClient, public_user: User) -> AsyncClient:
-    """A client carrying a valid public-user session cookie.
-
-    Minted directly rather than driven through magic verify: the cookie contents
-    are the same, and the verify flow has its own dedicated tests.
-    """
+    """A client carrying a valid public-user session cookie."""
     token = create_access_token(str(public_user.id), token_version=public_user.token_version)
     client.cookies.set(settings.session_cookie_name, token)
     return client

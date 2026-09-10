@@ -633,12 +633,7 @@ async def test_adapt_charges_once_for_the_assessment_and_the_rewrite() -> None:
 
 
 async def test_a_cached_assessment_does_not_buy_a_free_rewrite() -> None:
-    """The charge is one-shot and cannot be re-armed once waived.
-
-    Assess waives on its own cache hit, so a dish whose assessment is cached but
-    whose rewrite is not must still charge for the rewrite it is about to run —
-    otherwise the shared tier hands out free model calls for every popular dish.
-    """
+    """The charge is one-shot and cannot be re-armed once waived."""
     hit = DishAssessmentResponse(
         dish="pasta",
         verdict=SafetyLevel.AVOID,

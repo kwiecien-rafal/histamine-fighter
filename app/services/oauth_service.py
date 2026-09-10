@@ -72,11 +72,7 @@ async def exchange_code(
     redirect_uri: str,
     pkce_verifier: str,
 ) -> str:
-    """Trade the callback's authorization code for an access token.
-
-    Raises:
-        OAuthError: the provider refused the exchange or was unreachable.
-    """
+    """Trade the callback's authorization code for an access token."""
     creds = credentials(provider)
     if creds is None:
         raise OAuthError(f"{provider.name} OAuth is not configured.")
@@ -115,11 +111,7 @@ async def exchange_code(
 async def fetch_verified_email(
     client: httpx.AsyncClient, provider: OAuthProvider, access_token: str
 ) -> str:
-    """Return the account's verified email, the only claim this app needs.
-
-    Raises:
-        OAuthError: the profile was unreachable or carries no verified email.
-    """
+    """Return the account's verified email, the only claim this app needs."""
     try:
         response = await client.get(
             provider.userinfo_url,

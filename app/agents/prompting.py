@@ -1,4 +1,4 @@
-"""Prompt loading and strict placeholder rendering (CLAUDE §8).
+"""Prompt loading and strict placeholder rendering.
 
 Prompts live as markdown under ``app/agents/prompts``, one folder per agent plus
 shared ``_partials``. ``load_prompt`` resolves ``{{> partial}}`` includes one
@@ -35,17 +35,7 @@ def _read_partial(name: str) -> str:
 
 @lru_cache(maxsize=None)
 def load_prompt(name: str) -> str:
-    """Load ``prompts/<name>.md`` with its ``{{> partial}}`` includes resolved.
-
-    Variable placeholders are left in place for :func:`render_prompt`.
-
-    Args:
-        name: Path of the prompt relative to the prompts directory, without the
-            ``.md`` suffix, e.g. ``"dish_lookup/system"``.
-
-    Returns:
-        The template text with every include replaced by its partial's content.
-    """
+    """Load ``prompts/<name>.md`` with its ``{{> partial}}`` includes resolved."""
     template = (_PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
 
     def _include(match: re.Match[str]) -> str:
@@ -55,23 +45,7 @@ def load_prompt(name: str) -> str:
 
 
 def render_prompt(template: str, name: str = "inline template", /, **values: str) -> str:
-    """Fill every ``{{name}}`` placeholder in ``template`` from ``values``.
-
-    Strict both ways: a placeholder without a value, a value without a
-    placeholder, an unresolved include, or a malformed ``{{`` tag raises
-    :class:`PromptRenderError`. Braces inside the substituted values themselves
-    are user data and pass through untouched.
-
-    Args:
-        template: A template returned by :func:`load_prompt`.
-        name: The template's prompt name, named in errors so a failure at agent
-            startup points at the right file. Positional-only, so it can never
-            collide with a ``{{name}}`` placeholder.
-        **values: One string per ``{{name}}`` placeholder in the template.
-
-    Returns:
-        The rendered prompt.
-    """
+    """Fill every ``{{name}}`` placeholder in ``template`` from ``values``."""
     if any(match.group(1) for match in _TAG.finditer(template)):
         raise PromptRenderError(
             f"Prompt '{name}' still contains a '{{{{> ...}}}}' include; load it first."
@@ -90,22 +64,7 @@ def render_prompt(template: str, name: str = "inline template", /, **values: str
 
 
 def strip_region_tags(value: str, tags: Iterable[str]) -> str:
-    """Remove any literal region delimiter tags from user-supplied input.
-
-    Each user template wraps its variable inputs in named ``<tag>`` … ``</tag>``
-    regions. Stripping only a value's own closing tag is not enough: an input
-    could forge a *different* region's delimiter to make attacker text look like
-    a trusted, code-owned section (e.g. a dish name emitting ``<verdict>``). So
-    both the opening and closing form of *every* region tag in the prompt are
-    removed, leaving the input unable to close its own region or fake another.
-
-    Args:
-        value: The user-supplied text about to fill a delimited placeholder.
-        tags: The prompt's region tag names, e.g. ``("dish_text", "verdict")``.
-
-    Returns:
-        ``value`` with every spoofed region tag removed, case-insensitively.
-    """
+    """Remove any literal region delimiter tags from user-supplied input."""
     alternation = "|".join(re.escape(tag) for tag in tags)
     if not alternation:
         return value

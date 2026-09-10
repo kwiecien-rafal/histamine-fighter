@@ -49,14 +49,7 @@ def verify_meal(
     recipe_steps: Sequence[str] = (),
     risky_terms: TermMatcher | None = None,
 ) -> MealVerification:
-    """Classify each ingredient reading and optionally scan the recipe for risky mentions.
-
-    Args:
-        lookups: One reading per submitted ingredient, in the submitted order.
-        recipe_steps: The normalized recipe steps to scan for risky terms.
-        risky_terms: The index's avoid-level terms, prepared for matching.
-            ``None`` skips the recipe scan entirely (the admin edit gate).
-    """
+    """Classify each ingredient reading and optionally scan the recipe for risky mentions."""
     blockers: list[tuple[str, TraceReading]] = []
     cautioned: list[CautionedIngredient] = []
     unverified: list[str] = []
@@ -90,13 +83,7 @@ def verify_meal(
 
 
 def _moderation_note(lookup: LookupResult) -> str:
-    """The index's own guidance for a depends ingredient, best-informed row first.
-
-    A moderately compatible row's note is the direct answer; when the depends
-    verdict comes from mixed rows instead (egg yolk safe, egg white a liberator),
-    the risky row's note is the informative one. Never model-written: the model may
-    keep the ingredient, only the index says how.
-    """
+    """The index's own guidance for a depends ingredient, best-informed row first."""
     moderate = Compatibility.MODERATELY_COMPATIBLE.value
     safe = Compatibility.WELL_TOLERATED.value
     for candidate in lookup.candidates:
@@ -109,11 +96,7 @@ def _moderation_note(lookup: LookupResult) -> str:
 
 
 def _is_rated(lookup: LookupResult) -> bool:
-    """True when the index has at least one rated reading for the ingredient.
-
-    A miss returns no candidates, and a row with NULL compatibility surfaces as
-    ``unknown``; neither is evidence of safety, so both read as unrated here.
-    """
+    """True when the index has at least one rated reading for the ingredient."""
     return any(
         candidate.compatibility != CompatibilityVerdict.UNKNOWN.value
         for candidate in lookup.candidates

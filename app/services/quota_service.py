@@ -74,15 +74,7 @@ class QuotaService:
         self._session_factory = session_factory
 
     async def charge_shared(self, user_id: UUID, ip: str) -> None:
-        """Spend one shared-tier call for this user, their IP, and the site.
-
-        All three scopes must clear; the fixed user -> ip -> global order prevents
-        deadlocks between concurrent charges. Any refusal rolls back the whole
-        charge and raises.
-
-        Raises:
-            QuotaExceededError: one of the three daily limits is exhausted.
-        """
+        """Spend one shared-tier call for this user, their IP, and the site."""
         day = _today()
         charges: tuple[tuple[QuotaScope, str, int], ...] = (
             ("user", str(user_id), settings.shared_user_daily_limit),
@@ -100,24 +92,13 @@ class QuotaService:
             await session.commit()
 
     async def charge_signup(self, ip: str) -> None:
-        """Spend one account creation for this IP.
-
-        Raises:
-            QuotaExceededError: the IP already created today's allowance of accounts.
-        """
+        """Spend one account creation for this IP."""
         await self._charge_single(
             "signup_ip", ip, settings.signup_ip_daily_limit, event="quota.signup_exhausted"
         )
 
     async def charge_magic_send(self, ip: str) -> None:
-        """Spend one magic-link email for this IP.
-
-        Bounds inbox bombing and Resend spend when Turnstile is not configured;
-        the per-minute burst limit caps the rate, this caps the daily total.
-
-        Raises:
-            QuotaExceededError: the IP already sent today's allowance of emails.
-        """
+        """Spend one magic-link email for this IP."""
         await self._charge_single(
             "magic_send_ip",
             ip,
@@ -126,14 +107,7 @@ class QuotaService:
         )
 
     async def _charge_single(self, scope: QuotaScope, key: str, limit: int, *, event: str) -> None:
-        """Take one unit of a single daily scope in its own transaction, or raise.
-
-        The one-scope siblings (signup, magic send) share this, while charge_shared
-        keeps its own loop to charge three scopes in one transaction.
-
-        Raises:
-            QuotaExceededError: this scope's daily limit is exhausted.
-        """
+        """Take one unit of a single daily scope in its own transaction, or raise."""
         async with self._session_factory() as session:
             if not await self._increment_under_limit(session, scope, key, _today(), limit):
                 await session.rollback()
@@ -142,12 +116,7 @@ class QuotaService:
             await session.commit()
 
     async def read_status(self, user_id: UUID, session: AsyncSession) -> QuotaStatus:
-        """The user's shared-tier allowance today, for display.
-
-        Reads on the caller's (request) session: no counters change, so riding
-        the request transaction is safe here. The per-user limit is what the UI
-        shows; the IP and global caps surface only through a 429's payload.
-        """
+        """The user's shared-tier allowance today, for display."""
         stmt = select(UsageCounter.count).where(
             UsageCounter.scope == "user",
             UsageCounter.key == str(user_id),
@@ -161,12 +130,7 @@ class QuotaService:
     async def _increment_under_limit(
         self, session: AsyncSession, scope: str, key: str, day: date, limit: int
     ) -> bool:
-        """Atomically take one unit of (scope, key, day) if any remains.
-
-        The upsert's WHERE makes check-and-increment a single statement, so two
-        concurrent charges cannot both slip under the limit: the second blocks on
-        the row lock until the first commits, then sees its count.
-        """
+        """Atomically take one unit of (scope, key, day) if any remains."""
         stmt = (
             insert(UsageCounter)
             .values(scope=scope, key=key, date=day, count=1)

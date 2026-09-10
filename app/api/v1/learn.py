@@ -25,11 +25,7 @@ async def query_knowledge(
     cache: LearnCacheService = Depends(get_learn_cache_service),
     resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> LearnResponse:
-    """Answer a histamine question from the curated knowledge base, with citations.
-
-    The corpus is static between seeds, so grounded answers are served from the
-    TTL cache (keyed by normalized question and model) before touching the LLM.
-    """
+    """Answer a histamine question from the curated knowledge base, with citations."""
     cached = await cache.get(payload.question, agent.model_name)
     if cached is not None:
         # No model call happens on a hit, so release the shared-tier charge

@@ -20,11 +20,7 @@ _embedder_lock = threading.Lock()
 
 
 def get_embedder() -> Embedder:
-    """The process-wide embedder, built once (the model is expensive to load).
-
-    Construction downloads the model on first ever run, so the app warms this up
-    in its lifespan (off the event loop) rather than paying it on a request.
-    """
+    """The process-wide embedder, built once (the model is expensive to load)."""
     global _embedder
     with _embedder_lock:
         if _embedder is None:
@@ -33,11 +29,7 @@ def get_embedder() -> Embedder:
 
 
 def warm_up_embedder() -> Embedder:
-    """Build the embedder now so a missing/broken model fails at startup.
-
-    Blocking (model download + ONNX load); call it via ``asyncio.to_thread``
-    from async code.
-    """
+    """Build the embedder now so a missing/broken model fails at startup."""
     return get_embedder()
 
 

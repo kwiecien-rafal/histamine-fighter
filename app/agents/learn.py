@@ -130,12 +130,7 @@ class LearnAgent(BaseAgent):
 
     @staticmethod
     def _citations(chunks: list[KnowledgeMatch], used_passages: list[int]) -> list[Citation]:
-        """One citation per source document the answer drew on, in retrieval order.
-
-        Passage numbers come from the model, so they are validated against the
-        context that was sent (1-based, as displayed); anything out of range is
-        ignored rather than trusted.
-        """
+        """One citation per source document the answer drew on, in retrieval order."""
         used = {number for number in used_passages if 1 <= number <= len(chunks)}
         seen: set[str] = set()
         citations: list[Citation] = []

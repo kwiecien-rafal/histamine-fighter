@@ -28,11 +28,7 @@ class EmailService:
         self._client = client
 
     async def send_magic_link(self, email: str, *, link_url: str, code: str) -> None:
-        """Email a sign-in link and its 6-digit code, or log them without a key.
-
-        Raises:
-            EmailDeliveryError: Resend rejected the request or was unreachable.
-        """
+        """Email a sign-in link and its 6-digit code, or log them without a key."""
         if settings.resend_api_key is None:
             # Dev/self-hosted mode: the log line is the email. The link and code are
             # login credentials, but short-lived and single-use, and anyone reading

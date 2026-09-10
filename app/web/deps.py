@@ -2,8 +2,7 @@
 
 One :class:`Jinja2Templates` instance for the whole app, plus the display filters that
 are awkward to express in a template. Formatting and branded wording live here and in
-the templates only — never in the domain values the API and the database exchange
-(CLAUDE section 19).
+the templates only — never in the domain values the API and the database exchange.
 
 The signed-in account is resolved once per request by ``bind_current_user`` and handed
 to every template by a context processor, so the masthead can render the account slot
@@ -52,21 +51,12 @@ STATIC_DIR = _WEB_DIR / "static"
 async def bind_current_user(
     request: Request, user: User | None = Depends(get_current_user_optional)
 ) -> None:
-    """Stash the request's user where the template context processor can find it.
-
-    Declared once on the web router rather than by each page: the shell shows the
-    account on every page, so no handler should have to ask for it.
-    """
+    """Stash the request's user where the template context processor can find it."""
     request.state.user = user
 
 
 def require_user(user: User | None = Depends(get_current_user_optional)) -> User:
-    """The signed-in user, or a redirect to the sign-in page.
-
-    A page must not answer a missing session with the API's 401 JSON body; the
-    browser is sent to sign in instead. FastAPI caches the resolved dependency, so
-    a page using this shares the lookup ``bind_current_user`` already made.
-    """
+    """The signed-in user, or a redirect to the sign-in page."""
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
@@ -82,22 +72,12 @@ def current_path(request: Request) -> str:
 
 
 def safe_redirect(target: str, fallback: str) -> str:
-    """A return-here path supplied by a form, accepted only if it stays on this site.
-
-    The pages carry where to come back to in a hidden field (``Referrer-Policy:
-    no-referrer`` means there is no header to read it from), so the value is
-    attacker-supplied and anything that could leave the site is refused.
-    """
+    """A return-here path supplied by a form, accepted only if it stays on this site."""
     return target if target.startswith("/") and not target.startswith("//") else fallback
 
 
 def _session_context(request: Request) -> dict[str, object]:
-    """Expose the signed-in user and the deployment mode to every template.
-
-    ``user`` is ``None`` off the web router. ``public_deployment`` gates the choices
-    the AI panel may offer — Ollama is a self-hosted option only — and is read per
-    request so a test that flips the setting sees the panel change with it.
-    """
+    """Expose the signed-in user and the deployment mode to every template."""
     return {
         "user": getattr(request.state, "user", None),
         "public_deployment": settings.public_deployment,
@@ -131,11 +111,7 @@ def utc_time(value: datetime) -> str:
 
 
 def countdown(target: datetime) -> str:
-    """Roughly how long until a target, as '3h 05m', '12m', or 'any moment now'.
-
-    Rendered once per request rather than ticked by a script: the visitor reloads to
-    see it move, which is the whole cost of not shipping a countdown widget.
-    """
+    """Roughly how long until a target, as '3h 05m', '12m', or 'any moment now'."""
     minutes_left = int((target - datetime.now(UTC)).total_seconds() // 60)
     if minutes_left < 1:
         return "any moment now"
@@ -163,14 +139,7 @@ class SwapRow(NamedTuple):
 
 
 def swap_rows(result: DishAssessmentResponse, adapted: AdaptedDish) -> list[SwapRow]:
-    """The swap advice for whichever dish the card is showing.
-
-    A rewrite the index cleared has its own diff, so the rows are its changes and
-    the role is joined back on from the assessment entry that covers the ingredient.
-    Every other outcome has no new dish to diff, so the rows are the assessment's
-    own adaptations — advice on the dish as named, with the ingredients nothing
-    replaces marked as staying.
-    """
+    """The swap advice for whichever dish the card is showing."""
     if adapted.outcome is not RewriteOutcome.ADAPTED:
         return [
             SwapRow(
@@ -201,12 +170,7 @@ DishChipReading = Literal["clear", "watch", "kept", "unrated", "unreadable"]
 
 
 class DishChip(NamedTuple):
-    """One ingredient of the dish on the card, with the index's reading of it.
-
-    ``reading`` is a neutral value the templates map to their own wording and tone
-    (CLAUDE section 19). ``note`` is the index's own words, carried only when it
-    recorded any.
-    """
+    """One ingredient of the dish on the card, with the index's reading of it."""
 
     name: str
     reading: DishChipReading
@@ -219,14 +183,7 @@ def dish_chips(
     result: DishAssessmentResponse,
     adapted: AdaptedDish,
 ) -> list[DishChip]:
-    """The dish's own ingredients, each marked with what the index recorded for it.
-
-    One rule for every outcome, so the list somebody is shown is the same list they
-    edit, cook and save. A rewrite the index cleared carries its own readings; every
-    other outcome is the assessed dish, so the assessment's are the ones that apply —
-    an ingredient the index could not read keeps its caution instead of passing as
-    unremarkable, and one nothing replaces is marked as the compromise it is.
-    """
+    """The dish's own ingredients, each marked with what the index recorded for it."""
     watched = {item.ingredient.casefold(): item.note for item in advisories}
     kept: set[str] = set()
     unreadable: set[str] = set()
@@ -279,14 +236,7 @@ def known_categories(ingredients: Iterable[ProposedIngredient]) -> str:
 
 
 def read_known_categories(raw: str) -> dict[str, str]:
-    """Read that map back, degrading anything unreadable to no categories at all.
-
-    On the lookup path the map round-trips through the browser, so it is parsed as
-    hostile input. Losing it is safe in one direction only, which is why this may
-    give up on the whole map: a category can only widen the search to an umbrella
-    row, and a name that matches nothing already reads as no known concern, so the
-    worst an empty map costs is grounding — never caution.
-    """
+    """Read that map back, degrading anything unreadable to no categories at all."""
     if not raw or len(raw) > MAX_KNOWN_CHARS:
         return {}
     try:
@@ -305,11 +255,5 @@ def read_known_categories(raw: str) -> dict[str, str]:
 def confirmed_ingredients(
     names: Iterable[str], known: Mapping[str, str]
 ) -> list[ProposedIngredient]:
-    """The editor's rows as a normalized list, categories kept only for unchanged names.
-
-    A row that was renamed, typed by hand, or split out of another matches nothing
-    in the map and so carries no category. That is the whole guard against a stale
-    descriptor: it is not that a wrong category is detected, it is that an edited
-    name cannot carry one at all.
-    """
+    """The editor's rows as a normalized list, categories kept only for unchanged names."""
     return normalize_ingredients((name, known.get(name.strip().casefold())) for name in names)

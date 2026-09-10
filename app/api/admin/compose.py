@@ -96,13 +96,7 @@ def _ensure_within_queue_window(target: date, now: datetime) -> None:
 def _conflict_detail(
     existing: DailySuggestion | None, payload: ComposeDailyRequest
 ) -> dict[str, object] | None:
-    """The 409 body for a taken daily slot, or None when the save may proceed.
-
-    A non-rejected slot blocks unless the request opted into a replace. The body reports
-    the slot's status so the UI can word the confirm by stakes (replacing an approved row
-    un-publishes it). Shared by the route pre-check and the persist re-check so the rule
-    is stated once.
-    """
+    """The 409 body for a taken daily slot, or None when the save may proceed."""
     if existing is None or existing.approval_status is ApprovalStatus.REJECTED or payload.replace:
         return None
     return {
@@ -127,13 +121,7 @@ async def _slot_frames(
     error_event: str,
     inspiration_date: date | None = None,
 ) -> AsyncIterator[dict[str, str]]:
-    """Relay one composition's frames, closing its failures as ``error_event``.
-
-    Compose failures (the loop's budget, a model error) and the streamer's own save
-    failure all land on ``error_event``: the single-slot stream passes ``error`` so
-    the failure is terminal, the board passes ``slot_error`` so it can move on to the
-    remaining slots. An unexpected exception propagates to the caller's backstop.
-    """
+    """Relay one composition's frames, closing its failures as ``error_event``."""
     try:
         async for frame in streamer.stream(
             meal_type, persist=persist, inspiration_date=inspiration_date
@@ -152,16 +140,7 @@ async def _slot_frames(
 
 
 def _locked_sse(frames: AsyncIterator[dict[str, str]], *, run: str) -> EventSourceResponse:
-    """Stream compose frames as SSE behind the shared lock, with the error backstop.
-
-    A second trigger while one is in flight gets 409; the lock is the real guard, so
-    even if two requests slip past the check they run one at a time, and it releases
-    on completion or client cancel. The 200 and headers are already sent by the time
-    an unexpected failure lands, so it cannot become an HTTP error: it has to close
-    the open stream as a terminal ``error`` frame. A client disconnect raises
-    CancelledError (a BaseException), so it still propagates rather than being
-    swallowed.
-    """
+    """Stream compose frames as SSE behind the shared lock, with the error backstop."""
     if _compose_lock.locked():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_GENERATION_BUSY)
 
@@ -219,16 +198,7 @@ async def compose_daily(
     streamer: ComposerStreamer = Depends(get_composer_streamer),
     daily: DailyService = Depends(get_daily_service),
 ) -> EventSourceResponse:
-    """Compose one daily slot and save it as pending, refusing a silent overwrite.
-
-    A slot already holding a pending or approved suggestion is a 409 unless the request
-    carries ``replace=true``: the refusal happens before composing, so it spends no
-    tokens, and an overwrite is never accidental. A rejected or empty slot proceeds.
-
-    The pre-compose check is racy on its own, since the serialize lock is taken later
-    inside the stream; the persist callback re-reads the slot under the lock and refuses a
-    second time. That re-check, not the unique constraint, closes the clobber window.
-    """
+    """Compose one daily slot and save it as pending, refusing a silent overwrite."""
     now = datetime.now(UTC)
     _ensure_within_queue_window(payload.date, now)
     conflict = _conflict_detail(await daily.slot_for(payload.date, payload.meal_type), payload)
@@ -253,13 +223,7 @@ async def compose_daily(
 async def _board_frames(
     target: date, open_types: list[MealType], streamer: ComposerStreamer, *, now: datetime
 ) -> AsyncIterator[dict[str, str]]:
-    """Compose the date's open slots in sequence, announcing each with ``slot``.
-
-    ``open_types`` comes from the route's pre-check, which runs before the lock is
-    taken, so it is racy on its own; as in the single-slot route, the persist callback
-    re-reads the slot on the stream's session and refuses a concurrent fill. That
-    refusal surfaces as the slot's ``slot_error`` and the run moves on.
-    """
+    """Compose the date's open slots in sequence, announcing each with ``slot``."""
 
     async def persist(meal: ComposedMeal, session: AsyncSession) -> UUID:
         service = DailyService(session)
@@ -296,13 +260,7 @@ async def compose_daily_board(
     streamer: ComposerStreamer = Depends(get_composer_streamer),
     daily: DailyService = Depends(get_daily_service),
 ) -> EventSourceResponse:
-    """Compose every open slot of one date in a single stream, saving each as pending.
-
-    Board mode fills only slots that are empty or rejected; a pending or approved slot
-    is never replaced, so a board run cannot destroy review work. A date with no open
-    slot is a 409 before any tokens are spent. The whole board runs under one hold of
-    the compose lock, so the nightly cron or a second trigger cannot interleave.
-    """
+    """Compose every open slot of one date in a single stream, saving each as pending."""
     now = datetime.now(UTC)
     _ensure_within_queue_window(payload.date, now)
     open_types = await daily.open_meal_types(payload.date)
@@ -331,12 +289,7 @@ async def update_settings(
     admin: User = Depends(require_admin),
     service: GenerationSettingsService = Depends(get_generation_settings_service),
 ) -> ComposeSettingsRead:
-    """Set the composer provider/model, validated through the provider truth source.
-
-    Running the choice through ``resolve_llm_config`` rejects a keyless or gated
-    provider (mapped to 400/501 at the boundary) before it can be persisted, so the
-    saved setting is always usable and the provider rules cannot drift.
-    """
+    """Set the composer provider/model, validated through the provider truth source."""
     row = await service.set_composer(payload.provider.value, payload.model, actor=admin.email)
     return ComposeSettingsRead(
         provider=row.composer_provider,

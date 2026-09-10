@@ -27,9 +27,5 @@ class Base(DeclarativeBase):
 
 
 def enum_values(enum_cls: type[StdEnum]) -> list[str]:
-    """Persist enum values (e.g. 'breakfast'), not member names (e.g. 'BREAKFAST').
-
-    Passed as ``values_callable`` to a non-native SQLAlchemy ``Enum`` column so the
-    stored value is the neutral domain string, not the Python member name.
-    """
+    """Persist enum values (e.g. 'breakfast'), not member names (e.g. 'BREAKFAST')."""
     return [member.value for member in enum_cls.__members__.values()]

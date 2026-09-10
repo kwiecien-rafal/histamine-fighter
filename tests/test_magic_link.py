@@ -25,13 +25,7 @@ EMAIL = "gerald@example.com"
 
 @pytest.fixture(autouse=True)
 def _attempts_on_test_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Route the code-attempt counter through the test transaction.
-
-    The real ``_record_attempt`` commits on its own connection, which can
-    neither see the test's uncommitted rows nor stay inside the rollback
-    isolation; its durability is a production concern the direct service tests
-    cover.
-    """
+    """Route the code-attempt counter through the test transaction."""
 
     async def record(self: MagicLinkService, jti: UUID) -> int:
         row = await self._session.get(MagicLinkToken, jti)

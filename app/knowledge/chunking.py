@@ -106,12 +106,7 @@ def _parse_front_matter(raw: str) -> dict[str, str]:
 
 
 def _split_into_sections(body: str) -> list[tuple[str, str]]:
-    """Split on ATX headings into (breadcrumb, section-body) pairs.
-
-    The breadcrumb joins the active heading at each level (``Diagnosis > Symptoms``)
-    so a chunk under a subsection keeps its parents' context. Fenced code blocks
-    are opaque: a ``#`` line inside one is content, not a heading.
-    """
+    """Split on ATX headings into (breadcrumb, section-body) pairs."""
     sections: list[tuple[str, str]] = []
     heading_stack: list[tuple[int, str]] = []
     lines: list[str] = []
@@ -185,11 +180,7 @@ def _pack_paragraphs(paragraphs: list[str], max_chars: int, overlap: int) -> lis
 
 
 def _overlap_tail(text: str, overlap: int) -> str:
-    """The last ``overlap`` characters, trimmed to a word boundary.
-
-    The tail is stored as passage text, so a slice landing mid-word would open
-    the next chunk with a token fragment; the partial leading word is dropped.
-    """
+    """The last ``overlap`` characters, trimmed to a word boundary."""
     tail = text[-overlap:]
     if len(text) > overlap and not text[-overlap - 1].isspace() and not tail[0].isspace():
         parts = tail.split(maxsplit=1)
@@ -198,12 +189,7 @@ def _overlap_tail(text: str, overlap: int) -> str:
 
 
 def _split_oversized(block: str, budget: int) -> list[str]:
-    """Break a block that exceeds the budget at the most natural boundary available.
-
-    Lines first (tables, code blocks), then sentences, then words; a single token
-    longer than the whole budget is hard-sliced as a last resort. Every returned
-    piece fits the budget.
-    """
+    """Break a block that exceeds the budget at the most natural boundary available."""
     if len(block) <= budget:
         return [block]
     if "\n" in block:

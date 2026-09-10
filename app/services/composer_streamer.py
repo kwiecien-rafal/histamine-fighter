@@ -52,14 +52,7 @@ class ComposerStreamer:
     async def stream(
         self, meal_type: MealType, *, persist: Persist, inspiration_date: date | None = None
     ) -> AsyncIterator[dict[str, str]]:
-        """Yield SSE frames: a ``trace`` per step, the ``meal``, then ``saved``/``error``.
-
-        The finished meal is written and committed on the stream's own session after the
-        ``meal`` frame, then confirmed with a ``saved`` frame carrying its id (or an
-        ``error`` frame if the write fails). A fresh inspiration brief is drawn per run,
-        so re-generating a slot gives a different direction; ``inspiration_date`` (the
-        daily routes) adds the boards near that date to the do-not-repeat list.
-        """
+        """Yield SSE frames: a ``trace`` per step, the ``meal``, then ``saved``/``error``."""
         async with SessionLocal() as session:
             ingredient_service = IngredientService(session)
             agent = ComposerAgent(

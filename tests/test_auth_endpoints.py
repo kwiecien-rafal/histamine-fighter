@@ -274,8 +274,7 @@ async def test_an_allowed_origin_post_passes_the_check(
 async def test_a_same_origin_post_passes_without_being_a_configured_origin(
     client: AsyncClient, admin_user: User
 ) -> None:
-    """The server-rendered forms post back to the app's own address, which is not in
-    CORS_ORIGINS and must not have to be."""
+    """The server-rendered forms post back to the app's own address, never listed in CORS_ORIGINS."""
     assert "http://test" not in settings.cors_origins
 
     resp = await client.post(

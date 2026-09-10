@@ -26,14 +26,7 @@ class GenerationSettingsService:
         self._session = session
 
     async def get(self) -> GenerationSettings:
-        """Return the saved composer settings, or a default when none is saved yet.
-
-        The default mirrors today's behaviour: a fresh install composes with
-        ``settings.llm_provider`` and the provider's own default model, so the
-        composer works before an admin has set anything. A saved provider that is no
-        longer available is still returned as-is; flagging the mismatch is the GET
-        endpoint's job, which reports the available providers alongside.
-        """
+        """Return the saved composer settings, or a default when none is saved yet."""
         row = await self._row()
         if row is not None:
             return row
@@ -42,23 +35,14 @@ class GenerationSettingsService:
     async def set_composer(
         self, provider: str | None, model: str | None, *, actor: str
     ) -> GenerationSettings:
-        """Validate a composer provider/model through the provider truth source, then store it.
-
-        Running the choice through ``resolve_llm_config`` rejects a keyless or gated
-        provider before it can be persisted, so the saved setting is always usable and
-        the provider rules cannot drift between the API and the admin pages.
-        """
+        """Validate a composer provider/model through the provider truth source, then store it."""
         resolve_llm_config(LLMRequestConfig(provider=provider, model=model))
         return await self.update(provider, model, actor=actor)
 
     async def update(
         self, provider: str | None, model: str | None, *, actor: str
     ) -> GenerationSettings:
-        """Upsert the singleton with a new provider/model, recording the admin.
-
-        The caller validates the choice through ``resolve_llm_config`` before calling,
-        and owns the commit. Never inserts a second row, so the setting stays a singleton.
-        """
+        """Upsert the singleton with a new provider/model, recording the admin."""
         row = await self._row()
         if row is None:
             row = GenerationSettings()

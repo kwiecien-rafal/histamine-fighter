@@ -34,15 +34,7 @@ def client_ip(request: Request) -> str:
 
 
 def warn_if_unproxied(request: Request) -> None:
-    """Warn once if a public deployment looks to be missing its proxy headers.
-
-    A real external client can never arrive as a loopback address, so seeing one on
-    a public deployment means uvicorn is reading its own socket peer instead of the
-    proxy's forwarded client, which collapses every caller into one abuse bucket
-    (the per-IP send/signup/shared caps then apply site-wide). Best effort: it only
-    catches the common same-host reverse-proxy case, but that is the one that fails
-    silently, and there is no config-time signal for it.
-    """
+    """Warn once if a public deployment looks to be missing its proxy headers."""
     global _unproxied_reported
     if _unproxied_reported or not settings.public_deployment or request.client is None:
         return
@@ -62,11 +54,7 @@ def warn_if_unproxied(request: Request) -> None:
 
 
 def ip_bucket(ip: str) -> str:
-    """Collapse an IP to its abuse-control identity: the /64 for IPv6, itself otherwise.
-
-    Unparseable input (including ``"unknown"``) passes through unchanged, so a
-    missing transport address still lands in one shared bucket instead of failing.
-    """
+    """Collapse an IP to its abuse-control identity: the /64 for IPv6, itself otherwise."""
     try:
         address = IPv6Address(ip)
     except AddressValueError:

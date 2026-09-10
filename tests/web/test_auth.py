@@ -24,12 +24,7 @@ EMAIL = "gerald@example.com"
 
 @pytest.fixture(autouse=True)
 def _count_attempts_in_the_test_transaction(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the code-attempt counter inside the test transaction.
-
-    The real one commits on its own connection, which cannot see a row the test has
-    only flushed; left alone it would refuse every code redeemed here. The cap it
-    enforces is a policy concern, covered against the API in test_magic_link.py.
-    """
+    """Keep the code-attempt counter inside the test transaction."""
 
     async def record(self: MagicLinkService, jti: UUID) -> int:
         return 1

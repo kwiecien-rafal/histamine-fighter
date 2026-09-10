@@ -86,16 +86,7 @@ def sample_brief(
     rng: random.Random | None = None,
     anchors: CulinaryAnchors | None = None,
 ) -> InspirationBrief:
-    """Draw one brief for a slot.
-
-    Args:
-        meal_type: The slot being composed.
-        hero_pool: Well-tolerated index names to draw the hero from; empty skips it.
-        avoid_names: Recent dish names the model must not repeat, newest first.
-        rng: The entropy source. Inject a seeded one for a reproducible draw (the
-            daily script keys it on date, slot, and attempt); ``None`` draws fresh.
-        anchors: Anchor pool override for tests; defaults to the seed file.
-    """
+    """Draw one brief for a slot."""
     pools = anchors or load_anchors()
     draw = rng if rng is not None else random.Random()
     return InspirationBrief(

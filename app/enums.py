@@ -192,7 +192,7 @@ class SavedMealTag(StrEnum):
 class Role(StrEnum):
     """An account's privilege level, read from the database on every request.
 
-    Stored as a neutral domain value (CLAUDE section 19). New accounts default to
+    Stored as a neutral domain value. New accounts default to
     ``USER`` for least privilege, and ``ADMIN`` is granted only by the create_admin
     CLI.
     """

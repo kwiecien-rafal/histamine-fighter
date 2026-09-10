@@ -47,13 +47,7 @@ async def list_curated_meals(
     offset: int = Query(default=0, ge=0, description="How many meals to skip."),
     service: MealService = Depends(get_meal_service),
 ) -> PublicMealPage:
-    """One page of approved curated meals for the public browse, newest first, plus a total.
-
-    A plain read of the human-approved pool: no LLM call and no auth, since every row is
-    verified-safe by construction and signed off by an admin. Cards are lean (the recipe
-    and trace load from the detail endpoint on click), and the ``total`` lets the page
-    page through the pool. A short cache (like the daily board) absorbs bursts of readers.
-    """
+    """One page of approved curated meals for the public browse, newest first, plus a total."""
     rows, total = await service.list_approved(meal_type=meal_type, limit=limit, offset=offset)
     response.headers["Cache-Control"] = f"public, max-age={_BROWSE_MAX_AGE}"
     return PublicMealPage(items=[public_card(row) for row in rows], total=total)
@@ -65,11 +59,7 @@ async def get_curated_meal(
     response: Response,
     service: MealService = Depends(get_meal_service),
 ) -> PublicMealDetail:
-    """One approved meal in full, for the deep-linked detail; 404 when it is not public.
-
-    A pending, rejected, or unknown id is indistinguishable here by design: an
-    unapproved meal must never surface to a visitor, so all three read as not found.
-    """
+    """One approved meal in full, for the deep-linked detail; 404 when it is not public."""
     row = await service.get_approved(meal_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meal not found.")
@@ -112,13 +102,7 @@ async def adapt_dish(
     resolved: RequestLLM = Depends(get_request_llm_config),
     lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> AdaptedDish:
-    """A version of the dish its ingredient list can support, or why there is none.
-
-    The assessment behind it is recomputed from the same two fields rather than
-    accepted from the caller, and is dropped here: this endpoint answers "what can
-    I cook instead", and a client that wants the verdict too asks ``/assess``,
-    which serves the very row this call just wrote.
-    """
+    """A version of the dish its ingredient list can support, or why there is none."""
     _, adapted = await lookup.adapt(payload, agent=agent, resolved=resolved)
     return adapted
 

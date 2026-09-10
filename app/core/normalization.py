@@ -12,27 +12,10 @@ _TRAILING_PUNCTUATION = re.compile(r"[?!.\s]+$")
 
 
 def normalize_ingredient_name(name: str) -> str:
-    """Return a stable lookup key: lowercased, trimmed, single-spaced.
-
-    Args:
-        name: The display name as written, e.g. "  Aged   Parmesan ".
-
-    Returns:
-        The normalized key, e.g. "aged parmesan".
-    """
+    """Return a stable lookup key: lowercased, trimmed, single-spaced."""
     return _WHITESPACE.sub(" ", name.strip().lower())
 
 
 def normalize_question(question: str) -> str:
-    """Return a cache key for a free-text question.
-
-    Lowercased, trimmed, single-spaced, with trailing sentence punctuation
-    dropped so "What is histamine?" and "what is histamine" share one key.
-
-    Args:
-        question: The question as the user typed it.
-
-    Returns:
-        The normalized key, e.g. "what is histamine".
-    """
+    """Return a cache key for a free-text question."""
     return _TRAILING_PUNCTUATION.sub("", _WHITESPACE.sub(" ", question.strip().lower()))

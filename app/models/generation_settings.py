@@ -3,7 +3,7 @@
 A single row holding which provider and model the composer uses, set by an admin
 and honoured by both the admin triggers and the nightly cron. Only the provider and
 model strings live here, never an API key or a base URL: keys stay in the environment
-(CLAUDE section 13) so the database never holds a secret, and Ollama's base URL stays
+so the database never holds a secret, and Ollama's base URL stays
 env-only so a stored value cannot point the server at an arbitrary host. A unique
 ``is_singleton`` column pins the table to one row, and ``updated_by`` records the admin
 who last changed it.

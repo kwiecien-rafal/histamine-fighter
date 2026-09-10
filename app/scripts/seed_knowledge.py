@@ -31,10 +31,7 @@ KNOWLEDGE_DIR = Path(__file__).resolve().parents[2] / "seed_data" / "knowledge"
 
 
 def load_documents(directory: Path) -> list[ParsedDocument]:
-    """Parse every knowledge document in the directory, failing loudly on bad data.
-
-    README.md is the directory's own docs, not a corpus document, so it is skipped.
-    """
+    """Parse every knowledge document in the directory, failing loudly on bad data."""
     paths = sorted(p for p in directory.glob("*.md") if p.name.lower() != "readme.md")
     documents: list[ParsedDocument] = []
     for path in paths:
@@ -73,10 +70,7 @@ async def _build_chunks(
 
 
 async def refresh(session: AsyncSession, rows: list[KnowledgeChunk]) -> None:
-    """Replace the whole table with the freshly embedded rows.
-
-    Cached Learn answers cite the old corpus, so they are dropped with it.
-    """
+    """Replace the whole table with the freshly embedded rows."""
     await session.execute(delete(KnowledgeChunk))
     await session.execute(delete(LearnQueryCache))
     session.add_all(rows)

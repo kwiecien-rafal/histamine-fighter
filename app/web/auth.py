@@ -66,11 +66,7 @@ _AUTH_FAILURES = (
 
 
 def _failure_message(exc: BaseException) -> str:
-    """Page copy for a failed sign-in attempt.
-
-    The two sign-in refusals are already written for the person reading them; the
-    rest carry operator wording, so each gets its own sentence.
-    """
+    """Page copy for a failed sign-in attempt."""
     if isinstance(exc, DisposableEmailRefused):
         return str(exc)
     if isinstance(exc, InvalidSignInAttempt):
@@ -85,11 +81,7 @@ def _failure_message(exc: BaseException) -> str:
 
 
 def _configured_oauth_providers() -> list[str]:
-    """The providers this deployment can actually start a round trip with.
-
-    A self-hoster who registered no OAuth apps gets a clean email-only page rather
-    than buttons that answer 501.
-    """
+    """The providers this deployment can actually start a round trip with."""
     return [name for name, provider in PROVIDERS.items() if credentials(provider) is not None]
 
 
@@ -132,11 +124,7 @@ async def login_page(
     error: str = Query(default="", description="Coarse flag set by the OAuth callback."),
     user: User | None = Depends(get_current_user_optional),
 ) -> Response:
-    """The sign-in page: an email address, or one of the configured providers.
-
-    Someone already signed in is sent to their account rather than shown a form
-    they do not need.
-    """
+    """The sign-in page: an email address, or one of the configured providers."""
     if user is not None:
         return RedirectResponse("/account", status_code=status.HTTP_303_SEE_OTHER)
     return _login_form(request, error=OAUTH_ERRORS.get(error))
@@ -149,11 +137,7 @@ async def request_link(
     turnstile_token: str | None = Form(default=None, alias="cf-turnstile-response"),
     auth: AuthService = Depends(get_auth_service),
 ) -> HTMLResponse:
-    """Send the sign-in email, then show the code form.
-
-    The code form is rendered straight from the POST rather than redirected to, so
-    the address stays out of the URL and the browser history.
-    """
+    """Send the sign-in email, then show the code form."""
     email = email.strip()
     try:
         payload = MagicLinkRequest(email=email, turnstile_token=turnstile_token)
@@ -193,12 +177,7 @@ async def submit_code(
 async def verify_page(
     request: Request, token: str = Query(default="", description="The emailed link's token.")
 ) -> HTMLResponse:
-    """Where the emailed sign-in link lands: a button that posts its token back.
-
-    Deliberately not a GET that redeems the token. Mail scanners and link
-    previewers follow GET links, and a single-use token must survive that — only
-    the POST behind the button spends it.
-    """
+    """Where the emailed sign-in link lands: a button that posts its token back."""
     if not token:
         return _expired_link(request)
     return templates.TemplateResponse(request, "login_verify.html", {"token": token})
@@ -225,11 +204,7 @@ async def confirm_link(
 
 @router.get("/login/complete")
 async def login_complete() -> RedirectResponse:
-    """Where the OAuth callback lands once it has planted the session cookie.
-
-    The cookie is already set, so there is nothing left to do but hand the visitor
-    back to the site signed in.
-    """
+    """Where the OAuth callback lands once it has planted the session cookie."""
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -240,8 +215,7 @@ async def account_page(
     quota: QuotaService = Depends(get_quota_service),
     session: AsyncSession = Depends(get_session),
 ) -> HTMLResponse:
-    """The account: the signed-in address, today's shared-tier allowance, and the
-    two ways out of the session."""
+    """The account: the signed-in address, today's allowance, and the ways out of the session."""
     response = templates.TemplateResponse(
         request, "account.html", {"quota": await quota.read_status(user.id, session)}
     )
@@ -253,11 +227,7 @@ async def account_page(
 async def confirm_account_deletion(
     request: Request, user: User = Depends(require_user)
 ) -> HTMLResponse:
-    """Spell out what erasing the account removes, before anything is erased.
-
-    A page of its own rather than a dialog: without it the only thing between a
-    stray click and an irreversible delete would be a script.
-    """
+    """Spell out what erasing the account removes, before anything is erased."""
     return templates.TemplateResponse(
         request, "account_delete.html", {"is_admin": user.role is not Role.USER}
     )
@@ -288,11 +258,7 @@ async def logout_everywhere(
     user: User = Depends(require_user),
     user_service: UserService = Depends(get_user_service),
 ) -> RedirectResponse:
-    """Sign out of every browser by revoking the account's outstanding sessions.
-
-    A plain sign-out only drops this browser's cookie; the month-long tokens on
-    other devices stay valid until they expire.
-    """
+    """Sign out of every browser by revoking the account's outstanding sessions."""
     await user_service.revoke_sessions(user)
     response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
     clear_session_cookie(response)

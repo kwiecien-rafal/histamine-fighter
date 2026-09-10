@@ -46,12 +46,7 @@ class MealJudgeAgent(BaseAgent):
         recipe: Sequence[str] | None,
         tags: Sequence[str],
     ) -> tuple[MealJudgement, list[StepUsage]]:
-        """Judge one meal, returning the verdict and the call's token usage.
-
-        The usage rides back explicitly so the composer can fold it into its own
-        tally: the judged meal's cost then includes its reviews, keeping the
-        transparency panel honest.
-        """
+        """Judge one meal, returning the verdict and the call's token usage."""
         self._begin_usage()
         judgement = await self._structured_invoke(
             MealJudgement,

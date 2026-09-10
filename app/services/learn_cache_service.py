@@ -32,12 +32,7 @@ class LearnCacheService:
         self._ttl = timedelta(days=settings.learn_cache_ttl_days if ttl_days is None else ttl_days)
 
     async def get(self, question: str, model: str) -> LearnResponse | None:
-        """Return the cached answer for this question and model, or None.
-
-        The stored response echoes the question it was cached under; it is
-        replaced with the caller's exact phrasing so the response always mirrors
-        the request.
-        """
+        """Return the cached answer for this question and model, or None."""
         key = normalize_question(question)
         if not key:
             return None

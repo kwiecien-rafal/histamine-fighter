@@ -32,11 +32,7 @@ def warm_blocklist() -> None:
 
 
 def is_disposable(email: str) -> bool:
-    """Whether the email's domain is a known disposable-inbox provider.
-
-    Subdomains of a blocked domain are blocked too (mail.mailinator.com), since
-    disposable providers hand out arbitrary subdomains freely.
-    """
+    """Whether the email's domain is a known disposable-inbox provider."""
     domain = normalize_email(email).rpartition("@")[2]
     if not domain:
         return False

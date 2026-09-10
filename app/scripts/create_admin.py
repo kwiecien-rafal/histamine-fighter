@@ -1,6 +1,6 @@
 """Create or reset an admin account from the command line.
 
-The only way an admin account comes into existence (CLAUDE section 10): there is
+The only way an admin account comes into existence: there is
 no self-registration endpoint. Running it for an email that already exists resets
 that account's password, so it doubles as a password-reset tool.
 

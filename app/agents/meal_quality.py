@@ -46,13 +46,7 @@ def check_structure(
     ingredients: Sequence[ProposedIngredient],
     recipe: Sequence[str] | None,
 ) -> list[str]:
-    """Reasons a submission is too thin to accept; empty means it passes.
-
-    Counts and steps are hard floors. Category coverage is judged only when the
-    model categorized at least half the list: categories are model-supplied and
-    optional, so their absence means "cannot judge", and blocking on it would set
-    a trap the model cannot see its way out of.
-    """
+    """Reasons a submission is too thin to accept; empty means it passes."""
     reasons: list[str] = []
     minimum = _MIN_INGREDIENTS[meal_type]
     if len(ingredients) < minimum:
@@ -78,12 +72,7 @@ def check_structure(
 
 
 def _category_tokens(category: str) -> set[str]:
-    """Words of a free-text category, singularized enough to match the token sets.
-
-    Categories are model-written phrases ("fresh vegetables", "aged hard cheese"),
-    so matching is by contained word, with a crude plural trim that is fine for
-    food-group nouns.
-    """
+    """Words of a free-text category, singularized enough to match the token sets."""
     tokens = set[str]()
     for token in re.split(r"[^a-z]+", category.casefold()):
         if not token:

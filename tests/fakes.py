@@ -69,11 +69,7 @@ def _refuse_outbound(request: httpx.Request) -> httpx.Response:
 
 
 def refusing_http_client() -> httpx.AsyncClient:
-    """An httpx client that fails the test on any use.
-
-    The default for the suite: Turnstile and Resend are unconfigured in tests,
-    so nothing should go out. OAuth tests replace it with a scripted transport.
-    """
+    """An httpx client that fails the test on any use."""
     return httpx.AsyncClient(transport=httpx.MockTransport(_refuse_outbound))
 
 

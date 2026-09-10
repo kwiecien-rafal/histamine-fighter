@@ -152,11 +152,7 @@ def _judgement(*, passing: bool) -> MealJudgement:
 
 
 def _feedback(chat: _ScriptedToolChat) -> str:
-    """The revision feedback the model was sent after its first rejected submission.
-
-    The recorded invocations alias the composer's live message list, so the tool
-    message is found by type rather than by position.
-    """
+    """The revision feedback the model was sent after its first rejected submission."""
     message = next(m for m in chat.invocations[-1] if isinstance(m, ToolMessage))
     return str(message.content)
 

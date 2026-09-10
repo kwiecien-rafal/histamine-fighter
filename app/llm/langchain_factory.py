@@ -50,26 +50,7 @@ class ChatModel:
 def build_chat_model(
     cfg: LLMRequestConfig, *, temperature: float = 0.0, allow_server_key: bool = True
 ) -> ChatModel:
-    """Resolve a tool-capable chat model for a request, with its badge name.
-
-    Precedence and errors come from :func:`app.llm.providers.resolve_llm_config`;
-    ``allow_server_key`` is forwarded there so a public request cannot fall back
-    to the operator's key (see that function).
-
-    This is the gateway to the agentic tool-calling loop, so the model must
-    support tool calls. The hosted providers here do; a small local Ollama model
-    may not, and that only shows up when the loop first calls a tool, not at
-    resolution — there is no reliable pre-flight check short of a wasted model
-    call. The agent loop (Step 5) is responsible for turning a model that ignores
-    or rejects tools into a clean error.
-
-    ``temperature`` defaults to ``0.0`` to keep the dish-lookup flow steady run to
-    run, which firms up caching and stable prose. GPT-5-class models (the OpenAI
-    default) reject a custom temperature, so LangChain drops it there and they run
-    at the provider default; the verdict is unaffected either way because it is
-    computed in code from the index, never sampled. Creative agents (recipe, learn)
-    can pass a higher value.
-    """
+    """Resolve a tool-capable chat model for a request, with its badge name."""
     resolved = resolve_llm_config(cfg, allow_server_key=allow_server_key)
     log.debug("llm.chat_model", provider=resolved.provider.value, model=resolved.model)
     return ChatModel(model=_construct(resolved, temperature), model_name=resolved.model_name)

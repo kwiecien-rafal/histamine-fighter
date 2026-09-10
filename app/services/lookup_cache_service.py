@@ -55,12 +55,7 @@ CachedResponseT = TypeVar("CachedResponseT", bound=BaseModel)
 def _parsed(
     model: type[CachedResponseT], payload: dict[str, Any], *, tier: str
 ) -> CachedResponseT | None:
-    """Parse a stored row, reading one the current schema cannot load as a miss.
-
-    Rows outlive the schema that wrote them: a renamed enum value or a tightened
-    field would otherwise raise out of a cache read, turning a stale row into a
-    500 on a path whose whole job is to be skippable.
-    """
+    """Parse a stored row, reading one the current schema cannot load as a miss."""
     try:
         return model.model_validate(payload)
     except ValidationError:
@@ -78,13 +73,7 @@ def _stable_hash(payload: object) -> str:
 
 
 def ingredients_hash(ingredients: Sequence[ConfirmedIngredient]) -> str:
-    """One stable hash for a confirmed ingredient set, order-insensitive.
-
-    Categories are part of the identity: they steer the index's category
-    fallback, so two lists differing only in a category can assess differently.
-    JSON-encoded, so a delimiter character in a name can never collide two
-    distinct sets.
-    """
+    """One stable hash for a confirmed ingredient set, order-insensitive."""
     pairs = sorted([item.name.casefold(), (item.category or "").casefold()] for item in ingredients)
     return _stable_hash(pairs)
 
@@ -92,17 +81,7 @@ def ingredients_hash(ingredients: Sequence[ConfirmedIngredient]) -> str:
 async def compute_grounding(
     service: IngredientService, ingredients: Sequence[ConfirmedIngredient]
 ) -> str | None:
-    """Fingerprint everything an assessment of these ingredients is grounded in.
-
-    Covers each ingredient's full index reading (candidates with compatibility,
-    mechanisms, category and notes — the per-ingredient badges and the prose are
-    built from all of it, so a changed note invalidates as surely as a changed
-    verdict) plus the substitute options an avoid-level ingredient's adaptation
-    prose could have named, fetched exactly the way the agent fetches them.
-    Order-insensitive on both the ingredient set and the readings. Returns None
-    when any lookup errored: an unreadable index can neither prove nor refute a
-    cached row.
-    """
+    """Fingerprint everything an assessment of these ingredients is grounded in."""
     lookups = await lookup_ingredients(
         service, [(item.name, item.category) for item in ingredients]
     )
@@ -178,12 +157,7 @@ class LookupCacheService:
         return proposal
 
     async def store_proposal(self, response: IngredientProposalResponse) -> None:
-        """Upsert a recognized, non-empty proposal; junk is never worth freezing.
-
-        Deliberately no negative caching: repeat gibberish re-charges only its
-        own author, while caching "unrecognized" would let one shared-tier
-        glitch pin a false negative under a real dish's key for the whole TTL.
-        """
+        """Upsert a recognized, non-empty proposal; junk is never worth freezing."""
         if not response.recognized or not response.ingredients:
             return
         key = lookup_source_key(response.dish)
@@ -212,12 +186,7 @@ class LookupCacheService:
     async def get_assessment(
         self, dish: str, ingredients: Sequence[ConfirmedIngredient]
     ) -> DishAssessmentResponse | None:
-        """The cached assessment, served only if its grounding is provably unchanged.
-
-        The live fingerprint (index readings plus substitute options, no model
-        call) must match the one stored at write time byte for byte. Any drift
-        — a badge, a note, a swap option — or an errored lookup reads as a miss.
-        """
+        """The cached assessment, served only if its grounding is provably unchanged."""
         key = lookup_source_key(dish)
         if not key:
             return None
@@ -252,14 +221,7 @@ class LookupCacheService:
         ingredients: Sequence[ConfirmedIngredient],
         response: DishAssessmentResponse,
     ) -> None:
-        """Upsert an assessment whose grounding was complete and is fingerprinted.
-
-        Any errored per-ingredient reading means the verdict was floored on
-        missing data, not derived from the index; freezing that would serve
-        precaution as fact, so such responses are never stored. The fingerprint
-        check covers our own lookups too, so a blip that healed between the
-        agent's reads and this one still cannot freeze a floored response.
-        """
+        """Upsert an assessment whose grounding was complete and is fingerprinted."""
         if any(item.error for item in response.ingredients):
             return
         key = lookup_source_key(dish)
@@ -296,13 +258,7 @@ class LookupCacheService:
     async def get_rewrite(
         self, dish: str, ingredients: Sequence[ConfirmedIngredient]
     ) -> AdaptedDish | None:
-        """The cached rewrite for this dish and input list, if still grounded.
-
-        Same gate as the assessment tier, over a fingerprint that also covers the
-        rewritten list's own readings: a row is served only while the index still
-        clears the dish it hands back, so an ingredient reclassified to avoid-level
-        after the write can never be served as part of a safe version.
-        """
+        """The cached rewrite for this dish and input list, if still grounded."""
         key = lookup_source_key(dish)
         if not key:
             return None
@@ -334,13 +290,7 @@ class LookupCacheService:
     async def store_rewrite(
         self, dish: str, ingredients: Sequence[ConfirmedIngredient], response: AdaptedDish
     ) -> None:
-        """Upsert a rewrite that actually produced a dish, fingerprinting both sides.
-
-        Only ``adapted`` is worth a row: the other outcomes are read off the
-        assessment with no model call, so caching them would freeze a decision
-        that costs nothing to make again — and freezing ``exhausted`` would pin one
-        bad run's failure under a dish that a second attempt might well rescue.
-        """
+        """Upsert a rewrite that actually produced a dish, fingerprinting both sides."""
         if response.outcome is not RewriteOutcome.ADAPTED:
             return
         key = lookup_source_key(dish)
@@ -377,13 +327,7 @@ class LookupCacheService:
     async def _rewrite_grounding(
         self, ingredients: Sequence[ConfirmedIngredient], response: AdaptedDish
     ) -> str | None:
-        """Fingerprint both the list the rewrite was asked about and the one it returned.
-
-        The input side is what the adaptations were derived from; the output side is
-        what makes the returned dish safe. Either drifting invalidates the row, and
-        an unreadable index on either side returns None, which reads as a miss on
-        the way in and refuses the write on the way out.
-        """
+        """Fingerprint both the list the rewrite was asked about and the one it returned."""
         asked = await compute_grounding(self._ingredients, ingredients)
         produced = await compute_grounding(
             self._ingredients,

@@ -81,13 +81,7 @@ class AuthService:
         self._http_client = http_client
 
     async def request_magic_link(self, payload: MagicLinkRequest, *, ip: str) -> None:
-        """Send a sign-in email carrying a single-use link and its 6-digit code.
-
-        Guarded by Turnstile (when configured), the disposable-domain blocklist, and
-        a per-IP daily send cap that bounds inbox bombing even when Turnstile is not
-        configured. A capped caller returns normally without sending, so a hit
-        reveals nothing.
-        """
+        """Send a sign-in email carrying a single-use link and its 6-digit code."""
         await verify_turnstile(self._http_client, payload.turnstile_token, ip)
         if is_disposable(payload.email):
             log.info("magic_link.disposable_refused", client=ip)
@@ -112,12 +106,7 @@ class AuthService:
         await self._emails.send_magic_link(payload.email, link_url=link_url, code=code)
 
     async def redeem_magic_link(self, payload: MagicLinkVerify, *, ip: str) -> User:
-        """Redeem a link token or an email + code, and return the account it proves.
-
-        First-ever login creates the account (charged against the signup velocity cap
-        first, so a refused signup consumes nothing else). The caller mints the
-        session cookie, whose TTL follows the account's role.
-        """
+        """Redeem a link token or an email + code, and return the account it proves."""
         email = await self._redeem(payload)
         if email is None:
             raise InvalidSignInAttempt
@@ -142,12 +131,7 @@ class AuthService:
         return user
 
     async def erase_account(self, user: User) -> None:
-        """Erase the account and everything attached to it; the caller clears the cookie.
-
-        Hard delete, not deactivation: the point is that no personal data remains.
-        Saved meals also cascade at the database level; the explicit delete keeps the
-        erasure visible here alongside the other purges.
-        """
+        """Erase the account and everything attached to it; the caller clears the cookie."""
         if user.role is not Role.USER:
             # Admin accounts are operator-managed (manage_admin CLI). Self-serve
             # erasure from the public drawer must not be able to take the panel down.

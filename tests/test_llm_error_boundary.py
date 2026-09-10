@@ -51,11 +51,7 @@ class _FailingAgent:
 async def test_a_failed_call_maps_to_its_status(
     test_app: FastAPI, failure: Exception, status: int
 ) -> None:
-    """A refusal is the caller's model or key (400); anything else is upstream (502).
-
-    The handler lookup walks the exception's MRO, so the rejection handler answers
-    even though the error also is an ``LLMInvocationError``.
-    """
+    """A refusal is the caller's model or key (400); anything else is upstream (502)."""
     test_app.dependency_overrides[build_dish_lookup_agent] = lambda: _FailingAgent(failure)
 
     transport = ASGITransport(app=test_app)

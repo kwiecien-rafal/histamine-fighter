@@ -90,20 +90,7 @@ def more_cautious(first: SafetyLevel, second: SafetyLevel) -> SafetyLevel:
 
 
 def resolve_levels(levels: set[SafetyLevel]) -> SafetyLevel:
-    """Resolve one ingredient's risk from the levels its index matches map to.
-
-    Disagreement is resolved at the *safety* layer, not the raw compatibility
-    one, so two distinct compatibilities that mean the same thing never look like
-    a conflict:
-
-    - no levels (ingredient absent or unrated) -> safe;
-    - all matches agree -> that level (two ``avoid`` readings stay ``avoid``, two
-      ``safe`` readings stay ``safe``);
-    - a ``safe`` reading coexists with a risky one -> ``depends`` (the genuine
-      egg-yolk-vs-egg-white case: it depends which form the dish uses);
-    - every reading is risky but they differ in degree -> the most cautious of
-      them (caution is never softened to ``depends``).
-    """
+    """Resolve one ingredient's risk from the levels its index matches map to."""
     if not levels:
         return SafetyLevel.SAFE
     floor = min(levels, key=SAFETY_SEVERITY.__getitem__)
@@ -145,11 +132,7 @@ def worst_risky(candidates: list["LookupCandidate"]) -> LookupCandidate | None:
 
 
 def grounded_verdict(lookups: list["LookupResult"]) -> SafetyLevel:
-    """The dish verdict the index supports: the most cautious per-ingredient risk.
-
-    Each lookup contributes one level; ingredients absent from the index return no
-    candidates and add no risk. With nothing risky recorded the verdict is safe.
-    """
+    """The dish verdict the index supports: the most cautious per-ingredient risk."""
     verdict = SafetyLevel.SAFE
     for lookup in lookups:
         verdict = more_cautious(verdict, candidates_safety(lookup.candidates))
@@ -201,12 +184,7 @@ async def _resolve_with_category(
     category: str | None,
     primary: list[IngredientMatch],
 ) -> LookupResult:
-    """Assemble from the primary matches, falling back to the category on a miss.
-
-    The ingredient's own entry is authoritative; only when it misses and a
-    ``category`` descriptor is given ("aged hard cheese" for parmesan) does the
-    lookup fall back to that category's umbrella row.
-    """
+    """Assemble from the primary matches, falling back to the category on a miss."""
     if primary:
         return _assemble_result(ingredient, primary, "ingredient")
     if category and category.strip():
@@ -219,21 +197,7 @@ async def _resolve_with_category(
 async def lookup_ingredient_safety(
     service: IngredientService, ingredient: str, category: str | None = None
 ) -> LookupResult:
-    """Look up one ingredient's histamine compatibility in the curated index.
-
-    The index records histamine-relevant foods, so a miss means no known
-    concern, not danger. Kept as the single-ingredient entry point (and its
-    tests); the dish agent uses :func:`lookup_ingredients` for the whole list.
-
-    Args:
-        service: Request-scoped service reading the curated index.
-        ingredient: A single ingredient name, not a phrase or dish.
-        category: Short food-group + preparation descriptor for the fallback.
-
-    Returns:
-        A :class:`LookupResult`. On invalid input or a database blip it carries
-        ``error`` and no candidates, never raising at the caller.
-    """
+    """Look up one ingredient's histamine compatibility in the curated index."""
     query = ingredient.strip()
     if not query:
         return _unusable(ingredient, _EMPTY_INPUT)
@@ -251,16 +215,7 @@ async def lookup_ingredient_safety(
 async def lookup_ingredients(
     service: IngredientService, items: Sequence[tuple[str, str | None]]
 ) -> list[LookupResult]:
-    """Read a whole confirmed list, batching the common primary tier.
-
-    One :meth:`IngredientService.find_candidates_many` resolves every name's
-    primary match in ~2 queries; a per-miss category fallback then runs serially
-    for the items that missed and carry a category (the rare cold path). The
-    cautious direction governs the failures: invalid input degrades that one
-    item; a category-fallback blip degrades that one item; a failure of the
-    batched primary query degrades every item it covered. Results stay in the
-    order of ``items``.
-    """
+    """Read a whole confirmed list, batching the common primary tier."""
     results: list[LookupResult | None] = [None] * len(items)
     pending: list[int] = []
     for index, (ingredient, _category) in enumerate(items):
@@ -303,15 +258,7 @@ async def verify_submission(
     *,
     risky_terms: TermMatcher | None = None,
 ) -> "MealVerification":
-    """Re-derive a meal's safety from the index: the shared composer/edit gate.
-
-    Reads every ingredient against the curated index, so a composition and an admin
-    edit can never produce different ingredient verdicts for the same list. The recipe
-    scan for index-flagged terms only runs when ``risky_terms`` is supplied (the
-    composer path); the admin gate omits it. ``meal_verification`` is imported inside
-    the function on purpose: it depends on this module's ``LookupResult``, so a
-    module-level import here would cycle.
-    """
+    """Re-derive a meal's safety from the index: the shared composer/edit gate."""
     from app.agents.meal_verification import verify_meal
 
     lookups = await lookup_ingredients(

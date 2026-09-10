@@ -44,11 +44,7 @@ class TermMatcher:
         return bool(tokens) and any(term <= tokens or tokens <= term for _, term in self.terms)
 
     def found_in(self, text: str) -> list[str]:
-        """The terms whose tokens all appear in the text, in order, deduped.
-
-        One-directional on purpose: prose is matched by whether a term occurs in
-        it, not by the symmetric containment :meth:`matched` uses for two names.
-        """
+        """The terms whose tokens all appear in the text, in order, deduped."""
         tokens = _tokenize(text)
         if not tokens:
             return []
@@ -66,12 +62,7 @@ def _tokenize(text: str) -> frozenset[str]:
 
 
 def _singularize(word: str) -> str:
-    """Strip a common English plural so "tomatoes" and "tomato" share a token.
-
-    Conservative and applied to both sides of every comparison, so it never needs
-    to be correct English, only consistent: "molasses" folding to "molass" matches
-    nothing and harms nothing.
-    """
+    """Strip a common English plural so "tomatoes" and "tomato" share a token."""
     if len(word) <= 3:
         return word
     if word.endswith("ies"):

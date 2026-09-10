@@ -54,12 +54,7 @@ async def verify_edit(service: IngredientService, payload: MealEditFields) -> Me
 
 
 def ensure_safe(verification: MealVerification, *, confirmed: bool) -> list[str]:
-    """Apply the admin gate policy; raise UnsafeMealEdit on refusal.
-
-    Returns the formatted flagged items ("name (level)") the admin confirmed past,
-    for the caller to record alongside the unverified list, or an empty list when
-    nothing was flagged.
-    """
+    """Apply the admin gate policy; raise UnsafeMealEdit on refusal."""
     errors = [b for b in verification.blockers if b[1] is TraceReading.UNVERIFIABLE]
     overridable = [b for b in verification.blockers if b[1] is TraceReading.AVOID]
     if errors:

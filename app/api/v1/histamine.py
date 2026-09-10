@@ -31,11 +31,7 @@ async def lookup_ingredient(
     ),
     service: IngredientService = Depends(get_ingredient_service),
 ) -> IngredientLookupResponse:
-    """Return the curated index's candidate matches for an ingredient name.
-
-    The candidates are reported as-is, ambiguity included; disambiguation is the
-    caller's job. A miss returns an empty list, which means unknown, not safe.
-    """
+    """Return the curated index's candidate matches for an ingredient name."""
     candidates = await service.find_candidates(name)
     return IngredientLookupResponse(
         query=name,

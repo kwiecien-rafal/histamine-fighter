@@ -112,12 +112,7 @@ def test_strip_region_tags_with_no_tags_is_a_passthrough() -> None:
 def test_strip_tag_set_matches_its_template_regions(
     user_template: str, strip_tags: tuple[str, ...]
 ) -> None:
-    """Each agent's strip-tag tuple must cover exactly its template's regions.
-
-    The tuples are hand-maintained beside the agents; pinning them to the
-    templates means adding a ``<region>`` without extending the tuple — which
-    would silently reopen the delimiter-spoofing hole — fails here instead.
-    """
+    """Each agent's strip-tag tuple must cover exactly its template's regions."""
     regions = set(_REGION_TAG.findall(load_prompt(user_template)))
     assert set(strip_tags) == regions
 
@@ -167,12 +162,7 @@ def test_system_prompts_assemble_with_shared_identity(name: str) -> None:
 
 
 def test_no_prompt_file_is_hard_wrapped() -> None:
-    """Prose lines end at sentence boundaries, not at a formatter's column limit.
-
-    A hard wrap shows up as a line that stops just short of a typical 80-120
-    column limit mid-sentence; unwrapped paragraphs are either short or far
-    longer than any wrap column.
-    """
+    """Prose lines end at sentence boundaries, not at a formatter's column limit."""
     prompts_dir = Path(prompting.__file__).parent / "prompts"
     for path in prompts_dir.rglob("*.md"):
         if path.name == "README.md":

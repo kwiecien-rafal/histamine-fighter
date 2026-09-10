@@ -85,12 +85,7 @@ async def save_meal(
     meal_service: MealService = Depends(get_meal_service),
     daily_service: DailyService = Depends(get_daily_service),
 ) -> SavedMealDetail:
-    """Save a meal: 201 with the stored snapshot, or 200 with the existing one.
-
-    Idempotent per (source, source row); the service owns that and the source gates.
-    The per-user cap answers 409 — an abuse bound, not something a real collection
-    should reach.
-    """
+    """Save a meal: 201 with the stored snapshot, or 200 with the existing one."""
     try:
         row, created = await service.save(user.id, payload, meals=meal_service, daily=daily_service)
     except SaveLimitReached as exc:

@@ -94,11 +94,7 @@ def normalize_dish_text(value: str, *, max_chars: int) -> str:
 
 
 def lookup_source_key(dish: str) -> str:
-    """The canonical key for a dish name, derived server-side.
-
-    Keys the lookup caches. Saved meals used to share it, but now key on a
-    client-minted per-result id so same-named results save separately.
-    """
+    """The canonical key for a dish name, derived server-side."""
     return normalize_dish_text(dish, max_chars=MAX_DISH_CHARS).casefold()
 
 
@@ -353,16 +349,7 @@ def apply_adaptations(
     ingredients: list[ConfirmedIngredient],
     adaptations: list[Adaptation],
 ) -> list[ProposedIngredient]:
-    """The dish with every fixable problem fixed and the rest kept as it is.
-
-    A ``swap`` puts its index-vetted replacement where the ingredients it covers
-    were, an ``omit`` drops them, and a ``no_safe_swap`` keeps them — the dish
-    stays cookable and the page badges what that costs.
-
-    Deliberately not what :attr:`AdaptedDish.ingredients` holds: that field's
-    contract is a list the index cleared, and this one is best effort — it may
-    still carry the name nothing could replace, so it must never be read as one.
-    """
+    """The dish with every fixable problem fixed and the rest kept as it is."""
     covered: dict[str, Adaptation] = {
         name.casefold(): entry for entry in adaptations for name in entry.ingredients
     }
@@ -388,7 +375,7 @@ class CautionedIngredient(BaseModel):
 
     The note is the curated index's own wording ("fresh only", "small amounts"),
     never model-written: the model may keep the ingredient, but only the index says
-    how. A stable domain value pair (CLAUDE section 19); the frontend derives its
+    how. A stable domain value pair; the frontend derives its
     caution styling from the field's presence.
     """
 
@@ -511,7 +498,7 @@ class DishAlternativesDraft(BaseModel):
 class DishAlternative(BaseModel):
     """One suggested dish; its name fits :class:`DishLookupRequest` for re-lookup.
 
-    ``source`` is a neutral domain value, not branded copy (CLAUDE section 19):
+    ``source`` is a neutral domain value, not branded copy:
     ``verified`` is a member of the approved pool (code-verified and admin-approved,
     so the claim is sound), ``generated`` is a fresh idea the user re-vets on click.
     It defaults to ``generated`` so a caller that does not set it makes no safety
@@ -666,11 +653,7 @@ class TraceEvent(BaseModel):
 
 
 def public_trace(events: Iterable[TraceEvent]) -> list[TraceEvent]:
-    """The replayable trace with the model's own prose dropped.
-
-    Only code-authored steps reach a public surface: a ``draft`` is the model's text,
-    which never makes a safety claim to a visitor. The admin views keep the full trace.
-    """
+    """The replayable trace with the model's own prose dropped."""
     return [event for event in events if event.kind not in MODEL_AUTHORED_TRACE_KINDS]
 
 

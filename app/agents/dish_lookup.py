@@ -153,11 +153,7 @@ _NO_INGREDIENTS_FEEDBACK = (
 
 
 def _goal_line(goal: AlternativeGoal) -> str:
-    """The code-owned prompt line for a goal; the enum value is never interpolated.
-
-    A ``match`` rather than a lookup table, so adding an ``AlternativeGoal`` is a
-    type error here until it is handled, never a runtime ``KeyError``.
-    """
+    """The code-owned prompt line for a goal; the enum value is never interpolated."""
     match goal:
         case AlternativeGoal.ANY_MEAL:
             return "Suggest any satisfying meals; they need not resemble the original dish."
@@ -204,18 +200,7 @@ def _matches_safety(matches: list[IngredientMatch]) -> SafetyLevel:
 
 
 def _format_flagged(flagged: list[FlaggedIngredient]) -> str:
-    """The flagged ingredients as labelled lines for the synthesis prompt.
-
-    Prose-shaped rather than JSON: the model grounds its explanation in named
-    facts it can quote ("mechanisms: high histamine") instead of decoding
-    key/value structure, and the synthesis system prompt describes these labels
-    directly. Serves both severity sections: only avoid-level entries ever carry
-    ``safe_options``, so the candidate-swaps line never appears for watch lines.
-
-    An errored lookup renders as a single unverified line. An ambiguous one
-    lists every index reading instead of one compatibility, so the section
-    label ("depends-level") and the line can never contradict each other.
-    """
+    """The flagged ingredients as labelled lines for the synthesis prompt."""
     if not flagged:
         return "None."
     lines: list[str] = []
@@ -243,12 +228,7 @@ def _format_flagged(flagged: list[FlaggedIngredient]) -> str:
 
 
 def _format_candidates(lookups: list[LookupResult]) -> str:
-    """The ambiguous lookups as labelled lines for the disambiguation prompt.
-
-    One line per ingredient with the rows it matched, each shown with its food
-    category so the model can judge identity. Compatibility is withheld on
-    purpose: the model resolves which row an ingredient is, never how risky.
-    """
+    """The ambiguous lookups as labelled lines for the disambiguation prompt."""
     lines: list[str] = []
     for lookup in lookups:
         rows = ", ".join(
@@ -264,12 +244,7 @@ def _clipped(value: str, limit: int = MAX_INGREDIENT_CHARS) -> str:
 
 
 def _clipped_pitch(value: str, limit: int = MAX_PITCH_CHARS) -> str:
-    """Clip a pitch on a word boundary, marking a real cut with an ellipsis.
-
-    A verified pick reuses a meal's description, which is not written to the pitch
-    length, so a plain slice would chop mid-word. Pitches within the limit pass
-    through unchanged.
-    """
+    """Clip a pitch on a word boundary, marking a real cut with an ellipsis."""
     text = value.strip()
     if len(text) <= limit:
         return text
@@ -279,13 +254,7 @@ def _clipped_pitch(value: str, limit: int = MAX_PITCH_CHARS) -> str:
 
 
 def _normalized(items: list[ProposedIngredientDraft]) -> list[ProposedIngredient]:
-    """Degrade the model's draft items into valid response items.
-
-    The draft schema is deliberately unconstrained so a sloppy model cannot fail
-    the parse; everything the response schema enforces is normalized here
-    instead — trim and truncate each field, drop blanks, dedupe
-    (case-insensitive, order kept), cap the count.
-    """
+    """Degrade the model's draft items into valid response items."""
     kept: list[ProposedIngredient] = []
     seen: set[str] = set()
     for item in items:
@@ -301,11 +270,7 @@ def _normalized(items: list[ProposedIngredientDraft]) -> list[ProposedIngredient
 
 
 def _ingredient_assessment(name: str, lookup: LookupResult) -> IngredientAssessment:
-    """One confirmed ingredient's reading for the per-ingredient badge.
-
-    A failed lookup is marked ``error`` and reads as "depends": a cautious
-    default consistent with the floored dish verdict, not an index reading.
-    """
+    """One confirmed ingredient's reading for the per-ingredient badge."""
     if lookup.error:
         return IngredientAssessment(name=name, safety=SafetyLevel.DEPENDS, found=False, error=True)
     worst = worst_risky(lookup.candidates)
@@ -319,11 +284,7 @@ def _ingredient_assessment(name: str, lookup: LookupResult) -> IngredientAssessm
 
 
 def _parse_role(value: str) -> CulinaryRole | None:
-    """Parse a role, or ``None`` when the model wrote something off-enum.
-
-    The caller picks the fallback (and records that it had to), so the choice
-    and its logging live in one place rather than being hidden here.
-    """
+    """Parse a role, or ``None`` when the model wrote something off-enum."""
     try:
         return CulinaryRole(value.strip().lower())
     except ValueError:
@@ -350,20 +311,7 @@ def _default_reason(action: AdaptationAction, swap: str) -> str:
 def _normalized_adaptations(
     drafts: list[AdaptationDraft], avoid_names: dict[str, str]
 ) -> list[Adaptation]:
-    """Degrade the model's adaptation drafts into valid entries.
-
-    ``avoid_names`` maps casefolded avoid-level names to their confirmed
-    spelling — the only ingredients an adaptation may cover. A draft pulling in
-    a depends-level or invented name is exactly the over-swapping this design
-    kills, so such names are filtered out and an emptied entry is dropped.
-    Overlapping entries resolve first-wins; unknown enum strings, a missing
-    swap, and over-long reasons all degrade in code, never fail the parse.
-
-    The guiding rule on ``reason``: the model's words survive only while its
-    stated action does. Whenever code has to infer or demote the action down to
-    ``no_safe_swap``, the reason — which argued for some replacement — is reset
-    to a neutral template, never carried onto a card that now says the opposite.
-    """
+    """Degrade the model's adaptation drafts into valid entries."""
     kept: list[Adaptation] = []
     covered: set[str] = set()
     for draft in drafts:
@@ -447,12 +395,7 @@ def _default_advisory(entry: FlaggedIngredient) -> str:
 def _normalized_advisories(
     drafts: list[AdvisoryDraft], watch_flagged: list[FlaggedIngredient]
 ) -> list[Advisory]:
-    """One advisory per depends-level ingredient, model prose preferred.
-
-    Drafts naming anything outside the watch list are dropped; a watch
-    ingredient the model skipped still gets a note templated from its index
-    mechanisms, so every flagged ingredient is visibly addressed.
-    """
+    """One advisory per depends-level ingredient, model prose preferred."""
     by_key = {entry.ingredient.casefold(): entry for entry in watch_flagged}
     notes: dict[str, str] = {}
     for draft in drafts:
@@ -469,13 +412,7 @@ def _normalized_advisories(
 
 
 def _verified_alternatives(meals: list[CuratedMeal]) -> list[DishAlternative]:
-    """Approved-pool meals as verified suggestions; the description is the pitch.
-
-    The claim is sound because membership means code-verified plus admin-approved.
-    A meal whose name clips to blank is skipped; dedupe and the cap happen when the
-    tiers are combined, where verified picks fill first and so keep precedence over
-    generated ones.
-    """
+    """Approved-pool meals as verified suggestions; the description is the pitch."""
     kept: list[DishAlternative] = []
     for meal in meals:
         name = _clipped(meal.name, MAX_DISH_CHARS)
@@ -488,9 +425,7 @@ def _verified_alternatives(meals: list[CuratedMeal]) -> list[DishAlternative]:
 
 
 def _generated_alternatives(items: list[AlternativeDraft]) -> list[DishAlternative]:
-    """The model's fresh ideas, clipped; blanks dropped. Makes no safety claim, so
-    each is re-vetted when the user looks it up. Dedupe and the cap happen when the
-    tiers are combined."""
+    """The model's fresh ideas, clipped; blanks dropped."""
     kept: list[DishAlternative] = []
     for item in items:
         name = _clipped(item.name, MAX_DISH_CHARS)
@@ -505,14 +440,7 @@ def _generated_alternatives(items: list[AlternativeDraft]) -> list[DishAlternati
 def _take_alternatives(
     kept: list[DishAlternative], seen: set[str], items: Iterable[DishAlternative]
 ) -> None:
-    """Append items new by casefolded name into ``kept``, up to MAX_ALTERNATIVES.
-
-    ``kept`` and ``seen`` are shared across the verified then generated passes, so
-    one cap and one dedupe span both tiers: a generated idea repeating a verified
-    name (or the dish, pre-seeded in ``seen``) cannot take a slot, and verified
-    picks keep precedence because they fill first. An empty result is a valid
-    "nothing fits" answer.
-    """
+    """Append items new by casefolded name into ``kept``, up to MAX_ALTERNATIVES."""
     for item in items:
         if len(kept) == MAX_ALTERNATIVES:
             return
@@ -524,14 +452,7 @@ def _take_alternatives(
 
 
 def _format_problems(adaptations: list[Adaptation]) -> str:
-    """The grounded adaptations as labelled lines for the rewrite prompt.
-
-    Prose-shaped like the synthesis sections, and carrying the decisions already
-    made rather than the raw index readings: each entry's role, the action code
-    vetted (a swap here has passed ``_swap_is_safe``), and the reason. The model
-    builds the new dish from these instead of re-deciding what to do about each
-    ingredient.
-    """
+    """The grounded adaptations as labelled lines for the rewrite prompt."""
     lines: list[str] = []
     for entry in adaptations:
         match entry.action:
@@ -553,15 +474,7 @@ def _normalized_changes(
     original: list[ConfirmedIngredient],
     adapted: list[ProposedIngredient],
 ) -> list[IngredientChange]:
-    """Degrade the model's change lines into a diff that cannot misdescribe the dish.
-
-    Membership is code's: an ``original`` not on the assessed list is dropped, a
-    ``replacement`` not on the rewritten list reads as a plain removal, and a line
-    for an ingredient that is still in the dish is not a change at all. Whatever
-    the model leaves unaccounted for is appended, so every ingredient that
-    disappeared is visible — the same "surface the gap" rule the adaptations use.
-    The model's words survive only as ``reason``.
-    """
+    """Degrade the model's change lines into a diff that cannot misdescribe the dish."""
     originals = {item.name.casefold(): item.name for item in original}
     kept = {item.name.casefold() for item in adapted}
     replacements = {item.name.casefold(): item.name for item in adapted}
@@ -608,16 +521,7 @@ def _blocking_ingredients(adaptations: list[Adaptation]) -> list[str]:
 
 
 def _integrity(adaptations: list[Adaptation]) -> DishIntegrity:
-    """Grade what the adaptations do to the dish's identity.
-
-    A group only reaches ``core`` from the model stating it (see
-    ``_UNCERTAIN_ROLE``), so this most consequential signal never rests on a
-    code-chosen default. ``lost`` is a core group with no safe swap, the dead end
-    that tells the user to abandon the dish. ``altered`` is a core group that was
-    swapped or omitted: the dish is still makeable but no longer quite itself, so
-    the pivot is offered without the abandon-it wording. One swapped core
-    ingredient is enough, since a dish can hinge on several.
-    """
+    """Grade what the adaptations do to the dish's identity."""
     if any(
         entry.role is CulinaryRole.CORE and entry.action is AdaptationAction.NO_SAFE_SWAP
         for entry in adaptations
@@ -798,18 +702,7 @@ class DishLookupAgent(BaseAgent):
         )
 
     async def _disambiguate(self, dish: str, lookups: list[LookupResult]) -> list[LookupResult]:
-        """Drop clearly wrong rows from the ambiguous lookups, verdict invariant.
-
-        Only ambiguous lookups (candidates that disagree on compatibility) are
-        eligible, since nothing else can change the verdict, and if none are the
-        call is skipped. One batched call returns, per ingredient, the rows to
-        keep. Safety stays code's alone: a row name the model invents is ignored,
-        an empty keep-list leaves every original in place, any failure leaves the
-        lookups untouched, and a keep-list that would move an ingredient's
-        resolved level is held — the model reaching for the verdict, not identity.
-        So a prune only ever cleans the prose and adaptations, never the verdict,
-        which is provably identical with or without this step.
-        """
+        """Drop clearly wrong rows from the ambiguous lookups, verdict invariant."""
         eligible = [lookup for lookup in lookups if lookup.found and lookup.ambiguous]
         if not eligible:
             return lookups
@@ -877,20 +770,7 @@ class DishLookupAgent(BaseAgent):
         return revised
 
     def _flagged(self, lookups: list[LookupResult]) -> list[FlaggedIngredient]:
-        """Summarise the risky ingredients for the synthesis step.
-
-        One entry per risky lookup, built from its most severe risky candidate, so
-        the model writes adaptations and explanations for exactly what the index
-        flagged. ``severity`` is the resolved per-ingredient risk — the same
-        reading the per-ingredient badge shows — and decides the entry's tier.
-
-        Two special entry shapes keep the prompt honest: an *errored* lookup read
-        nothing, so it joins the watch tier marked unverified (matching its
-        floored badge) rather than silently vanishing from the prompt; and an
-        *ambiguous* lookup carries all of its index readings, so the model can
-        explain a conflict instead of guessing at one reading shown out of
-        context.
-        """
+        """Summarise the risky ingredients for the synthesis step."""
         flagged: list[FlaggedIngredient] = []
         for lookup in lookups:
             if lookup.error:
@@ -979,16 +859,7 @@ class DishLookupAgent(BaseAgent):
         adaptations: list[Adaptation],
         avoid_names: dict[str, str],
     ) -> list[Adaptation]:
-        """Vet every proposed swap against the index; never invent one.
-
-        A safe verdict carries no adaptations. A swap the index flags demotes
-        its entry to ``no_safe_swap`` in place — the model's reason argued for
-        the rejected swap, so a neutral one replaces it. An avoid-level
-        ingredient the model never covered gets an appended ``no_safe_swap``
-        entry so the gap is still surfaced (and the alternatives pivot still
-        offered); its role is the uncertain default, not ``core``, because a
-        forgotten ingredient is no evidence the dish is unsalvageable.
-        """
+        """Vet every proposed swap against the index; never invent one."""
         if verdict is SafetyLevel.SAFE:
             return []
 
@@ -1038,28 +909,7 @@ class DishLookupAgent(BaseAgent):
         ingredients: list[ConfirmedIngredient],
         assessment: DishAssessmentResponse,
     ) -> AdaptedDish:
-        """Rewrite the assessed dish into a version the curated index can support.
-
-        Four outcomes, two of them free. A dish with nothing avoid-level in it has
-        nothing to replace (``unchanged``), and one the assessment already graded
-        as having lost its identity has no version to find (``impossible``) — both
-        are read off the assessment before a call is made. Otherwise the model
-        drafts the whole new ingredient list and code reads every name back from
-        the index: anything it flags sends the draft back naming the offenders, up
-        to ``_MAX_ADAPT_ROUNDS`` times, after which the attempt is ``exhausted``.
-
-        Safety is never the model's to assert. A list only ships once the index has
-        cleared it, and the verdict on it is the same ``grounded_verdict`` the
-        assess path computes — so the same ingredients never read two ways.
-
-        Args:
-            dish: The dish text the visitor sent, for the prompt.
-            ingredients: The list the assessment was computed from.
-            assessment: That assessment; its adaptations are the brief.
-
-        Returns:
-            The rewritten dish, or the outcome explaining why there is none.
-        """
+        """Rewrite the assessed dish into a version the curated index can support."""
         self._begin_usage()
         if not assessment.adaptations:
             return self._unchanged_dish(ingredients, assessment)
@@ -1169,12 +1019,7 @@ class DishLookupAgent(BaseAgent):
     def _unchanged_dish(
         self, ingredients: list[ConfirmedIngredient], assessment: DishAssessmentResponse
     ) -> AdaptedDish:
-        """The dish as it stands, when the index flags nothing avoid-level to replace.
-
-        Costs no model call, so it credits no model: the badge is left empty rather
-        than attributing an answer the index alone produced. The assessment's own
-        verdict travels, so a depends-level dish still reads as one.
-        """
+        """The dish as it stands, when the index flags nothing avoid-level to replace."""
         return AdaptedDish(
             dish=assessment.dish,
             name=assessment.dish,
@@ -1194,14 +1039,7 @@ class DishLookupAgent(BaseAgent):
         blocked: list[str],
         outcome: RewriteOutcome = RewriteOutcome.IMPOSSIBLE,
     ) -> AdaptedDish:
-        """A dead end, and which kind it is.
-
-        ``impossible`` is a claim about the dish — a core ingredient the index has
-        no replacement for, read straight off the assessment. ``exhausted`` is only
-        a claim about this run, so its wording never tells anyone the dish cannot
-        be made. The two are kept apart here rather than in the page, so the JSON
-        API cannot report one as the other.
-        """
+        """A dead end, and which kind it is."""
         if outcome is RewriteOutcome.IMPOSSIBLE:
             listed = ", ".join(blocked) or "what makes it itself"
             explanation = (
@@ -1224,15 +1062,7 @@ class DishLookupAgent(BaseAgent):
     async def _safe_anchors(
         self, avoid_ingredients: list[str], prefer_ingredients: list[str]
     ) -> list[str]:
-        """Well-tolerated ingredients to steer the suggestions toward.
-
-        The dish's own confirmed-safe ingredients lead: they are the truest "this
-        dish, minus the problem" signal. They are then topped up with well-tolerated
-        swaps from each excluded ingredient's index category, so a dish with few safe
-        parts still gets direction. All curated reads, no model call. An excluded
-        ingredient never anchors its own replacement; the result is deduped
-        (case-insensitive) and capped.
-        """
+        """Well-tolerated ingredients to steer the suggestions toward."""
         excluded = {name.casefold() for name in avoid_ingredients}
         seen: set[str] = set()
         anchors: list[str] = []
@@ -1266,12 +1096,7 @@ class DishLookupAgent(BaseAgent):
         return anchors
 
     async def _avoid_categories(self, avoid_ingredients: list[str]) -> list[str]:
-        """Each excluded ingredient's index category, best match only, deduped.
-
-        Only the top-ranked candidate's category is taken, mirroring how the assess
-        path resolves a single reading: a lower fuzzy candidate would drag in a
-        category the ingredient does not really belong to.
-        """
+        """Each excluded ingredient's index category, best match only, deduped."""
         matches_by_name = await self._service.find_candidates_many(avoid_ingredients)
         categories: list[str] = []
         seen: set[str] = set()
@@ -1292,29 +1117,7 @@ class DishLookupAgent(BaseAgent):
         avoid_ingredients: list[str],
         prefer_ingredients: list[str] | None = None,
     ) -> DishAlternativesResponse:
-        """Suggest different dishes once this one cannot keep its identity.
-
-        Two tiers. First retrieve from the verified pool and re-grade each pick
-        against the live index. Membership means the meal was code-verified and
-        admin-approved, but the index is mutable, so the ``verified`` signal must
-        mean safe now, not safe when it was approved. A pick that still grounds to
-        safe keeps the signal, with similarity there being pure relevance and the
-        *goal* selecting the query axis. One that no longer does drops out, and the
-        generation tier fills its place. Then, only if the pool did not fill the
-        count, generate fresh ideas to top it up: these make no safety claim and
-        are re-vetted when the user looks them up (propose → confirm → assess).
-        Both ingredient lists are client-asserted and never touch a verdict:
-        ``avoid_ingredients`` exclude pool dishes built on them, while
-        ``prefer_ingredients`` (the looked-up dish's own safe parts) lead the
-        anchors so suggestions build on what already worked before falling back to
-        category swaps.
-
-        Re-grading and retrieval are both zero model calls, so usage is still
-        tallied only when the generation tier runs. A picked suggestion is always
-        looked up again by name, so a verified pick can read differently when its
-        name decomposes into other ingredients than the pool stored. That fresh
-        lookup is the intended vetting, not a verdict this pivot owns.
-        """
+        """Suggest different dishes once this one cannot keep its identity."""
         self._begin_usage()
         prefer = prefer_ingredients or []
         # similar_flavours queries the pool by the safe anchors, so they are needed
@@ -1380,14 +1183,7 @@ class DishLookupAgent(BaseAgent):
     async def _verified_picks(
         self, goal: AlternativeGoal, dish: str, anchors: list[str], avoid_ingredients: list[str]
     ) -> list[CuratedMeal]:
-        """Retrieve approved-pool meals for the goal; the goal picks the query axis.
-
-        ``same_style`` searches by the rejected dish name (the nearest pool dishes
-        are the same style, now safe by membership); ``similar_flavours`` searches
-        by the safe-anchor flavour terms; ``any_meal`` skips similarity and samples
-        at random. The ``avoid_ingredients`` are excluded throughout, so a pool dish
-        built on what the user is avoiding is never offered back.
-        """
+        """Retrieve approved-pool meals for the goal; the goal picks the query axis."""
         match goal:
             case AlternativeGoal.SAME_STYLE:
                 matches = await self._meal_service.search(
@@ -1408,17 +1204,7 @@ class DishLookupAgent(BaseAgent):
         assert_never(goal)
 
     async def _still_safe(self, meals: list[CuratedMeal]) -> list[CuratedMeal]:
-        """Keep only pool meals that still ground to safe against the live index.
-
-        A meal joined the pool code-verified and admin-approved, but the index it
-        was graded against can change, so the ``verified`` badge is re-earned here
-        rather than trusted: each meal's stored ingredients are re-graded by the
-        same code that grades a live lookup, and a meal that no longer grounds to
-        safe is dropped so the generation tier can fill its place. No model call,
-        the verdict comes from the index. A meal carrying no ingredients grounds to
-        safe by the same rule a clean lookup does, which the composer never emits
-        but the code handles without a special case.
-        """
+        """Keep only pool meals that still ground to safe against the live index."""
         kept: list[CuratedMeal] = []
         for meal in meals:
             items = [
@@ -1439,15 +1225,7 @@ class DishLookupAgent(BaseAgent):
         already_chosen: list[str],
         count: int,
     ) -> list[DishAlternative]:
-        """Generate fresh dish ideas grounded in the safe anchors (one model call).
-
-        ``already_chosen`` are the verified picks already filling the list, named so
-        the model does not regenerate one. For ``same_style`` the pool picks are the
-        nearest dishes to the query, exactly what the model would propose unprompted,
-        so without this it would collide with them and waste the slots. ``count`` is
-        how many slots remain, so the model writes only what is needed. Both are a
-        prompt steer, not the guarantee: the merge still dedupes and caps.
-        """
+        """Generate fresh dish ideas grounded in the safe anchors (one model call)."""
         messages: list[BaseMessage] = [
             SystemMessage(self._alternatives_prompt),
             HumanMessage(

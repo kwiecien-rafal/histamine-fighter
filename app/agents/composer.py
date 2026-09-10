@@ -146,17 +146,7 @@ class ComposerAgent(BaseAgent):
     async def compose(
         self, meal_type: MealType, inspiration: InspirationBrief | None = None
     ) -> ComposedMeal:
-        """Compose one verified-safe meal for the meal type, or raise on no result.
-
-        Args:
-            meal_type: The slot to compose.
-            inspiration: A code-drawn direction the model starts from, so runs vary
-                by construction rather than by sampling luck. ``None`` composes free.
-
-        Raises:
-            ComposerExhausted: the loop hit its budget without a safe submission.
-            LLMInvocationError: the model failed or cannot call tools.
-        """
+        """Compose one verified-safe meal for the meal type, or raise on no result."""
         async for item in self.events(meal_type, inspiration):
             if isinstance(item, ComposedMeal):
                 log.info(
@@ -175,16 +165,7 @@ class ComposerAgent(BaseAgent):
     async def stream(
         self, meal_type: MealType, inspiration: InspirationBrief | None = None
     ) -> AsyncIterator[str]:
-        """Stream the run as discriminated JSON lines: trace steps, then the meal.
-
-        The ``BaseAgent`` streaming contract, implemented so it cannot be silently
-        dropped (CLAUDE section 8). The live admin SSE path does not go through here:
-        :class:`~app.services.composer_streamer.ComposerStreamer` consumes ``events()``
-        directly, because it needs the trace-carrying ``ComposedMeal`` to persist. Each
-        step is a ``TraceStreamItem`` and the terminal item a ``MealStreamItem`` whose
-        meal omits the trace (the client assembled it from the steps), so a consumer
-        switches on ``type`` instead of sniffing the payload shape.
-        """
+        """Stream the run as discriminated JSON lines: trace steps, then the meal."""
         async for item in self.events(meal_type, inspiration):
             if isinstance(item, ComposedMeal):
                 yield MealStreamItem.of(item).model_dump_json()
@@ -194,13 +175,7 @@ class ComposerAgent(BaseAgent):
     async def events(
         self, meal_type: MealType, inspiration: InspirationBrief | None = None
     ) -> AsyncIterator[TraceEvent | ComposedMeal]:
-        """Drive the tool-calling loop, yielding each authored step then the meal.
-
-        The rich core: ``compose`` and ``stream`` consume it, and so does the live
-        streamer, which needs the terminal ``ComposedMeal`` (with its trace) to persist
-        the run. The running ``trace`` becomes the meal's ``reasoning_trace``, and each
-        new event is yielded as it is appended.
-        """
+        """Drive the tool-calling loop, yielding each authored step then the meal."""
         self._begin_usage()
         self._judge_rounds = 0
         try:
@@ -292,14 +267,7 @@ class ComposerAgent(BaseAgent):
     async def _handle_submission(
         self, meal_type: MealType, call: ToolCall, trace: list[TraceEvent], risky_terms: TermMatcher
     ) -> tuple[ComposedMeal | None, str | None]:
-        """Verify a submission in code; return the meal or feedback to revise.
-
-        The check is recomputed in code from the index, never trusted from the
-        model: a risky reading on any listed ingredient (or one that cannot be
-        read), or an index-flagged ingredient written into the recipe, sends it
-        back. Ingredients absent from the index pass but are recorded as
-        unverified. Appends the submit and the verify/reject events to ``trace``.
-        """
+        """Verify a submission in code; return the meal or feedback to revise."""
         try:
             submission = SubmitMeal.model_validate(call["args"])
         except ValidationError:
@@ -426,11 +394,7 @@ class ComposerAgent(BaseAgent):
         )
 
     async def _run_tool(self, call: ToolCall) -> tuple[str, TraceEvent]:
-        """Execute one read tool, returning the model-facing result and a trace event.
-
-        Tools only read the local database, never make an external call. The result
-        string is what the model reads next; the event is the human-facing line.
-        """
+        """Execute one read tool, returning the model-facing result and a trace event."""
         name = call["name"]
         args = call["args"]
         if name == LookupIngredientSafety.__name__:
@@ -490,11 +454,7 @@ class ComposerAgent(BaseAgent):
 
     @staticmethod
     def _reject_event(dish: str, verification: MealVerification) -> TraceEvent:
-        """The single trace line shown when a submission is sent back.
-
-        Leads with the most concrete reason: a flagged ingredient names the row and
-        its reading, otherwise a risky recipe mention names the term.
-        """
+        """The single trace line shown when a submission is sent back."""
         if verification.blockers:
             ingredient, reason = verification.blockers[0]
             return TraceEvent(

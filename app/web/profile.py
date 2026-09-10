@@ -177,12 +177,7 @@ async def write_recipe(
     ingredients: IngredientService = Depends(get_ingredient_service),
     resolved: RequestLLM = Depends(get_request_llm_config),
 ) -> Response:
-    """Write a recipe for a saved copy that has none. One model call, ever, per copy.
-
-    The agent is built here rather than injected so an unresolvable provider is
-    page copy: raised from a dependency it would reach the browser as the API's
-    JSON error body instead.
-    """
+    """Write a recipe for a saved copy that has none."""
     row = await _owned(service, user, save_id)
     try:
         agent = build_recipe_agent(resolved, ingredients)
@@ -249,11 +244,7 @@ def _meal_page(
     form: dict[str, object] | None = None,
     error: str | None = None,
 ) -> HTMLResponse:
-    """Render one saved copy and the form that edits it.
-
-    ``form`` carries back what was submitted when an edit failed, so a rejected
-    edit is corrected rather than retyped.
-    """
+    """Render one saved copy and the form that edits it."""
     return _private(
         templates.TemplateResponse(
             request,

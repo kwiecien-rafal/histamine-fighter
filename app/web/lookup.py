@@ -141,32 +141,14 @@ class LookupState(BaseModel):
 
     @property
     def ingredients(self) -> list[ProposedIngredient]:
-        """What is actually in the dish being shown.
-
-        A rewrite the index cleared is the dish. When there is none, the dish is the
-        list that was assessed with every fixable problem fixed and the rest kept —
-        best effort rather than cleared, and badged as such. A dead end is still a
-        dish someone may want to edit, cook or keep: tolerance is personal, and an
-        ingredient the index dislikes is theirs to decide on.
-        """
+        """What is actually in the dish being shown."""
         return self.adapted.ingredients or apply_adaptations(
             self.confirmed, self.result.adaptations
         )
 
     @property
     def advisories(self) -> list[Advisory]:
-        """The keep-an-eye-on notes for the dish on the page.
-
-        A rewrite's notes are the index's own wording for the depends-level
-        ingredients it kept, computed in code over the new list — so an empty list
-        there means the rewrite kept none, and the assessment's notes would name
-        ingredients that are no longer in the dish.
-
-        Every other outcome shows the assessed list itself, so the assessment's own
-        notes are the ones that apply. None of them can have gone missing on the
-        way: an adaptation only ever covers an avoid-level ingredient, and an
-        advisory only ever names a depends-level one.
-        """
+        """The keep-an-eye-on notes for the dish on the page."""
         if self.adapted.outcome is not RewriteOutcome.ADAPTED:
             return self.result.advisories
         return [
@@ -217,12 +199,7 @@ async def check(
     meals: MealService = Depends(get_meal_service),
     lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
-    """Work out a version of the dish the index can support, whichever way in.
-
-    From a name the model proposes the list first; from a list the visitor typed
-    there is nothing to propose and that call is saved. Both then run the same
-    assessment and rewrite, so neither way in can end on a dish the index refuses.
-    """
+    """Work out a version of the dish the index can support, whichever way in."""
     dish = dish.strip()
     own = mode == MODE_OWN
     # Read only when the radio asked for them, so an editor left filled by an
@@ -292,12 +269,7 @@ async def adapt_result(
     meals: MealService = Depends(get_meal_service),
     lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
-    """Run the rewrite again for a dish whose first attempt came up short.
-
-    The retry behind an ``exhausted`` run, and the only step that spends a call on
-    a dish already on the page. It re-grounds the same confirmed list, so a second
-    attempt starts from the ingredients the assessment was computed over.
-    """
+    """Run the rewrite again for a dish whose first attempt came up short."""
     current = _read_state(state)
     payload = DishRewriteRequest(dish=current.result.dish, ingredients=current.confirmed)
     try:
@@ -320,12 +292,7 @@ async def adapt_result(
 
 @router.post("/refine", response_class=HTMLResponse, name="web.lookup_refine")
 async def refine(request: Request, state: str = Form()) -> HTMLResponse:
-    """Open the version on the page back in the entry editor, ready to re-check.
-
-    Costs no model call of its own: it hands the rewritten list to the same form
-    someone typing their own list uses, so an edited version re-enters the flow as
-    exactly that — their dish rather than the model's suggestion.
-    """
+    """Open the version on the page back in the entry editor, ready to re-check."""
     current = _read_state(state)
     return _entry_page(
         request,
@@ -345,11 +312,7 @@ async def write_recipe(
     ingredients: IngredientService = Depends(get_ingredient_service),
     lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
-    """Write a recipe for the dish on the page, straight off its card.
-
-    Nothing is persisted: the dish is not a saved meal yet, so the steps ride in
-    the page's state until a save carries them along.
-    """
+    """Write a recipe for the dish on the page, straight off its card."""
     current = _read_state(state)
     if not current.ingredients:
         return _safe_page(request, current, error="There is no dish here to write a recipe for.")
@@ -384,11 +347,7 @@ async def suggest_alternatives(
     meals: MealService = Depends(get_meal_service),
     lookup: DishLookupService = Depends(get_dish_lookup_service),
 ) -> HTMLResponse:
-    """Suggest other dishes for one goal, once this one cannot be kept.
-
-    A goal already fetched is shown from the page's own state, so switching back
-    and forth between goals costs one model call each, not one per click.
-    """
+    """Suggest other dishes for one goal, once this one cannot be kept."""
     current = _read_state(state)
     if goal in current.alternatives:
         return _safe_page(request, current, goal=goal)
@@ -421,11 +380,7 @@ async def save_result(
     meals: MealService = Depends(get_meal_service),
     daily: DailyService = Depends(get_daily_service),
 ) -> Response:
-    """Put the dish on the page onto the visitor's shelf, then open their copy of it.
-
-    A rewritten dish saves as itself — its own name, its own verified list, its own
-    verdict — because that, not the dish they started from, is what they will cook.
-    """
+    """Put the dish on the page onto the visitor's shelf, then open their copy of it."""
     current = _read_state(state)
     if not current.ingredients:
         return _safe_page(request, current, error="There is no dish here to save.")
@@ -461,12 +416,7 @@ async def _lookup_agent(
     ingredients: IngredientService,
     meals: MealService,
 ) -> tuple[RequestLLM, DishLookupAgent]:
-    """Resolve this request's provider and wire the dish-lookup agent to it.
-
-    Both happen inside the handler's try block on purpose: a refusal here — no
-    session for the shared tier, a missing key, an unknown provider — belongs on
-    the page, and raised from a dependency it would reach the browser as JSON.
-    """
+    """Resolve this request's provider and wire the dish-lookup agent to it."""
     resolved = await get_request_llm_config(request, user, quota)
     return resolved, build_dish_lookup_agent(resolved, ingredients, meals)
 
@@ -489,14 +439,7 @@ def _alternatives_request(
 
 
 def _rewrite_call(*parts: LLMUsage, model: str) -> ModelCall | None:
-    """One usage line for a page several calls produced, or none when all were cached.
-
-    The rewrite path runs up to three calls behind a single form post — propose,
-    assess, and the rewrite itself — so reporting only the last would understate
-    what the page cost. A cached step contributes no steps and therefore no tokens,
-    and a page of nothing but cached steps reports no call at all rather than one
-    that cost nothing.
-    """
+    """One usage line for a page several calls produced, or none when all were cached."""
     steps = [entry for part in parts for entry in part.steps]
     if not steps:
         return None
@@ -514,11 +457,7 @@ def _rewrite_call(*parts: LLMUsage, model: str) -> ModelCall | None:
 
 
 def _read_state(raw: str) -> LookupState:
-    """The result the page carried back, re-validated here.
-
-    Only a tampered field or a tab left open across a deploy can fail this, and
-    neither leaves anything worth showing — so both start the flow again.
-    """
+    """The result the page carried back, re-validated here."""
     try:
         return LookupState.model_validate_json(raw)
     except ValidationError:
@@ -539,11 +478,7 @@ def _entry_page(
     error: str | None = None,
     unrecognized: bool = False,
 ) -> HTMLResponse:
-    """The one form the flow starts from, and the editor a re-check comes back to.
-
-    Keeps the dish name, the chosen half, and the rows as normalized, so a refused
-    check and an edited version both land on a form worth carrying on from.
-    """
+    """The one form the flow starts from, and the editor a re-check comes back to."""
     return templates.TemplateResponse(
         request,
         "lookup.html",
@@ -569,13 +504,7 @@ def _safe_page(
     error: str | None = None,
     call: ModelCall | None = None,
 ) -> HTMLResponse:
-    """The version of the dish the index can support, or why there is not one.
-
-    The flow's only result page, and one shape for all four outcomes. The assessment
-    reaches it already joined to the dish being shown — as the ingredient marks and
-    the swap advice — so the template renders view models rather than deciding which
-    of two dishes each part of the card is about.
-    """
+    """The version of the dish the index can support, or why there is not one."""
     return templates.TemplateResponse(
         request,
         "lookup_safe.html",

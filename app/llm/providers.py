@@ -68,22 +68,7 @@ class ResolvedLLMConfig(NamedTuple):
 def resolve_llm_config(
     cfg: LLMRequestConfig, *, allow_server_key: bool = True
 ) -> ResolvedLLMConfig:
-    """Resolve a request's LLM config: header overrides win, else server defaults.
-
-    ``allow_server_key`` decides whether a cloud provider may fall back to the
-    operator's configured key. The admin composer and cron run on the operator's
-    keys and leave it ``True``. Public request paths pass ``False`` on a public
-    deployment, where the server key is reserved for the metered shared tier (a
-    keyless BYO request is then a clean 400, not a silent charge to the operator);
-    self-hosted, they leave it ``True`` so the configured provider stays the free
-    default. The shared tier itself is unaffected either way: it passes its key in
-    ``cfg`` explicitly.
-
-    Raises:
-        ProviderNotAvailableError: the provider is reserved for a later phase.
-        LLMConfigError: the provider is unknown, a required key is missing, or
-            OpenRouter was chosen without a model.
-    """
+    """Resolve a request's LLM config: header overrides win, else server defaults."""
     provider = _parse_provider(cfg.provider or settings.llm_provider)
 
     if provider is Provider.OLLAMA:
@@ -120,12 +105,7 @@ def _parse_provider(name: str) -> Provider:
 
 
 def selectable_providers() -> list[Provider]:
-    """The providers an admin may pick for the composer, in enum order.
-
-    A cloud provider is offered only when its key is configured in the environment;
-    Ollama only on a self-hosted deployment (the same gate ``resolve_llm_config``
-    enforces). Returns enum members, never key values, so the list is safe to expose.
-    """
+    """The providers an admin may pick for the composer, in enum order."""
     available: list[Provider] = [
         provider
         for provider in Provider

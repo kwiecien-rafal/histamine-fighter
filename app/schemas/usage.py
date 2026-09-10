@@ -2,7 +2,7 @@
 
 The backend reports raw, provider-normalized token counts only; the approximate
 cost is derived in the frontend, where the price table is a presentation concern
-that changes far more often than the API contract (CLAUDE.md Section 19).
+that changes far more often than the API contract.
 LangChain normalizes ``usage_metadata`` across all five providers, so these
 counts mean the same thing whichever model answered.
 """

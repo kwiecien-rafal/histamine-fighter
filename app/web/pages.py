@@ -21,10 +21,7 @@ async def home(
     daily_service: DailyService = Depends(get_daily_service),
     meal_service: MealService = Depends(get_meal_service),
 ) -> HTMLResponse:
-    """The landing page: today's board strip, how the lookup works, and pool teasers.
-
-    Two plain database reads and no LLM call, so the first impression is instant.
-    """
+    """The landing page: today's board strip, how the lookup works, and pool teasers."""
     now = datetime.now(UTC)
     board = await daily_service.board_for(now.date(), now=now)
     approved_total = await meal_service.count_approved()

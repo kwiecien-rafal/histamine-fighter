@@ -39,11 +39,7 @@ async def daily_board(
     saves: SavedMealService = Depends(get_saved_meal_service),
     user: User | None = Depends(get_current_user_optional),
 ) -> HTMLResponse:
-    """Today's board, or a past day's, with links to step through the history window.
-
-    The UTC clock and the window match the JSON route's, so the days a visitor can
-    reach here are exactly the days the API will serve.
-    """
+    """Today's board, or a past day's, with links to step through the history window."""
     now = datetime.now(UTC)
     today = now.date()
     earliest = service.earliest_readable_date(today)
@@ -82,11 +78,7 @@ async def browse_meals(
     offset: int = Query(default=0, ge=0, description="How many meals to skip."),
     service: MealService = Depends(get_meal_service),
 ) -> HTMLResponse:
-    """One page of the approved pool, filterable by meal type and paged by links.
-
-    Paging is a plain link with an ``offset``, so the browser's back button and a
-    shared URL both land on the page the visitor was actually looking at.
-    """
+    """One page of the approved pool, filterable by meal type and paged by links."""
     rows, total = await service.list_approved(
         meal_type=meal_type, limit=BROWSE_PAGE_SIZE, offset=offset
     )
@@ -146,11 +138,7 @@ def _board_url(on: date) -> str:
 
 
 def _browse_url(meal_type: MealType | None, offset: int) -> str:
-    """A browse link for one filter and page.
-
-    Passed into the template as well as used for the pager, so every browse URL in the
-    page — filter links included — is spelled in exactly one place.
-    """
+    """A browse link for one filter and page."""
     params: list[tuple[str, str]] = []
     if meal_type is not None:
         params.append(("meal_type", meal_type.value))

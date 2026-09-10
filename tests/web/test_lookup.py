@@ -53,12 +53,7 @@ PROPOSED = [
 
 
 def _usage(step: str, input_tokens: int, output_tokens: int) -> LLMUsage:
-    """One step's usage, itemized the way an agent reports it.
-
-    The steps are what the page's usage line is built from — a response carrying
-    none reads as cached and is not tallied — so a stub that omitted them would
-    never exercise the tally at all.
-    """
+    """One step's usage, itemized the way an agent reports it."""
     total = input_tokens + output_tokens
     return LLMUsage(
         calls=1,
@@ -260,12 +255,7 @@ class _StubRecipeAgent:
 
 
 def _stub_agent(monkeypatch: pytest.MonkeyPatch, agent: _StubLookupAgent) -> _StubLookupAgent:
-    """Answer every lookup step from the stub.
-
-    Patched on the module rather than through ``dependency_overrides``: the pages
-    build their agent inside the handler so an unresolvable provider can be page
-    copy rather than the API's JSON error body.
-    """
+    """Answer every lookup step from the stub."""
     monkeypatch.setattr(lookup, "build_dish_lookup_agent", lambda *args: agent)
     return agent
 
@@ -499,11 +489,7 @@ async def test_a_renamed_row_drops_the_category_it_was_rendered_with(
 async def test_an_unreadable_category_map_costs_grounding_not_the_check(
     client: AsyncClient, agent: _StubLookupAgent
 ) -> None:
-    """Junk in the hidden field degrades to no categories, never to a refused step.
-
-    The safe direction: a category only ever widens the search toward an umbrella
-    row, so losing the map can add caution but never remove it.
-    """
+    """Junk in the hidden field degrades to no categories, never to a refused step."""
     await _listed(
         client, "spaghetti bolognese", ["tomato", "parmesan"], ingredient_categories="}not json{"
     )

@@ -66,11 +66,7 @@ _SLOT_ATTEMPTS = 2
 async def _compose_one(
     agent: ComposerAgent, meal_type: MealType, hero_pool: list[str]
 ) -> ComposedMeal | None:
-    """Compose one meal to a freshly drawn brief, or None when no safe one finishes.
-
-    The curated pool has no dated board to steer away from, so the brief carries no
-    do-not-repeat list; the agent's own SearchCuratedMeals tool covers duplicates.
-    """
+    """Compose one meal to a freshly drawn brief, or None when no safe one finishes."""
     for attempt in range(_SLOT_ATTEMPTS):
         brief = sample_brief(meal_type, hero_pool=hero_pool)
         try:

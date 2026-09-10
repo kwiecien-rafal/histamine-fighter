@@ -26,11 +26,7 @@ from tests.web.factories import add_curated_meal, add_daily_suggestion, add_save
 
 
 async def _reload(session: AsyncSession, saved: SavedMeal) -> SavedMeal:
-    """Re-read a saved row, flushing the request's pending writes on the way.
-
-    A refresh would drop them instead: the routes leave committing to the request
-    session, which the test transaction stands in for.
-    """
+    """Re-read a saved row, flushing the request's pending writes on the way."""
     return (await session.execute(select(SavedMeal).where(SavedMeal.id == saved.id))).scalar_one()
 
 
@@ -59,12 +55,7 @@ class _StubRecipeAgent:
 
 @pytest.fixture
 def stub_recipe_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Answer the recipe button with fixed steps instead of a model call.
-
-    Patched on the module rather than through ``dependency_overrides``: the page
-    builds its agent inside the handler so an unresolvable provider can be page
-    copy rather than the API's JSON error body.
-    """
+    """Answer the recipe button with fixed steps instead of a model call."""
     monkeypatch.setattr(
         profile,
         "build_recipe_agent",

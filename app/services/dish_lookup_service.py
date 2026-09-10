@@ -29,13 +29,7 @@ from app.services.lookup_cache_service import LookupCacheService
 
 
 def _cache_writes_allowed(resolved: RequestLLM) -> bool:
-    """Whether this request's output may enter the shared lookup cache.
-
-    On a public deployment only the operator-pinned shared tier writes: a BYO
-    model is untrusted quality (and, via any endpoint-controllable provider,
-    untrusted content), and must not populate state every visitor reads. A
-    non-public deployment is one trust domain, so everything caches.
-    """
+    """Whether this request's output may enter the shared lookup cache."""
     return resolved.shared or not settings.public_deployment
 
 
@@ -96,26 +90,7 @@ class DishLookupService:
         agent: DishLookupAgent,
         resolved: RequestLLM,
     ) -> tuple[DishAssessmentResponse, AdaptedDish]:
-        """Assess the dish, then rewrite it into a version the index supports.
-
-        The assessment is recomputed here rather than accepted from the caller, so
-        no client can steer a rewrite with a verdict it made up; it is normally a
-        cache hit, since the list being adapted is the one just assessed. Both
-        halves are returned because the flow genuinely produces both — the pages
-        show why the original was a problem beside the version that fixes it.
-
-        Cost is bounded by the request, not by this method: ``charge`` is a
-        one-shot per resolved config, so the assessment, the rewrite, and every
-        revision round the model needs together spend at most one shared-tier
-        allowance. Someone pays for asking, never for the model's retries.
-
-        Which is exactly why the rewrite cache is read *first*. The charge is also
-        one-shot in the other direction: once waived it cannot be re-armed. Assess
-        waives on its own cache hit, so had it run first, a dish whose assessment
-        was cached but whose rewrite was not would call the model for free.
-        Deciding here that a rewrite is going to happen, and charging before the
-        inner step can waive, is what closes that.
-        """
+        """Assess the dish, then rewrite it into a version the index supports."""
         cached = await self._cache.get_rewrite(payload.dish, payload.ingredients)
         if cached is None:
             await resolved.charge()
@@ -141,13 +116,7 @@ class DishLookupService:
         agent: RecipeAgent,
         resolved: RequestLLM,
     ) -> RecipeGeneration:
-        """Write a recipe for an assessed dish, persisting nothing.
-
-        The result is not a saved meal (yet), so the steps live with the caller until a
-        save carries them along. The payload is client-asserted like a lookup save; the
-        agent's own scan of the drafted steps against the index is the guardrail that
-        matters.
-        """
+        """Write a recipe for an assessed dish, persisting nothing."""
         await resolved.charge()
         return await agent.run(
             name=payload.dish,

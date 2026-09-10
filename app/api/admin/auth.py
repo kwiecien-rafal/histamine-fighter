@@ -27,11 +27,7 @@ router = APIRouter(prefix="/admin/auth", tags=["admin"])
 
 
 def _invalid_credentials() -> HTTPException:
-    """The single 401 for any failed login.
-
-    Identical for a wrong password, an unknown email, and a disabled account, so the
-    response never reveals which of those it was.
-    """
+    """The single 401 for any failed login."""
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Incorrect email or password.",
@@ -46,11 +42,7 @@ async def login(
     payload: AdminLoginRequest,
     user_service: UserService = Depends(get_user_service),
 ) -> AuthUser:
-    """Verify credentials and open a session by setting the httpOnly cookie.
-
-    A wrong email and a wrong password give the same 401, so the response never
-    reveals which accounts exist. The token rides in the cookie, never the body.
-    """
+    """Verify credentials and open a session by setting the httpOnly cookie."""
     try:
         user = await user_service.authenticate_admin(payload, ip=client_ip(request))
     except InvalidCredentials as exc:
@@ -64,22 +56,12 @@ async def login(
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(response: Response) -> None:
-    """Delete the session cookie. Idempotent, so it is safe without a session.
-
-    This clears the browser's copy of the token. It does not revoke the token
-    server-side, so one captured before logout stays valid until it expires. A
-    password reset, which bumps token_version, is the revoke-all.
-    """
+    """Delete the session cookie."""
     clear_session_cookie(response)
 
 
 @router.get("/me")
 async def me(response: Response, user: User = Depends(get_current_user)) -> AuthUser:
-    """Return the signed-in user, or 401.
-
-    The SPA calls this on load to recover session state, since it cannot read the
-    httpOnly cookie itself. The response carries the user's identity, so it stays out
-    of any shared cache.
-    """
+    """Return the signed-in user, or 401."""
     response.headers["Cache-Control"] = "no-store"
     return AuthUser.model_validate(user)

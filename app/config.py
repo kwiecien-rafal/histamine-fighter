@@ -183,10 +183,7 @@ class Settings(BaseSettings):
     )
     @classmethod
     def _blank_to_none(cls, value: object) -> object:
-        """Treat a blank optional secret as unset. ``.env.example`` ships these keys
-        blank, and an empty secret must disable its feature, not half-enable it,
-        matching the blank-JWT_SIGNING_KEY handling below.
-        """
+        """Treat a blank optional secret as unset."""
         if isinstance(value, str) and not value.strip():
             return None
         return value
@@ -194,12 +191,7 @@ class Settings(BaseSettings):
     @field_validator("app_base_url")
     @classmethod
     def _normalize_app_base_url(cls, value: str) -> str:
-        """Fail fast on a malformed origin and drop any trailing slash.
-
-        The value is concatenated into the magic-link URL and both OAuth redirect
-        URIs; a trailing slash would produce ``https://site//api/...`` and break
-        the exact-match check registered at the OAuth provider.
-        """
+        """Fail fast on a malformed origin and drop any trailing slash."""
         value = value.strip().rstrip("/")
         if not value.startswith(("http://", "https://")):
             raise ValueError("APP_BASE_URL must start with http:// or https://")
@@ -207,30 +199,17 @@ class Settings(BaseSettings):
 
     @property
     def is_production(self) -> bool:
-        """Whether this runs as a production deployment.
-
-        Any production signal counts: PUBLIC_DEPLOYMENT, or DEBUG off (CLAUDE
-        section 20 mandates DEBUG=false in production). The secret-key gate and the
-        Secure-cookie gate both read this, so they cannot disagree on what counts
-        as production if one flag is later forgotten.
-        """
+        """Whether this runs as a production deployment."""
         return self.public_deployment or not self.debug
 
     @property
     def cookie_secure(self) -> bool:
-        """Whether the session cookie is restricted to HTTPS.
-
-        Keyed on public_deployment, the only flag that implies TLS (terminated at the
-        proxy in production, the same signal HSTS uses). Deliberately not is_production:
-        DEBUG governs error verbosity, not transport, so keying Secure on it would make
-        the cookie silently fail to set when an operator runs with DEBUG off over http.
-        """
+        """Whether the session cookie is restricted to HTTPS."""
         return self.public_deployment
 
     @property
     def session_cookie_max_age(self) -> int:
-        """Session cookie lifetime in seconds, matched to the JWT it carries so the
-        two expire together."""
+        """Session cookie lifetime in seconds, matched to the JWT it carries."""
         return self.access_token_expire_minutes * 60
 
     @property

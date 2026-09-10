@@ -32,13 +32,7 @@ class MealReviewService:
     async def list_by_status(
         self, status: ApprovalStatus, *, limit: int | None = None, offset: int = 0
     ) -> list[CuratedMeal]:
-        """Return one page of meals in a review state, oldest first.
-
-        Oldest-first plus offset paging means a backlog is worked through FIFO and
-        nothing is stranded below the row cap. The id breaks ties between rows that
-        share a timestamp (a batch insert shares one). The embedding column is
-        heavy and unused by the review queue, so it is deferred, not loaded per row.
-        """
+        """Return one page of meals in a review state, oldest first."""
         stmt = (
             select(CuratedMeal)
             .where(CuratedMeal.approval_status == status)
@@ -50,10 +44,7 @@ class MealReviewService:
         return list((await self._session.execute(stmt)).scalars().all())
 
     async def approve(self, meal_id: UUID, *, actor: str) -> CuratedMeal | None:
-        """Approve a meal for the public pool, stamping the actor and time.
-
-        Returns the updated meal, or None when no meal has that id.
-        """
+        """Approve a meal for the public pool, stamping the actor and time."""
         meal = await self._session.get(CuratedMeal, meal_id)
         if meal is None:
             return None
@@ -64,10 +55,7 @@ class MealReviewService:
         return meal
 
     async def reject(self, meal_id: UUID) -> CuratedMeal | None:
-        """Reject a meal, clearing any prior approval stamp.
-
-        Returns the updated meal, or None when no meal has that id.
-        """
+        """Reject a meal, clearing any prior approval stamp."""
         meal = await self._session.get(CuratedMeal, meal_id)
         if meal is None:
             return None
@@ -78,13 +66,7 @@ class MealReviewService:
         return meal
 
     async def delete(self, meal_id: UUID, *, actor: str) -> bool:
-        """Permanently remove a meal. Returns False when no meal has that id.
-
-        The hard counterpart to ``reject``: reject keeps the row out of the pool but on
-        record, delete drops it entirely (an unwanted generation or experiment). The
-        actor is logged because a hard delete is the one moderation step with nothing
-        left on the row to audit afterwards.
-        """
+        """Permanently remove a meal."""
         meal = await self._session.get(CuratedMeal, meal_id)
         if meal is None:
             return False

@@ -1,7 +1,7 @@
 """ORM model for application accounts.
 
 One row per account that can sign in: admins created by
-``python -m app.scripts.create_admin`` (CLAUDE section 10) and public users who
+``python -m app.scripts.create_admin`` and public users who
 arrive passwordless through magic link or OAuth (``password_hash`` is NULL for
 them — no password ever exists to leak). ``role`` decides what an account may do
 and is read from the database on every request, never trusted from the token.
@@ -20,15 +20,7 @@ from app.enums import Role
 
 
 def normalize_email(email: str) -> str:
-    """Return the stored/lookup form of an email: trimmed, lowercased, untagged.
-
-    Login and account creation both normalize through here so a stray capital or
-    surrounding space can never split one person into two accounts. The plus-tag
-    is stripped too (``gerald+news@`` -> ``gerald@``): subaddresses land in the
-    same inbox, so keeping them distinct would mint unlimited accounts — each
-    with its own shared-tier quota — from one mailbox. Sign-in emails still go
-    to the address as typed; only the stored identity collapses.
-    """
+    """Return the stored/lookup form of an email: trimmed, lowercased, untagged."""
     email = email.strip().lower()
     local, sep, domain = email.partition("@")
     untagged = local.split("+", 1)[0]
