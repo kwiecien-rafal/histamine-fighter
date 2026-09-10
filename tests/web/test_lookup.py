@@ -45,6 +45,7 @@ from app.schemas.meal import (
 )
 from app.schemas.usage import LLMUsage, StepUsage
 from app.web import lookup
+from tests.web.markup import markup
 
 PROPOSED = [
     ProposedIngredient(name="tomato", category="vegetable"),
@@ -309,8 +310,8 @@ async def test_the_entry_page_offers_both_ways_in(client: AsyncClient) -> None:
     assert 'action="/lookup/check"' in response.text
     # The choice rides in the form's values, so it survives a plain post as well as
     # a boosted one, and the editor is served open for a visitor without the script.
-    assert 'name="mode" value=""' in response.text
-    assert f'name="mode" value="{lookup.MODE_OWN}"' in response.text
+    assert 'name="mode" value=""' in markup(response.text)
+    assert f'name="mode" value="{lookup.MODE_OWN}"' in markup(response.text)
     assert 'name="ingredient"' in response.text
 
 
@@ -319,7 +320,7 @@ async def test_the_entry_page_opens_on_the_editor_when_asked(client: AsyncClient
 
     assert response.status_code == 200
     assert 'value="leftover risotto"' in response.text
-    assert "data-ingredients-toggle checked" in response.text
+    assert "data-ingredients-toggle checked" in markup(response.text)
 
 
 # --- checking a dish by name ------------------------------------------------------
@@ -358,7 +359,7 @@ async def test_an_unrecognized_dish_is_announced_not_rewritten(
     # Nothing was rewritten, so no version is claimed for it.
     assert "Spaghetti with Courgette" not in response.text
     # Listing it by hand is the only thing left to try, so that half is open.
-    assert "data-ingredients-toggle checked" in response.text
+    assert "data-ingredients-toggle checked" in markup(response.text)
 
 
 async def test_a_blank_dish_never_reaches_the_model(
@@ -789,7 +790,7 @@ async def test_refining_reopens_the_version_in_the_entry_editor(
     assert 'value="courgette"' in response.text
     # The same form a visitor typing their own list uses, opened on its editor.
     assert 'action="/lookup/check"' in response.text
-    assert "data-ingredients-toggle checked" in response.text
+    assert "data-ingredients-toggle checked" in markup(response.text)
 
 
 async def test_an_edited_version_keeps_the_grounding_of_rows_left_alone(
@@ -844,7 +845,7 @@ async def test_each_goal_is_one_press(client: AsyncClient, dead_end: _StubLookup
     page = await _named(client)
 
     for option in AlternativeGoal:
-        assert f'type="submit" name="goal" value="{option.value}"' in page
+        assert f'type="submit" name="goal" value="{option.value}"' in markup(page)
 
 
 async def test_choosing_a_goal_renders_suggestions(
@@ -1005,18 +1006,18 @@ async def test_a_public_deployment_offers_no_local_ollama(
 
     response = await client.get("/lookup")
 
-    assert 'value="ollama" disabled' in response.text
+    assert 'value="ollama" disabled' in markup(response.text)
     assert 'data-public-deployment="true"' in response.text
 
 
 async def test_the_shared_tier_is_closed_to_an_anonymous_visitor(client: AsyncClient) -> None:
     response = await client.get("/lookup")
 
-    assert 'value="shared" disabled' in response.text
+    assert 'value="shared" disabled' in markup(response.text)
     assert "Sign in</a> to use it." in response.text
 
 
 async def test_the_shared_tier_opens_once_signed_in(user_client: AsyncClient) -> None:
     response = await user_client.get("/lookup")
 
-    assert 'value="shared" disabled' not in response.text
+    assert 'value="shared" disabled' not in markup(response.text)
