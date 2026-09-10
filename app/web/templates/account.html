@@ -6,7 +6,7 @@
   <h1>Your account</h1>
   <p class="lede">
     Signed in as <strong>{{ user.email }}</strong>. Your email address is all we store.
-    Your <a href="/profile">saved meals</a> live on their own page.
+    Your <a href="{{ url_for('web.profile').path }}">saved meals</a> live on their own page.
   </p>
 
   <section class="stack">
@@ -23,7 +23,7 @@
 
   <section class="stack">
     <h2>Sessions</h2>
-    <form method="post" action="/logout">
+    <form method="post" action="{{ url_for('web.logout').path }}">
       <button class="button" type="submit">Sign out</button>
     </form>
     <details>
@@ -32,7 +32,7 @@
         Signing out here only drops this browser's cookie. This revokes every session on
         every device, including this one.
       </p>
-      <form method="post" action="/logout/all">
+      <form method="post" action="{{ url_for('web.logout_all').path }}">
         <button class="button" type="submit">Sign out everywhere</button>
       </form>
     </details>
@@ -41,6 +41,6 @@
   <section class="stack">
     <h2>Deleting your account</h2>
     <p class="small muted">Deleting your account erases your email, your saved meals, and your usage history.</p>
-    <p><a href="/account/delete">Delete my account</a></p>
+    <p><a href="{{ url_for('web.account_delete_confirm').path }}">Delete my account</a></p>
   </section>
 {% endblock %}

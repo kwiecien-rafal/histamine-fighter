@@ -171,7 +171,7 @@ def _login_error_redirect(reason: str, provider: OAuthProvider) -> RedirectRespo
     return response
 
 
-@router.get("/oauth/{provider_name}/start")
+@router.get("/oauth/{provider_name}/start", name="api.oauth_start")
 @limiter.limit(auth_rate_limit)
 async def oauth_start(request: Request, provider_name: str) -> RedirectResponse:
     """Send the browser to the provider's consent screen.

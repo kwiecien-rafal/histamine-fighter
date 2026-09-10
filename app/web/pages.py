@@ -15,7 +15,7 @@ router = APIRouter()
 ROBOTS_TXT = "User-agent: *\nAllow: /\nDisallow: /admin\n"
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse, name="web.home")
 async def home(
     request: Request,
     daily_service: DailyService = Depends(get_daily_service),
@@ -33,13 +33,13 @@ async def home(
     )
 
 
-@router.get("/privacy", response_class=HTMLResponse)
+@router.get("/privacy", response_class=HTMLResponse, name="web.privacy")
 async def privacy(request: Request) -> HTMLResponse:
     """The privacy policy."""
     return templates.TemplateResponse(request, "privacy.html", {})
 
 
-@router.get("/terms", response_class=HTMLResponse)
+@router.get("/terms", response_class=HTMLResponse, name="web.terms")
 async def terms(request: Request) -> HTMLResponse:
     """The terms of service."""
     return templates.TemplateResponse(request, "terms.html", {})

@@ -194,7 +194,7 @@ class ModelCall(NamedTuple):
     usage: LLMUsage
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse, name="web.lookup")
 async def entry(
     request: Request,
     dish: str = Query(default="", description="A dish name to start from."),
@@ -204,7 +204,7 @@ async def entry(
     return _entry_page(request, dish=dish.strip()[:MAX_DISH_CHARS], mode=mode)
 
 
-@router.post("/check", response_class=HTMLResponse)
+@router.post("/check", response_class=HTMLResponse, name="web.lookup_check")
 async def check(
     request: Request,
     dish: str = Form(),
@@ -282,7 +282,7 @@ async def check(
     )
 
 
-@router.post("/adapt", response_class=HTMLResponse)
+@router.post("/adapt", response_class=HTMLResponse, name="web.lookup_adapt")
 async def adapt_result(
     request: Request,
     state: str = Form(),
@@ -318,7 +318,7 @@ async def adapt_result(
     )
 
 
-@router.post("/refine", response_class=HTMLResponse)
+@router.post("/refine", response_class=HTMLResponse, name="web.lookup_refine")
 async def refine(request: Request, state: str = Form()) -> HTMLResponse:
     """Open the version on the page back in the entry editor, ready to re-check.
 
@@ -336,7 +336,7 @@ async def refine(request: Request, state: str = Form()) -> HTMLResponse:
     )
 
 
-@router.post("/recipe", response_class=HTMLResponse)
+@router.post("/recipe", response_class=HTMLResponse, name="web.lookup_recipe")
 async def write_recipe(
     request: Request,
     state: str = Form(),
@@ -373,7 +373,7 @@ async def write_recipe(
     return _safe_page(request, current, call=ModelCall("recipe", recipe.model, recipe.usage))
 
 
-@router.post("/alternatives", response_class=HTMLResponse)
+@router.post("/alternatives", response_class=HTMLResponse, name="web.lookup_alternatives")
 async def suggest_alternatives(
     request: Request,
     state: str = Form(),
@@ -412,7 +412,7 @@ async def suggest_alternatives(
     )
 
 
-@router.post("/save")
+@router.post("/save", name="web.lookup_save")
 async def save_result(
     request: Request,
     state: str = Form(),

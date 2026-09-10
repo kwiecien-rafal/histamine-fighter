@@ -1,21 +1,22 @@
 {#
   Imported once here, so every page extending this shell can call ui.* directly. A
-  template that does NOT extend it must import the macros itself.
+  template that does NOT extend it must import the macros itself. ``with context`` is
+  what lets a macro call url_for, which reads the request off the render context.
 #}
-{% import "_macros.html" as ui %}
+{% import "_macros.html" as ui with context %}
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{% block title %}Histamine Fighter{% endblock %}</title>
-    <link rel="icon" href="/static/favicon.svg" />
-    <link rel="stylesheet" href="/static/app.css" />
+    <link rel="icon" href="{{ url_for('static', path='favicon.svg').path }}" />
+    <link rel="stylesheet" href="{{ url_for('static', path='app.css').path }}" />
     {# Vendored, not a CDN, and deferred: the pages render and submit without them.
        htmx only carries the visitor's AI settings as request headers, which a plain
        form post cannot do; app.js is the settings panel and the usage tally. #}
-    <script src="/static/vendor/htmx.min.js" defer></script>
-    <script src="/static/app.js" defer></script>
+    <script src="{{ url_for('static', path='vendor/htmx.min.js').path }}" defer></script>
+    <script src="{{ url_for('static', path='app.js').path }}" defer></script>
     {% block head %}{% endblock %}
   </head>
   {# Read by app.js: the shared tier is the sensible default only where we pay the
@@ -23,7 +24,7 @@
   <body data-public-deployment="{{ 'true' if public_deployment else 'false' }}">
     <header class="masthead">
       <div class="wrap">
-        <a class="masthead__brand" href="/">Histamine Fighter</a>
+        <a class="masthead__brand" href="{{ url_for('web.home').path }}">Histamine Fighter</a>
         <nav>
           {{ ui.nav_link(request, "/", "Home") }}
           {{ ui.nav_link(request, "/lookup", "Check a dish") }}
@@ -33,7 +34,7 @@
           {% if user %}
             {{ ui.nav_link(request, "/profile", "Saved") }}
             <a class="masthead__account"
-               href="/account"
+               href="{{ url_for('web.account').path }}"
                title="{{ user.email }}"
                {% if request.url.path == "/account" %}aria-current="page"{% endif %}>{{ user.email }}</a>
           {% else %}
@@ -65,8 +66,8 @@
         <p>
           An open-source portfolio project · MIT license ·
           <a href="https://github.com/kwiecien-rafal/histamine-fighter">GitHub</a> ·
-          <a href="/privacy">Privacy</a> ·
-          <a href="/terms">Terms</a>
+          <a href="{{ url_for('web.privacy').path }}">Privacy</a> ·
+          <a href="{{ url_for('web.terms').path }}">Terms</a>
         </p>
       </div>
     </footer>

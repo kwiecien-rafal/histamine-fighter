@@ -126,7 +126,7 @@ def _expired_link(request: Request, *, error: str | None = None) -> HTMLResponse
     )
 
 
-@router.get("/login", response_class=HTMLResponse)
+@router.get("/login", response_class=HTMLResponse, name="web.login")
 async def login_page(
     request: Request,
     error: str = Query(default="", description="Coarse flag set by the OAuth callback."),
@@ -142,7 +142,7 @@ async def login_page(
     return _login_form(request, error=OAUTH_ERRORS.get(error))
 
 
-@router.post("/login", response_class=HTMLResponse)
+@router.post("/login", response_class=HTMLResponse, name="web.login_request")
 async def request_link(
     request: Request,
     email: str = Form(),
@@ -166,7 +166,7 @@ async def request_link(
     return _code_form(request, email=payload.email)
 
 
-@router.post("/login/code")
+@router.post("/login/code", name="web.login_code")
 async def submit_code(
     request: Request,
     email: str = Form(),
@@ -204,7 +204,7 @@ async def verify_page(
     return templates.TemplateResponse(request, "login_verify.html", {"token": token})
 
 
-@router.post("/login/verify")
+@router.post("/login/verify", name="web.login_verify")
 async def confirm_link(
     request: Request,
     token: str = Form(),
@@ -233,7 +233,7 @@ async def login_complete() -> RedirectResponse:
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
 
-@router.get("/account", response_class=HTMLResponse)
+@router.get("/account", response_class=HTMLResponse, name="web.account")
 async def account_page(
     request: Request,
     user: User = Depends(require_user),
@@ -249,7 +249,7 @@ async def account_page(
     return response
 
 
-@router.get("/account/delete", response_class=HTMLResponse)
+@router.get("/account/delete", response_class=HTMLResponse, name="web.account_delete_confirm")
 async def confirm_account_deletion(
     request: Request, user: User = Depends(require_user)
 ) -> HTMLResponse:
@@ -263,7 +263,7 @@ async def confirm_account_deletion(
     )
 
 
-@router.post("/account/delete")
+@router.post("/account/delete", name="web.account_delete")
 async def delete_account(
     user: User = Depends(require_user),
     auth: AuthService = Depends(get_auth_service),
@@ -275,7 +275,7 @@ async def delete_account(
     return erased
 
 
-@router.post("/logout")
+@router.post("/logout", name="web.logout")
 async def logout() -> RedirectResponse:
     """Sign out of this browser. Idempotent, so it is safe without a session."""
     response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
@@ -283,7 +283,7 @@ async def logout() -> RedirectResponse:
     return response
 
 
-@router.post("/logout/all")
+@router.post("/logout/all", name="web.logout_all")
 async def logout_everywhere(
     user: User = Depends(require_user),
     user_service: UserService = Depends(get_user_service),

@@ -8,7 +8,7 @@
 {% block wrap %}wrap--narrow{% endblock %}
 
 {% block content %}
-  <p><a href="/admin">← Admin panel</a></p>
+  <p><a href="{{ url_for('web.admin').path }}">← Admin panel</a></p>
 
   <header>
     <h1>{{ heading }}</h1>
@@ -74,7 +74,7 @@
 
     <p class="row">
       <button class="button" type="submit">Save</button>
-      <a class="button" href="/admin">Cancel</a>
+      <a class="button" href="{{ url_for('web.admin').path }}">Cancel</a>
     </p>
   </form>
 

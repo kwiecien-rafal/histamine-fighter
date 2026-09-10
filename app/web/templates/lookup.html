@@ -24,7 +24,7 @@
   <div hx-boost="true">
     <form class="stack"
           method="post"
-          action="/lookup/check"
+          action="{{ url_for('web.lookup_check').path }}"
           hx-disabled-elt="find button">
       <label class="field field--wide">
         <span>Dish name</span>

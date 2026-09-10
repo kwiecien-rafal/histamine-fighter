@@ -13,7 +13,9 @@
     <p class="notice notice--error" role="alert">{{ error }}</p>
   {% endif %}
 
-  <form class="stack" method="post" action="/login/code">
+  <form class="stack"
+        method="post"
+        action="{{ url_for('web.login_code').path }}">
     <input type="hidden" name="email" value="{{ email }}" />
     <label class="field">
       <span>{{ code_length }}-digit code</span>
@@ -33,6 +35,6 @@
 
   <p class="small muted">
     Nothing arrived? Check the spam folder; the code is in the subject line. Or
-    <a href="/login">start again with a different address</a>.
+    <a href="{{ url_for('web.login').path }}">start again with a different address</a>.
   </p>
 {% endblock %}

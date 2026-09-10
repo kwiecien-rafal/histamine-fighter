@@ -18,10 +18,12 @@
   {% if user %}
     <p class="notice">
       You're signed in as {{ user.email }}, which is not an admin account.
-      <a href="/">Back to the site</a>.
+      <a href="{{ url_for('web.home').path }}">Back to the site</a>.
     </p>
   {% else %}
-    <form class="stack" method="post" action="/admin/login">
+    <form class="stack"
+          method="post"
+          action="{{ url_for('web.admin_login').path }}">
       <label class="field">
         <span>Email</span>
         <input type="email"
@@ -48,7 +50,7 @@
     <p class="small muted">
       Admin accounts are created from the command line with
       <code>just admin you@example.com</code>. There is no sign-up, by design. Everyone
-      else signs in <a href="/login">without a password</a>.
+      else signs in <a href="{{ url_for('web.login').path }}">without a password</a>.
     </p>
   {% endif %}
 {% endblock %}

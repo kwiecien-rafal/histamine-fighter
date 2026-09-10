@@ -70,7 +70,7 @@ _EDIT_MESSAGES = {
 }
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse, name="web.profile")
 async def shelf(
     request: Request,
     filter_by: str = Query(default="", alias="filter", description="A meal slot, or 'lookup'."),
@@ -81,7 +81,7 @@ async def shelf(
     return await _shelf_page(request, user, service, selected=filter_by)
 
 
-@router.post("/meals")
+@router.post("/meals", name="web.profile_save")
 async def save_meal(
     request: Request,
     source: Literal[SaveSource.CURATED, SaveSource.DAILY] = Form(),
@@ -111,7 +111,7 @@ async def save_meal(
     return _back_to(back_url)
 
 
-@router.get("/meals/{save_id}", response_class=HTMLResponse)
+@router.get("/meals/{save_id}", response_class=HTMLResponse, name="web.saved_meal")
 async def saved_copy(
     request: Request,
     save_id: UUID,
@@ -122,7 +122,7 @@ async def saved_copy(
     return _meal_page(request, saved_detail(await _owned(service, user, save_id)))
 
 
-@router.post("/meals/{save_id}")
+@router.post("/meals/{save_id}", name="web.saved_meal_edit")
 async def edit_saved_meal(
     request: Request,
     save_id: UUID,
@@ -168,7 +168,7 @@ async def edit_saved_meal(
     return _back_to(f"/profile/meals/{save_id}")
 
 
-@router.post("/meals/{save_id}/recipe")
+@router.post("/meals/{save_id}/recipe", name="web.saved_meal_recipe")
 async def write_recipe(
     request: Request,
     save_id: UUID,
@@ -192,7 +192,7 @@ async def write_recipe(
     return _back_to(f"/profile/meals/{save_id}")
 
 
-@router.post("/meals/{save_id}/delete")
+@router.post("/meals/{save_id}/delete", name="web.saved_meal_delete")
 async def remove_saved_meal(
     request: Request,
     save_id: UUID,

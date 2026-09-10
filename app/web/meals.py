@@ -31,7 +31,7 @@ router = APIRouter()
 BROWSE_PAGE_SIZE = 24
 
 
-@router.get("/daily", response_class=HTMLResponse)
+@router.get("/daily", response_class=HTMLResponse, name="web.daily")
 async def daily_board(
     request: Request,
     on: date | None = Query(default=None, description="A past day within the history window."),
@@ -75,7 +75,7 @@ async def daily_board(
     )
 
 
-@router.get("/meals", response_class=HTMLResponse)
+@router.get("/meals", response_class=HTMLResponse, name="web.meals")
 async def browse_meals(
     request: Request,
     meal_type: MealType | None = Query(default=None, description="Filter to one meal type."),
@@ -110,7 +110,7 @@ async def browse_meals(
     )
 
 
-@router.get("/meals/{meal_id}", response_class=HTMLResponse)
+@router.get("/meals/{meal_id}", response_class=HTMLResponse, name="web.meal_detail")
 async def meal_detail(
     request: Request,
     meal_id: UUID,

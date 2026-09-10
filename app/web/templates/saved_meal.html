@@ -3,7 +3,7 @@
 {% block wrap %}wrap--narrow{% endblock %}
 
 {% block content %}
-  <p><a href="/profile">← Your saved meals</a></p>
+  <p><a href="{{ url_for('web.profile').path }}">← Your saved meals</a></p>
 
   <header>
     <h1>{{ meal.name }}</h1>
@@ -38,7 +38,8 @@
         We can write one from the ingredients below. Save any edits first: the recipe is
         written from the saved copy, and only once.
       </p>
-      <form method="post" action="/profile/meals/{{ meal.id }}/recipe">
+      <form method="post"
+            action="{{ url_for('web.saved_meal_recipe', save_id=meal.id).path }}">
         <button class="button" type="submit">Write the recipe</button>
       </form>
     </section>
@@ -52,7 +53,9 @@
     ingredient index.
   </p>
 
-  <form class="stack" method="post" action="/profile/meals/{{ meal.id }}">
+  <form class="stack"
+        method="post"
+        action="{{ url_for('web.saved_meal_edit', save_id=meal.id).path }}">
     <label class="field field--wide">
       <span>Name</span>
       <input type="text" name="name" value="{{ form.name }}" required />
@@ -100,7 +103,8 @@
 <section class="stack">
   <h2>Remove</h2>
   <p class="small muted">This drops your copy for good. The original meal stays where it is.</p>
-  <form method="post" action="/profile/meals/{{ meal.id }}/delete">
+  <form method="post"
+        action="{{ url_for('web.saved_meal_delete', save_id=meal.id).path }}">
     <button class="button" type="submit">Remove from saved</button>
   </form>
 </section>

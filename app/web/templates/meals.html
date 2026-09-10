@@ -27,7 +27,10 @@
             <span class="badge">{{ ui.meal_type_label(meal.meal_type.value) }}</span>
             {{ ui.safety_badge() }}
           </div>
-          <h3><a class="card__link" href="/meals/{{ meal.id }}">{{ meal.name }}</a></h3>
+          <h3>
+            <a class="card__link"
+               href="{{ url_for('web.meal_detail', meal_id=meal.id).path }}">{{ meal.name }}</a>
+          </h3>
           <p class="small muted">{{ meal.description }}</p>
           {% if meal.tags %}
             <ul class="chips">
@@ -48,7 +51,7 @@
   {% elif meal_type %}
     <p class="notice">
       No approved {{ ui.meal_type_label(meal_type.value) | lower }} meals yet.
-      <a href="/meals">Try another filter</a>.
+      <a href="{{ url_for('web.meals').path }}">Try another filter</a>.
     </p>
   {% else %}
     <p class="notice">No meals here yet. Check back later.</p>

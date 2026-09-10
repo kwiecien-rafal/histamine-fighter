@@ -6,7 +6,7 @@
   ``_macros.html`` is imported for the pieces that are genuinely shared, so the composer
   trace renders here exactly as it does on a public meal.
 #}
-{% import "_macros.html" as ui %}
+{% import "_macros.html" as ui with context %}
 
 {% set STATE_TONES = {"approved": "badge--ok", "rejected": "badge--danger"} %}
 

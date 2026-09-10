@@ -10,7 +10,7 @@ from app.web.deps import templates
 router = APIRouter()
 
 
-@router.get("/learn", response_class=HTMLResponse)
+@router.get("/learn", response_class=HTMLResponse, name="web.learn")
 async def learn_hub(
     request: Request,
     service: KnowledgeService = Depends(get_knowledge_service),

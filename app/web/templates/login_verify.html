@@ -9,7 +9,7 @@
       Confirm below and you are in. The link is spent the moment you confirm, so nothing
       that merely previewed this page can have used it.
     </p>
-    <form method="post" action="/login/verify">
+    <form method="post" action="{{ url_for('web.login_verify').path }}">
       <input type="hidden" name="token" value="{{ token }}" />
       <button class="button" type="submit">Confirm and sign in</button>
     </form>
@@ -18,7 +18,7 @@
     <p class="notice notice--error" role="alert">{{ error }}</p>
     <p>
       Sign-in links work once and expire quickly.
-      <a href="/login">Request a fresh one</a>, or type the code from your newest email.
+      <a href="{{ url_for('web.login').path }}">Request a fresh one</a>, or type the code from your newest email.
     </p>
   {% endif %}
 {% endblock %}

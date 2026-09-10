@@ -3,7 +3,7 @@
 {% block wrap %}wrap--narrow{% endblock %}
 
 {% block content %}
-  <p><a href="/account">← Your account</a></p>
+  <p><a href="{{ url_for('web.account').path }}">← Your account</a></p>
 
   <h1>Delete your account?</h1>
   <p class="lede">
@@ -17,11 +17,11 @@
       itself here.
     </p>
   {% else %}
-    <form method="post" action="/account/delete">
+    <form method="post" action="{{ url_for('web.account_delete').path }}">
       <button class="button" type="submit">Yes, delete my account</button>
     </form>
     <p class="small muted">
-      Changed your mind? <a href="/account">Go back</a>. Nothing has been deleted yet.
+      Changed your mind? <a href="{{ url_for('web.account').path }}">Go back</a>. Nothing has been deleted yet.
     </p>
   {% endif %}
 {% endblock %}

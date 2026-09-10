@@ -184,17 +184,19 @@
 #}
 {% macro save_control(user, source, source_id, save_id, back_url) -%}
   {% if not user %}
-    <a class="button" href="/login">Sign in to save</a>
+    <a class="button" href="{{ url_for('web.login').path }}">Sign in to save</a>
   {% elif save_id %}
     <span class="row">
-      <a class="button" href="/profile/meals/{{ save_id }}">Open your saved copy</a>
-      <form method="post" action="/profile/meals/{{ save_id }}/delete">
+      <a class="button"
+         href="{{ url_for('web.saved_meal', save_id=save_id).path }}">Open your saved copy</a>
+      <form method="post"
+            action="{{ url_for('web.saved_meal_delete', save_id=save_id).path }}">
         <input type="hidden" name="back_url" value="{{ back_url }}" />
         <button class="button" type="submit">Remove</button>
       </form>
     </span>
   {% else %}
-    <form method="post" action="/profile/meals">
+    <form method="post" action="{{ url_for('web.profile_save').path }}">
       <input type="hidden" name="source" value="{{ source }}" />
       <input type="hidden" name="source_id" value="{{ source_id }}" />
       <input type="hidden" name="back_url" value="{{ back_url }}" />
@@ -374,7 +376,7 @@
      while the first is still being answered, and it leaves the state field alone. #}
   <form class="stack"
         method="post"
-        action="/lookup/alternatives"
+        action="{{ url_for('web.lookup_alternatives').path }}"
         hx-disabled-elt="find fieldset">
     <input type="hidden" name="state" value="{{ state_json }}" />
     <fieldset class="field field--wide">
@@ -409,7 +411,9 @@
             {% if item.pitch %}<p class="small muted">{{ item.pitch }}</p>{% endif %}
             {# Every suggestion, whatever its source, is re-checked from scratch on
                the way through — a suggested name is an idea, never a verdict. #}
-            <form method="post" action="/lookup/check" hx-disabled-elt="find button">
+            <form method="post"
+                  action="{{ url_for('web.lookup_check').path }}"
+                  hx-disabled-elt="find button">
               <input type="hidden" name="dish" value="{{ item.name }}" />
               <button class="button" type="submit">{{ cta }}</button>
               <span class="busy small muted">Working on it…</span>

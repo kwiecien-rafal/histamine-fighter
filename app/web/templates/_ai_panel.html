@@ -65,7 +65,7 @@
           <p class="small muted">{{ row.note }}</p>
 
           {% if row.id == "shared" and not user %}
-            <p class="small muted"><a href="/login">Sign in</a> to use it.</p>
+            <p class="small muted"><a href="{{ url_for('web.login').path }}">Sign in</a> to use it.</p>
           {% elif row.id == "ollama" and public_deployment %}
             <p class="small muted">Available when you run the stack yourself.</p>
           {% endif %}
@@ -75,7 +75,7 @@
             <div class="stack" data-fields="{{ row.id }}" hidden>
               {% if row.id == "shared" %}
                 <p class="small muted">
-                  Nothing to configure. <a href="/account">Your account</a> shows today's allowance.
+                  Nothing to configure. <a href="{{ url_for('web.account').path }}">Your account</a> shows today's allowance.
                 </p>
               {% else %}
                 {% if row.id == "ollama" %}

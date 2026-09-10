@@ -33,7 +33,9 @@
       {{ ui.verdict_line(outcome, adapted.verdict.value, adapted.blocked_ingredients) }}
 
       {% if outcome == "exhausted" %}
-        <form method="post" action="/lookup/adapt" hx-disabled-elt="find button">
+        <form method="post"
+              action="{{ url_for('web.lookup_adapt').path }}"
+              hx-disabled-elt="find button">
           <input type="hidden" name="state" value="{{ state_json }}" />
           <p class="row">
             <button class="button" type="submit">Try again</button>
@@ -49,7 +51,7 @@
         </ul>
         {# Costs no model call: it hands this list back to the form somebody typing
            their own would have used, so an edited dish re-enters the flow as theirs. #}
-        <form method="post" action="/lookup/refine">
+        <form method="post" action="{{ url_for('web.lookup_refine').path }}">
           <input type="hidden" name="state" value="{{ state_json }}" />
           <button class="button" type="submit">Edit this list and check it again</button>
         </form>
@@ -113,7 +115,9 @@
         <ol>{% for step in recipe.steps %}<li>{{ step }}</li>{% endfor %}</ol>
         <p class="small muted">Written by <span class="badge">{{ recipe.model }}</span></p>
       {% else %}
-        <form method="post" action="/lookup/recipe" hx-disabled-elt="find button">
+        <form method="post"
+              action="{{ url_for('web.lookup_recipe').path }}"
+              hx-disabled-elt="find button">
           <input type="hidden" name="state" value="{{ state_json }}" />
           <p class="row">
             <button class="button" type="submit">Write the recipe</button>
@@ -127,16 +131,18 @@
       <h2>Save it</h2>
       {% if user %}
         <p class="small muted">Saved as your own private copy, exactly as it reads here, recipe included.</p>
-        <form method="post" action="/lookup/save" hx-boost="false">
+        <form method="post"
+              action="{{ url_for('web.lookup_save').path }}"
+              hx-boost="false">
           <input type="hidden" name="state" value="{{ state_json }}" />
           <button class="button" type="submit">Save this dish</button>
         </form>
       {% else %}
         <p class="small muted">A free account keeps the dishes you check and their recipes.</p>
-        <p><a class="button" href="/login">Sign in to save this</a></p>
+        <p><a class="button" href="{{ url_for('web.login').path }}">Sign in to save this</a></p>
       {% endif %}
     </section>
 
-    <p class="small muted"><a href="/lookup">← Start over with another dish</a></p>
+    <p class="small muted"><a href="{{ url_for('web.lookup').path }}">← Start over with another dish</a></p>
   </div>
 {% endblock %}

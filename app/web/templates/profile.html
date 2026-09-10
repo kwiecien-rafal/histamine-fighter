@@ -6,7 +6,7 @@
     <h1>Your saved meals</h1>
     <p class="muted">
       Each save is your own copy, taken at the moment you saved it. Edit it freely; it
-      stays private to you. <a href="/account">Your account</a>
+      stays private to you. <a href="{{ url_for('web.account').path }}">Your account</a>
     </p>
   </header>
 
@@ -17,15 +17,15 @@
   {% if total %}
     <nav class="row" aria-label="Filter saved meals">
       <a class="button"
-         href="/profile"
+         href="{{ url_for('web.profile').path }}"
          {% if not selected %} aria-current="true"{% endif %}>All</a>
       {% for value in meal_types %}
         <a class="button"
-           href="/profile?filter={{ value.value }}"
+           href="{{ url_for('web.profile').path }}?filter={{ value.value }}"
            {% if selected == value.value %}aria-current="true"{% endif %}>{{ ui.meal_type_label(value.value) }}</a>
       {% endfor %}
       <a class="button"
-         href="/profile?filter={{ lookup_filter }}"
+         href="{{ url_for('web.profile').path }}?filter={{ lookup_filter }}"
          {% if selected == lookup_filter %}aria-current="true"{% endif %}>Dish checks</a>
     </nav>
 
@@ -43,7 +43,10 @@
               </span>
               {% if meal.verdict %}{{ ui.verdict_badge(meal.verdict.value) }}{% endif %}
             </div>
-            <h3><a class="card__link" href="/profile/meals/{{ meal.id }}">{{ meal.name }}</a></h3>
+            <h3>
+              <a class="card__link"
+                 href="{{ url_for('web.saved_meal', save_id=meal.id).path }}">{{ meal.name }}</a>
+            </h3>
             <p class="small muted">{{ meal.description }}</p>
             <div class="row">
               {% if meal.has_recipe %}<span class="badge">Recipe</span>{% endif %}
@@ -61,13 +64,13 @@
       </ul>
     {% else %}
       <p class="notice">
-        Nothing saved under this filter yet. <a href="/profile">Show everything</a>.
+        Nothing saved under this filter yet. <a href="{{ url_for('web.profile').path }}">Show everything</a>.
       </p>
     {% endif %}
   {% else %}
     <p class="notice">
-      Nothing saved yet. Use “Save this meal” on <a href="/daily">today's board</a> or on any
-      of the <a href="/meals">safe meals</a>.
+      Nothing saved yet. Use “Save this meal” on <a href="{{ url_for('web.daily').path }}">today's board</a> or on any
+      of the <a href="{{ url_for('web.meals').path }}">safe meals</a>.
     </p>
   {% endif %}
 {% endblock %}

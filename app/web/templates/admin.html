@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% import "_admin_macros.html" as admin %}
+{% import "_admin_macros.html" as admin with context %}
 
 {% block title %}Admin · Histamine Fighter{% endblock %}
-{% block head %}<script src="/static/admin.js" defer></script>{% endblock %}
+{% block head %}<script src="{{ url_for('static', path='admin.js').path }}" defer></script>{% endblock %}
 
 {% block content %}
   <header class="stack">
     <div class="row row--between">
       <h1>Admin</h1>
-      <form method="post" action="/logout">
+      <form method="post" action="{{ url_for('web.logout').path }}">
         <button class="button" type="submit">Sign out</button>
       </form>
     </div>
@@ -38,7 +38,9 @@
     </p>
 
     {% if available_providers %}
-      <form class="row" method="post" action="/admin/ui/settings">
+      <form class="row"
+            method="post"
+            action="{{ url_for('web.admin_settings').path }}">
         <label class="field">
           <span>Provider</span>
           <select name="provider">
@@ -177,10 +179,10 @@
     <nav class="row" aria-label="Review state">
       {% for state in review_states %}
         <a class="button"
-           href="/admin?status={{ state.value }}#curated"
+           href="{{ url_for('web.admin').path }}?status={{ state.value }}#curated"
            {% if curated_state == state %}aria-current="true"{% endif %}>{{ state.value }}</a>
       {% endfor %}
-      <a class="button" href="/admin/ui/meals/new">Write a meal by hand</a>
+      <a class="button" href="{{ url_for('web.admin_meal_new').path }}">Write a meal by hand</a>
     </nav>
 
     {% if meals %}

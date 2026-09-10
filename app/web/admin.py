@@ -189,7 +189,7 @@ def require_admin_page(user: User | None = Depends(get_current_user_optional)) -
     return user
 
 
-@router.get("", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse, name="web.admin")
 async def panel(
     request: Request,
     review_state: str = Query(default="", alias="status", description="Which curated tab."),
@@ -210,7 +210,7 @@ async def panel(
     )
 
 
-@router.post("/login")
+@router.post("/login", name="web.admin_login")
 async def sign_in(
     request: Request,
     email: str = Form(),
@@ -243,7 +243,7 @@ async def sign_in(
     return signed_in
 
 
-@router.post("/ui/settings")
+@router.post("/ui/settings", name="web.admin_settings")
 async def update_compose_settings(
     request: Request,
     provider: Provider = Form(),
@@ -273,7 +273,7 @@ async def update_compose_settings(
 
 # Declared before the ``{meal_id}`` route below, which would otherwise claim this path and
 # refuse "new" as a malformed id.
-@router.get("/ui/meals/new", response_class=HTMLResponse)
+@router.get("/ui/meals/new", response_class=HTMLResponse, name="web.admin_meal_new")
 async def new_meal_form(
     request: Request, _admin: User = Depends(require_admin_page)
 ) -> HTMLResponse:

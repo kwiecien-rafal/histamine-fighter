@@ -5,5 +5,5 @@
 {% block content %}
   <h1>Not found</h1>
   <p class="notice notice--error">{{ message }}</p>
-  <p><a href="/">Back to the home page</a></p>
+  <p><a href="{{ url_for('web.home').path }}">Back to the home page</a></p>
 {% endblock %}

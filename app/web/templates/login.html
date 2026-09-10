@@ -18,7 +18,9 @@
     <p class="notice notice--error" role="alert">{{ error }}</p>
   {% endif %}
 
-  <form class="stack" method="post" action="/login">
+  <form class="stack"
+        method="post"
+        action="{{ url_for('web.login_request').path }}">
     <label class="field">
       <span>Email</span>
       <input type="email"
@@ -44,7 +46,8 @@
       <h2>Or use a provider</h2>
       <p class="row">
         {% for provider in oauth_providers %}
-          <a class="button" href="/api/v1/auth/oauth/{{ provider }}/start">
+          <a class="button"
+             href="{{ url_for('api.oauth_start', provider_name=provider).path }}">
             Continue with {{ ui.oauth_provider_label(provider) }}
           </a>
         {% endfor %}
@@ -53,7 +56,7 @@
   {% endif %}
 
   <p class="small muted">
-    By signing in you agree to our <a href="/terms">terms</a> and
-    <a href="/privacy">privacy policy</a>. We store your email address and nothing else.
+    By signing in you agree to our <a href="{{ url_for('web.terms').path }}">terms</a> and
+    <a href="{{ url_for('web.privacy').path }}">privacy policy</a>. We store your email address and nothing else.
   </p>
 {% endblock %}
