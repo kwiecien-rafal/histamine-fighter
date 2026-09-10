@@ -9,7 +9,7 @@
    the row, so the panel simply reloads and the result appears in the queue below. Only a
    failure holds the page still, with the reason on it. */
 
-(function () {
+(function() {
   "use strict";
 
   var RELOAD_NOTE = " Reload the panel to see where things stand.";
@@ -18,7 +18,7 @@
   function parseFrame(text) {
     var event = "message";
     var data = [];
-    text.split(/\r?\n/).forEach(function (line) {
+    text.split(/\r?\n/).forEach(function(line) {
       if (line.indexOf("event:") === 0) event = line.slice(6).trim();
       else if (line.indexOf("data:") === 0) data.push(line.slice(5).trim());
     });
@@ -46,7 +46,7 @@
     var notes = region.querySelector("[data-compose-notes]");
     var stop = region.querySelector("[data-compose-stop]");
     return {
-      start: function (text) {
+      start: function(text) {
         region.hidden = false;
         status.textContent = text;
         log.textContent = "";
@@ -54,32 +54,32 @@
       },
       /* Offered only while a run is open. Assigned rather than added, so a second run
          replaces the first run's handler instead of stacking on it. */
-      running: function (onStop) {
+      running: function(onStop) {
         stop.hidden = false;
         stop.onclick = onStop;
       },
-      idle: function () {
+      idle: function() {
         stop.hidden = true;
         stop.onclick = null;
       },
       /* A board run announces each slot; the log from here on belongs to that slot. */
-      slot: function (text) {
+      slot: function(text) {
         status.textContent = text;
         log.textContent = "";
       },
-      status: function (text) {
+      status: function(text) {
         status.textContent = text;
       },
-      step: function (event) {
+      step: function(event) {
         var line = node("li");
         line.appendChild(node("span", "badge", event.kind));
         line.appendChild(document.createTextNode(" " + event.text));
         log.appendChild(line);
       },
-      note: function (text, className) {
+      note: function(text, className) {
         notes.appendChild(node("p", className, text));
       },
-      offer: function (text, label, onAccept) {
+      offer: function(text, label, onAccept) {
         var accept = node("button", "button", label);
         accept.type = "button";
         accept.addEventListener("click", onAccept);
@@ -87,7 +87,7 @@
         box.appendChild(node("p", null, text));
         box.appendChild(accept);
         notes.appendChild(box);
-      }
+      },
     };
   }
 
@@ -115,16 +115,15 @@
     }
     view.status("Nothing was composed.");
     if (detail && detail.conflict) {
-      view.offer(detail.message, "Replace it", function () {
+      view.offer(detail.message, "Replace it", function() {
         run(form, view, requestFor(form, false, true));
       });
     } else if (response.status === 401 || response.status === 403) {
       view.note("Your admin session has ended. Reload and sign in again.", "notice notice--error");
     } else {
-      var message =
-        typeof detail === "string"
-          ? detail
-          : "The composer could not start (error " + response.status + ").";
+      var message = typeof detail === "string"
+        ? detail
+        : "The composer could not start (error " + response.status + ").";
       view.note(message, "notice notice--error");
     }
   }
@@ -145,7 +144,13 @@
         view.step(frame.data);
       } else if (frame.event === "slot") {
         view.slot(
-          "Composing " + frame.data.meal_type + " (" + frame.data.index + " of " + frame.data.total + ")…"
+          "Composing "
+            + frame.data.meal_type
+            + " ("
+            + frame.data.index
+            + " of "
+            + frame.data.total
+            + ")…",
         );
       } else if (frame.event === "saved" || frame.event === "board") {
         finished = true;
@@ -182,11 +187,11 @@
   async function run(form, view, request) {
     var buttons = form.querySelectorAll("button");
     var controller = new AbortController();
-    buttons.forEach(function (button) {
+    buttons.forEach(function(button) {
       button.disabled = true;
     });
     view.start("Composing…");
-    view.running(function () {
+    view.running(function() {
       controller.abort();
     });
     try {
@@ -194,7 +199,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request.body),
-        signal: controller.signal
+        signal: controller.signal,
       });
       if (response.ok && response.body) await consume(response.body, view);
       else await refused(form, view, response);
@@ -208,16 +213,16 @@
       }
     } finally {
       view.idle();
-      buttons.forEach(function (button) {
+      buttons.forEach(function(button) {
         button.disabled = false;
       });
     }
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll("[data-compose]").forEach(function (form) {
+  document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll("[data-compose]").forEach(function(form) {
       var view = display(form);
-      form.addEventListener("submit", function (event) {
+      form.addEventListener("submit", function(event) {
         event.preventDefault();
         var board = Boolean(event.submitter) && event.submitter.name === "board";
         run(form, view, requestFor(form, board, false));

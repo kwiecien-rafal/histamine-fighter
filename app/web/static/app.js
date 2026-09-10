@@ -7,7 +7,7 @@
    us, and never logged. Everything here degrades to nothing: with the script off,
    the forms post normally and the server uses its own configured provider. */
 
-(function () {
+(function() {
   "use strict";
 
   var SETTINGS_KEY = "hf.llm";
@@ -22,7 +22,7 @@
     "anthropic/claude-sonnet-4-6": [3, 15],
     "anthropic/claude-haiku-4-5": [1, 5],
     "gemini/gemini-2.5-flash": [0.3, 2.5],
-    "gemini/gemini-2.5-pro": [1.25, 10]
+    "gemini/gemini-2.5-pro": [1.25, 10],
   };
   var PRICES_UPDATED = "2026-06-14";
   var SELF_HOSTED = "ollama/";
@@ -50,7 +50,7 @@
       provider: stored.provider || "",
       key: stored.key || {},
       model: stored.model || {},
-      baseUrl: stored.baseUrl || ""
+      baseUrl: stored.baseUrl || "",
     };
   }
 
@@ -82,14 +82,16 @@
     var current = settings();
     var provider = currentProvider();
 
-    panel.querySelectorAll("input[name=provider]").forEach(function (radio) {
+    panel.querySelectorAll("input[name=provider]").forEach(function(radio) {
       radio.checked = radio.value === provider;
     });
-    panel.querySelectorAll("[data-llm]").forEach(function (input) {
+    panel.querySelectorAll("[data-llm]").forEach(function(input) {
       var field = input.dataset.llm;
-      input.value = field === "baseUrl" ? current.baseUrl : current[field][input.dataset.provider] || "";
+      input.value = field === "baseUrl"
+        ? current.baseUrl
+        : current[field][input.dataset.provider] || "";
     });
-    panel.querySelectorAll("[data-fields]").forEach(function (group) {
+    panel.querySelectorAll("[data-fields]").forEach(function(group) {
       group.hidden = group.dataset.fields !== provider;
     });
   }
@@ -98,16 +100,16 @@
     var panel = document.getElementById("ai-settings");
     if (!panel) return;
 
-    panel.querySelectorAll("input[name=provider]").forEach(function (radio) {
-      radio.addEventListener("change", function () {
+    panel.querySelectorAll("input[name=provider]").forEach(function(radio) {
+      radio.addEventListener("change", function() {
         var next = settings();
         next.provider = radio.value;
         write(SETTINGS_KEY, next);
         renderSettings();
       });
     });
-    panel.querySelectorAll("[data-llm]").forEach(function (input) {
-      input.addEventListener("input", function () {
+    panel.querySelectorAll("[data-llm]").forEach(function(input) {
+      input.addEventListener("input", function() {
         var next = settings();
         if (input.dataset.llm === "baseUrl") next.baseUrl = input.value;
         else next[input.dataset.llm][input.dataset.provider] = input.value;
@@ -124,7 +126,7 @@
   function lockSettings(locked) {
     var panel = document.getElementById("ai-settings");
     if (!panel) return;
-    panel.querySelectorAll("input").forEach(function (input) {
+    panel.querySelectorAll("input").forEach(function(input) {
       if (locked && !input.disabled) {
         input.disabled = true;
         input.dataset.locked = "true";
@@ -151,7 +153,7 @@
       calls: 0,
       input: 0,
       output: 0,
-      unreported: 0
+      unreported: 0,
     };
     totals.calls += Number(node.dataset.calls);
     totals.input += Number(node.dataset.input);
@@ -202,37 +204,43 @@
     var priced = false;
 
     body.textContent = "";
-    Object.keys(models).sort().forEach(function (model) {
-      var totals = models[model];
-      var estimate = cost(model, totals);
-      var row = document.createElement("tr");
-      cell(row, model);
-      cell(row, String(totals.calls));
-      cell(row, formatTokens(totals, totals.input));
-      cell(row, formatTokens(totals, totals.output));
-      cell(row, reported(totals) ? formatUsd(estimate) : "—");
-      body.appendChild(row);
+    Object.keys(models)
+      .sort()
+      .forEach(function(model) {
+        var totals = models[model];
+        var estimate = cost(model, totals);
+        var row = document.createElement("tr");
+        cell(row, model);
+        cell(row, String(totals.calls));
+        cell(row, formatTokens(totals, totals.input));
+        cell(row, formatTokens(totals, totals.output));
+        cell(row, reported(totals) ? formatUsd(estimate) : "—");
+        body.appendChild(row);
 
-      calls += totals.calls;
-      if (reported(totals)) {
-        tokens += totals.input + totals.output;
-        if (estimate !== null) {
-          spend += estimate;
-          priced = true;
+        calls += totals.calls;
+        if (reported(totals)) {
+          tokens += totals.input + totals.output;
+          if (estimate !== null) {
+            spend += estimate;
+            priced = true;
+          }
         }
-      }
-    });
+      });
 
     panel.querySelector("[data-usage=priced]").textContent = PRICES_UPDATED;
     panel.querySelector("[data-usage=summary]").textContent = calls
-      ? calls + " calls · " + tokens.toLocaleString() + " tokens · ≈ " + formatUsd(priced ? spend : null)
+      ? calls
+        + " calls · "
+        + tokens.toLocaleString()
+        + " tokens · ≈ "
+        + formatUsd(priced ? spend : null)
       : "nothing yet";
   }
 
   function bindUsage() {
     var reset = document.querySelector("[data-usage=reset]");
     if (!reset) return;
-    reset.addEventListener("click", function () {
+    reset.addEventListener("click", function() {
       write(USAGE_KEY, { models: {} });
       renderUsage();
     });
@@ -253,12 +261,12 @@
   function renderIngredients(editor) {
     var rows = ingredientRows(editor);
     var max = Number(editor.dataset.max);
-    var filled = rows.filter(function (row) {
+    var filled = rows.filter(function(row) {
       return row.querySelector("input").value.trim() !== "";
     }).length;
 
     editor.querySelector("[data-ingredients-count]").textContent = filled + " of " + max;
-    rows.forEach(function (row, index) {
+    rows.forEach(function(row, index) {
       var remove = row.querySelector("[data-ingredients-remove]");
       remove.hidden = false;
       remove.setAttribute("aria-label", "Remove ingredient " + (index + 1));
@@ -292,16 +300,16 @@
   }
 
   function bindIngredients() {
-    document.querySelectorAll("[data-ingredients]").forEach(function (editor) {
+    document.querySelectorAll("[data-ingredients]").forEach(function(editor) {
       if (editor.dataset.bound) return;
       editor.dataset.bound = "true";
 
-      editor.addEventListener("click", function (event) {
+      editor.addEventListener("click", function(event) {
         var remove = event.target.closest("[data-ingredients-remove]");
         if (remove) removeIngredientRow(editor, remove.closest(".ingredients__row"));
         else if (event.target.closest("[data-ingredients-add]")) addIngredientRow(editor);
       });
-      editor.addEventListener("input", function () {
+      editor.addEventListener("input", function() {
         renderIngredients(editor);
       });
       renderIngredients(editor);
@@ -320,7 +328,7 @@
     function sync() {
       panel.hidden = !toggle.checked;
     }
-    document.querySelectorAll('input[name="mode"]').forEach(function (radio) {
+    document.querySelectorAll("input[name=\"mode\"]").forEach(function(radio) {
       radio.addEventListener("change", sync);
     });
     sync();
@@ -335,10 +343,10 @@
     renderUsage();
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener("DOMContentLoaded", function() {
     /* hx-boost replaces the body's contents, so the listeners live on the body
        itself and the panels are re-bound against the markup each swap brings in. */
-    document.body.addEventListener("htmx:configRequest", function (event) {
+    document.body.addEventListener("htmx:configRequest", function(event) {
       /* Only the writes spend a model call; a boosted link is a plain page read and
          has no business carrying somebody's API key. The same verb decides both the
          headers and the lock, so the panel is locked for exactly the calls it paid for. */
@@ -348,10 +356,10 @@
     });
     /* The happy path re-renders the panel from the markup the swap brought in, so this
        is what covers the error path, where nothing is swapped at all. */
-    document.body.addEventListener("htmx:afterRequest", function () {
+    document.body.addEventListener("htmx:afterRequest", function() {
       lockSettings(false);
     });
-    document.body.addEventListener("htmx:afterSwap", function () {
+    document.body.addEventListener("htmx:afterSwap", function() {
       recordCall();
       start();
     });

@@ -28,11 +28,11 @@
     <article class="card stack">
       {# A rewrite is still the dish that was asked about, so it is badged as ours
          rather than renamed into something the visitor never typed. #}
-      <h1>{{ adapted.name }}{% if outcome == 'adapted' %} by HF{% endif %}</h1>
+      <h1>{{ adapted.name }}{% if outcome == "adapted" %} by HF{% endif %}</h1>
 
       {{ ui.verdict_line(outcome, adapted.verdict.value, adapted.blocked_ingredients) }}
 
-      {% if outcome == 'exhausted' %}
+      {% if outcome == "exhausted" %}
         <form method="post" action="/lookup/adapt" hx-disabled-elt="find button">
           <input type="hidden" name="state" value="{{ state_json }}" />
           <p class="row">
@@ -57,7 +57,7 @@
 
       {% if swaps %}
         <div class="stack">
-          <h3>{% if outcome == 'adapted' %}Making it safe{% else %}Taking the edge off{% endif %}</h3>
+          <h3>{% if outcome == "adapted" %}Making it safe{% else %}Taking the edge off{% endif %}</h3>
           <ul class="stack plain-list">
             {% for row in swaps %}
               <li class="notice small">
@@ -95,7 +95,7 @@
       <p>{{ ui.attribution(model) }}</p>
     </article>
 
-    {% if outcome in ('impossible', 'exhausted') %}
+    {% if outcome in ("impossible", "exhausted") %}
       <section class="card stack">
         <h2>Find something else</h2>
         <p class="muted">
@@ -126,9 +126,7 @@
     <section class="card stack">
       <h2>Save it</h2>
       {% if user %}
-        <p class="small muted">
-          Saved as your own private copy, exactly as it reads here, recipe included.
-        </p>
+        <p class="small muted">Saved as your own private copy, exactly as it reads here, recipe included.</p>
         <form method="post" action="/lookup/save" hx-boost="false">
           <input type="hidden" name="state" value="{{ state_json }}" />
           <button class="button" type="submit">Save this dish</button>

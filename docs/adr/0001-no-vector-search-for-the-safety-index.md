@@ -29,11 +29,11 @@ and `find_substitutes`. Cross-dialect synonyms are covered by curating the
 A viability check
 ([experiments/ingredient_embedding_viability.py](../../experiments/ingredient_embedding_viability.py))
 embedded a set of true cross-dialect synonyms (`prosciutto` → Cured Ham) and
-*dangerous near-misses* (`almond milk` → Milk) and asked: is there a single
+_dangerous near-misses_ (`almond milk` → Milk) and asked: is there a single
 cosine cutoff that keeps every true synonym while rejecting every wrong match?
 
 Across five models the separation margin was **always negative** — the
-lowest-scoring true synonym always scored *below* the highest-scoring dangerous
+lowest-scoring true synonym always scored _below_ the highest-scoring dangerous
 near-miss:
 
 ```
@@ -50,7 +50,7 @@ similarity. A usable cutoff exists only when `margin > 0`.
 
 The failure is **structural, not a capacity gap**:
 
-- General embeddings are *correct* that "almond milk" is semantically near "milk".
+- General embeddings are _correct_ that "almond milk" is semantically near "milk".
   The distinction that matters here — histamine profile — is domain knowledge no
   general model carries.
 - Bigger did not help: 1024-dim `mxbai-large` (−0.322) lost to 768-dim

@@ -50,7 +50,9 @@
         </label>
         <label class="field">
           <span>Model, empty for the provider's default</span>
-          <input type="text" name="model" value="{{ model or '' }}"
+          <input type="text"
+                 name="model"
+                 value="{{ model or '' }}"
                  placeholder="provider default (OpenRouter needs one named)" />
         </label>
         <button class="button" type="submit">Save</button>
@@ -83,7 +85,8 @@
         approved meal is never replaced by a board run, and replacing one singly asks first.
       </p>
       {# No action: with the script off, submitting is a harmless GET back to the panel. #}
-      <form class="row" data-compose="daily"
+      <form class="row"
+            data-compose="daily"
             data-url="/admin/compose/daily"
             data-board-url="/admin/compose/daily/board"
             data-output="#compose-daily">
@@ -97,8 +100,12 @@
         </label>
         <label class="field">
           <span>Date</span>
-          <input type="date" name="date" value="{{ compose_date }}"
-                 min="{{ today }}" max="{{ latest_date }}" required />
+          <input type="date"
+                 name="date"
+                 value="{{ compose_date }}"
+                 min="{{ today }}"
+                 max="{{ latest_date }}"
+                 required />
         </label>
         <button class="button" type="submit">Compose the slot</button>
         <button class="button" type="submit" name="board" value="1">Compose every open slot</button>
@@ -109,7 +116,8 @@
     <div class="card stack">
       <h3>Curated pool</h3>
       <p class="small muted">A meal for the browsable pool, with no date attached.</p>
-      <form class="row" data-compose="curated"
+      <form class="row"
+            data-compose="curated"
             data-url="/admin/compose/curated"
             data-output="#compose-curated">
         <label class="field">
@@ -159,9 +167,7 @@
         </div>
       {% endfor %}
     {% else %}
-      <p class="notice">
-        Nothing queued. Compose a board above, or wait for the nightly job.
-      </p>
+      <p class="notice">Nothing queued. Compose a board above, or wait for the nightly job.</p>
     {% endif %}
   </section>
 
@@ -170,7 +176,8 @@
 
     <nav class="row" aria-label="Review state">
       {% for state in review_states %}
-        <a class="button" href="/admin?status={{ state.value }}#curated"
+        <a class="button"
+           href="/admin?status={{ state.value }}#curated"
            {% if curated_state == state %}aria-current="true"{% endif %}>{{ state.value }}</a>
       {% endfor %}
       <a class="button" href="/admin/ui/meals/new">Write a meal by hand</a>

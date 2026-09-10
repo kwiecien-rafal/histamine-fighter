@@ -43,6 +43,6 @@ reproduced. With thanks to:
 - **SIGHI — Swiss Interest Group Histamine Intolerance**: <https://www.histaminintoleranz.ch>
 - **British Dietetic Association**, food fact sheet on histamine and vasoactive amines.
 - **Histamine Intolerance Awareness (UK)**: <https://www.histamineintolerance.org.uk>
-- **Sánchez-Pérez et al. (2021)**, *Nutrients* (CC BY): <https://pmc.ncbi.nlm.nih.gov/articles/PMC8143338/>
-- **Comas-Basté et al. (2018)**, *Foods* (CC BY): <https://pmc.ncbi.nlm.nih.gov/articles/PMC6306728/>
+- **Sánchez-Pérez et al. (2021)**, _Nutrients_ (CC BY): <https://pmc.ncbi.nlm.nih.gov/articles/PMC8143338/>
+- **Comas-Basté et al. (2018)**, _Foods_ (CC BY): <https://pmc.ncbi.nlm.nih.gov/articles/PMC6306728/>
 - **EFSA (2011)**, Scientific Opinion on biogenic amines in fermented foods: <https://www.efsa.europa.eu/en/efsajournal/pub/2393>

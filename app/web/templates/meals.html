@@ -4,15 +4,17 @@
 {% block content %}
   <header>
     <h1>Safe meals</h1>
-    <p class="muted">
-      Every meal here was composed from the curated safe index and approved by a human.
-    </p>
+    <p class="muted">Every meal here was composed from the curated safe index and approved by a human.</p>
   </header>
 
   <nav class="row" aria-label="Filter by meal type">
-    <a class="button" href="{{ browse_url(none, 0) }}"{% if not meal_type %} aria-current="true"{% endif %}>All</a>
+    <a class="button"
+       href="{{ browse_url(none, 0) }}"
+       {% if not meal_type %} aria-current="true"{% endif %}>All</a>
     {% for value in meal_types %}
-      <a class="button" href="{{ browse_url(value, 0) }}"{% if meal_type == value %} aria-current="true"{% endif %}>{{ ui.meal_type_label(value.value) }}</a>
+      <a class="button"
+         href="{{ browse_url(value, 0) }}"
+         {% if meal_type == value %} aria-current="true"{% endif %}>{{ ui.meal_type_label(value.value) }}</a>
     {% endfor %}
   </nav>
 

@@ -40,9 +40,7 @@
   </div>
   <details>
     <summary class="small">Remove permanently</summary>
-    <p class="small muted">
-      Drops the row for good and frees its slot. Rejecting keeps it on record instead.
-    </p>
+    <p class="small muted">Drops the row for good and frees its slot. Rejecting keeps it on record instead.</p>
     {{ action_form(base ~ "/" ~ id ~ "/delete", "Remove permanently", tab) }}
   </details>
 {%- endmacro %}
@@ -62,9 +60,7 @@
       <h3>{{ content.name }}</h3>
       <span class="row">
         <span class="badge">{{ row.meal_type.value }}</span>
-        <span class="badge {{ STATE_TONES.get(row.approval_status.value, '') }}">
-          {{ row.approval_status.value }}
-        </span>
+        <span class="badge {{ STATE_TONES.get(row.approval_status.value, '') }}">{{ row.approval_status.value }}</span>
       </span>
     </div>
 
@@ -72,9 +68,7 @@
 
     <ul class="chips">
       {% for item in content.ingredients %}
-        <li class="chip">
-          {{ item.name }}
-        </li>
+        <li class="chip">{{ item.name }}</li>
       {% endfor %}
     </ul>
 
@@ -131,7 +125,8 @@
       <span class="small" data-compose-status aria-live="polite"></span>
       <button class="button" type="button" data-compose-stop hidden>Stop</button>
     </p>
-    <ol class="small stack" data-compose-log></ol>
+    <ol class="small stack" data-compose-log>
+    </ol>
     <div class="stack" data-compose-notes role="alert"></div>
   </div>
 {%- endmacro %}

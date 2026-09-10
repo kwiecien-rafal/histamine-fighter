@@ -3,7 +3,7 @@
   template that does NOT extend it must import the macros itself.
 #}
 {% import "_macros.html" as ui %}
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -32,10 +32,10 @@
           {{ ui.nav_link(request, "/learn", "Learn") }}
           {% if user %}
             {{ ui.nav_link(request, "/profile", "Saved") }}
-            <a class="masthead__account" href="/account" title="{{ user.email }}"
-               {% if request.url.path == "/account" %}aria-current="page"{% endif %}>
-              {{ user.email }}
-            </a>
+            <a class="masthead__account"
+               href="/account"
+               title="{{ user.email }}"
+               {% if request.url.path == "/account" %}aria-current="page"{% endif %}>{{ user.email }}</a>
           {% else %}
             {{ ui.nav_link(request, "/login", "Sign in") }}
           {% endif %}
@@ -44,7 +44,9 @@
     </header>
 
     <main class="page">
-      <div class="wrap {% block wrap %}{% endblock %}">{% block content %}{% endblock %}</div>
+      <div class="wrap {% block wrap %}{% endblock %}">
+        {% block content %}{% endblock %}
+      </div>
     </main>
 
     {% include "_ai_panel.html" %}

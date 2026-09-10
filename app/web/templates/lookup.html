@@ -22,11 +22,20 @@
   {# Boosted so the AI settings ride along as request headers; without JavaScript this
      posts as an ordinary form and falls back to the server's own provider. #}
   <div hx-boost="true">
-    <form class="stack" method="post" action="/lookup/check" hx-disabled-elt="find button">
+    <form class="stack"
+          method="post"
+          action="/lookup/check"
+          hx-disabled-elt="find button">
       <label class="field field--wide">
         <span>Dish name</span>
-        <input type="text" name="dish" value="{{ dish }}" maxlength="{{ max_dish_chars }}"
-               placeholder="e.g. spaghetti bolognese" autocomplete="off" required autofocus />
+        <input type="text"
+               name="dish"
+               value="{{ dish }}"
+               maxlength="{{ max_dish_chars }}"
+               placeholder="e.g. spaghetti bolognese"
+               autocomplete="off"
+               required
+               autofocus />
       </label>
 
       {# Radios, not two submit buttons: the choice is then part of the form's values,
@@ -42,8 +51,11 @@
           </li>
           <li>
             <label class="check check--plain">
-              <input type="radio" name="mode" value="{{ mode_own }}"
-                     data-ingredients-toggle {% if own %}checked{% endif %} />
+              <input type="radio"
+                     name="mode"
+                     value="{{ mode_own }}"
+                     data-ingredients-toggle
+                     {% if own %}checked{% endif %} />
               I'll list them myself
             </label>
             {# Rendered open and hidden by the script, never the other way round:
@@ -52,7 +64,7 @@
                server reads. #}
             <div data-ingredients-panel>
               {{ ui.ingredient_editor(ingredients, known=known_categories,
-                                      hint="List at least %d." % manual_minimum) }}
+                hint="List at least %d." % manual_minimum) }}
             </div>
           </li>
         </ul>

@@ -45,6 +45,8 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
     "mypy>=1.13",
+    "djlint>=1.46",
+    "dprint-py>=0.57.4",
 ]
 
 [tool.pytest.ini_options]
@@ -62,6 +64,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 extend-select = ["I"]
+
+[tool.djlint]
+profile = "jinja"
+indent = 2
+preserve_blank_lines = true
 
 [tool.mypy]
 strict = true

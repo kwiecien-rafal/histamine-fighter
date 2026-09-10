@@ -17,10 +17,18 @@
     <input type="hidden" name="email" value="{{ email }}" />
     <label class="field">
       <span>{{ code_length }}-digit code</span>
-      <input type="text" name="code" inputmode="numeric" pattern="[0-9]*"
-             maxlength="{{ code_length }}" autocomplete="one-time-code" required autofocus />
+      <input type="text"
+             name="code"
+             inputmode="numeric"
+             pattern="[0-9]*"
+             maxlength="{{ code_length }}"
+             autocomplete="one-time-code"
+             required
+             autofocus />
     </label>
-    <p><button class="button" type="submit">Sign in with the code</button></p>
+    <p>
+      <button class="button" type="submit">Sign in with the code</button>
+    </p>
   </form>
 
   <p class="small muted">

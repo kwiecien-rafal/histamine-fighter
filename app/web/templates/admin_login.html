@@ -24,15 +24,25 @@
     <form class="stack" method="post" action="/admin/login">
       <label class="field">
         <span>Email</span>
-        <input type="email" name="email" value="{{ email }}"
-               maxlength="{{ max_email_chars }}" autocomplete="username" required autofocus />
+        <input type="email"
+               name="email"
+               value="{{ email }}"
+               maxlength="{{ max_email_chars }}"
+               autocomplete="username"
+               required
+               autofocus />
       </label>
       <label class="field">
         <span>Password</span>
-        <input type="password" name="password"
-               maxlength="{{ max_password_chars }}" autocomplete="current-password" required />
+        <input type="password"
+               name="password"
+               maxlength="{{ max_password_chars }}"
+               autocomplete="current-password"
+               required />
       </label>
-      <p><button class="button" type="submit">Sign in</button></p>
+      <p>
+        <button class="button" type="submit">Sign in</button>
+      </p>
     </form>
 
     <p class="small muted">

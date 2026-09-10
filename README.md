@@ -7,6 +7,7 @@ Histamine Fighter is an AI-first web app for people struggling with histamine in
 > Status: work in progress. The schema, API, and UI still change rapidly. Currently only available if you fork the code and run the app yourself locally. I'm keeping this README minimal for now to reduce liability.
 
 Current main functionalities:
+
 - **Dish lookup:** Input a dish of your choosing and get a low-histamine version suggestion with detailed ingredients.
 - **Daily board:** Every day an AI Composer Agent generates four dishes for the day (breakfast, lunch, dinner, snack) from scratch.
 - **[WIP] Learn:** Retrieval-grounded answers over a curated histamine knowledge base.

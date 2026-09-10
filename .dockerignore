@@ -1,5 +1,3 @@
-# The build context is now the repo root, so everything the image does not COPY is
-# excluded here -- the environment file first of all.
 .env
 .git/
 .github/
@@ -13,3 +11,4 @@ docs/
 experiments/
 migrations/
 tests/
+dprint.json

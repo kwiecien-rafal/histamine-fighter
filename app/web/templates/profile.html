@@ -16,17 +16,17 @@
 
   {% if total %}
     <nav class="row" aria-label="Filter saved meals">
-      <a class="button" href="/profile"{% if not selected %} aria-current="true"{% endif %}>All</a>
+      <a class="button"
+         href="/profile"
+         {% if not selected %} aria-current="true"{% endif %}>All</a>
       {% for value in meal_types %}
-        <a class="button" href="/profile?filter={{ value.value }}"
-           {% if selected == value.value %}aria-current="true"{% endif %}>
-          {{ ui.meal_type_label(value.value) }}
-        </a>
+        <a class="button"
+           href="/profile?filter={{ value.value }}"
+           {% if selected == value.value %}aria-current="true"{% endif %}>{{ ui.meal_type_label(value.value) }}</a>
       {% endfor %}
-      <a class="button" href="/profile?filter={{ lookup_filter }}"
-         {% if selected == lookup_filter %}aria-current="true"{% endif %}>
-        Dish checks
-      </a>
+      <a class="button"
+         href="/profile?filter={{ lookup_filter }}"
+         {% if selected == lookup_filter %}aria-current="true"{% endif %}>Dish checks</a>
     </nav>
 
     {% if meals %}

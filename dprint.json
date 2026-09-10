@@ -1,0 +1,21 @@
+{
+  "lineWidth": 100,
+  "indentWidth": 2,
+  "useTabs": false,
+  "excludes": [
+    ".venv",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "app/web/static/vendor",
+    "app/agents/prompts",
+    "uv.lock"
+  ],
+  "plugins": [
+    "npm:@dprint/typescript@0.96.1",
+    "npm:@dprint/markdown@0.23.3",
+    "npm:@dprint/json@0.23.0",
+    "npm:dprint-plugin-malva@0.16.0",
+    "npm:dprint-plugin-yaml@0.6.0"
+  ]
+}

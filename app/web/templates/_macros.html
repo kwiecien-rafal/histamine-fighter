@@ -5,22 +5,23 @@
   as flat dictionaries so they can become an i18n dictionary later.
 #}
 
-{% set MEAL_TYPE_LABELS = {
-  "breakfast": "Breakfast",
-  "lunch": "Lunch",
-  "dinner": "Dinner",
-  "snack": "Snack",
-} %}
+{% set MEAL_TYPE_LABELS = {"breakfast": "Breakfast", "lunch": "Lunch", "dinner": "Dinner", "snack": "Snack"} %}
 
-{% set OAUTH_PROVIDER_LABELS = {
-  "google": "Google",
-  "github": "GitHub",
-} %}
+{% set OAUTH_PROVIDER_LABELS = {"google": "Google", "github": "GitHub"} %}
 
 {% set SAFETY_LABELS = {
-  "safe": {"label": "Safe", "tone": "badge--ok"},
-  "depends": {"label": "Depends", "tone": "badge--caution"},
-  "avoid": {"label": "Avoid", "tone": "badge--danger"},
+  "safe": {
+    "label": "Safe",
+    "tone": "badge--ok"
+  },
+  "depends": {
+    "label": "Depends",
+    "tone": "badge--caution"
+  },
+  "avoid": {
+    "label": "Avoid",
+    "tone": "badge--danger"
+  }
 } %}
 
 {% set SAVED_TAG_LABELS = {
@@ -34,26 +35,14 @@
   "green": "Green",
   "blue": "Blue",
   "yellow": "Yellow",
-  "orange": "Orange",
+  "orange": "Orange"
 } %}
 
-{% set ADAPTATION_LABELS = {
-  "swap": "swap it",
-  "omit": "leave it out",
-  "no_safe_swap": "no safe swap",
-} %}
+{% set ADAPTATION_LABELS = {"swap": "swap it", "omit": "leave it out", "no_safe_swap": "no safe swap"} %}
 
-{% set CULINARY_ROLE_LABELS = {
-  "core": "core to the dish",
-  "supporting": "supporting",
-  "seasoning": "seasoning",
-} %}
+{% set CULINARY_ROLE_LABELS = {"core": "core to the dish", "supporting": "supporting", "seasoning": "seasoning"} %}
 
-{% set ALTERNATIVE_GOAL_LABELS = {
-  "any_meal": "Just a good meal",
-  "same_style": "Same style of dish",
-  "similar_flavours": "Similar flavours",
-} %}
+{% set ALTERNATIVE_GOAL_LABELS = {"any_meal": "Just a good meal", "same_style": "Same style of dish", "similar_flavours": "Similar flavours"} %}
 
 {#
   What a rewrite attempt came to, as the one line the result card leads with. Keyed on
@@ -62,12 +51,30 @@
   outcome alone and matched by the macro's fallback.
 #}
 {% set VERDICT_LINES = {
-  "unchanged:safe": {"label": "Nothing here needs changing.", "tone": "verdict--ok"},
-  "unchanged:depends": {"label": "Fine as it is, with a few things worth watching.", "tone": "verdict--caution"},
-  "adapted:safe": {"label": "Made histamine-safe.", "tone": "verdict--ok"},
-  "adapted:depends": {"label": "Made safer, with a few things worth watching.", "tone": "verdict--caution"},
-  "impossible": {"label": "This can't be made histamine-safe.", "tone": "verdict--danger"},
-  "exhausted": {"label": "We couldn't put a safe version together this time.", "tone": "verdict--caution"},
+  "unchanged:safe": {
+    "label": "Nothing here needs changing.",
+    "tone": "verdict--ok"
+  },
+  "unchanged:depends": {
+    "label": "Fine as it is, with a few things worth watching.",
+    "tone": "verdict--caution"
+  },
+  "adapted:safe": {
+    "label": "Made histamine-safe.",
+    "tone": "verdict--ok"
+  },
+  "adapted:depends": {
+    "label": "Made safer, with a few things worth watching.",
+    "tone": "verdict--caution"
+  },
+  "impossible": {
+    "label": "This can't be made histamine-safe.",
+    "tone": "verdict--danger"
+  },
+  "exhausted": {
+    "label": "We couldn't put a safe version together this time.",
+    "tone": "verdict--caution"
+  }
 } %}
 
 {#
@@ -75,11 +82,26 @@
   ``dish_chips`` produces; the wording and the tone are this file's alone.
 #}
 {% set CHIP_READINGS = {
-  "clear": {"note": "", "tone": ""},
-  "watch": {"note": "worth watching", "tone": "chip--caution"},
-  "kept": {"note": "no safe swap", "tone": "chip--danger"},
-  "unrated": {"note": "no known concern", "tone": ""},
-  "unreadable": {"note": "check failed", "tone": "chip--caution"},
+  "clear": {
+    "note": "",
+    "tone": ""
+  },
+  "watch": {
+    "note": "worth watching",
+    "tone": "chip--caution"
+  },
+  "kept": {
+    "note": "no safe swap",
+    "tone": "chip--danger"
+  },
+  "unrated": {
+    "note": "no known concern",
+    "tone": ""
+  },
+  "unreadable": {
+    "note": "check failed",
+    "tone": "chip--caution"
+  }
 } %}
 
 {% set TRACE_KIND_LABELS = {
@@ -91,7 +113,7 @@
   "reject": "Reject",
   "submit": "Submit",
   "verify": "Verify",
-  "judge": "Judge",
+  "judge": "Judge"
 } %}
 
 
@@ -212,9 +234,8 @@
 {# Provenance for an AI output: the producing model, or the hand-authored sentinel. #}
 {% macro attribution(model) -%}
   {% if model == MANUAL_MODEL %}
-    <span class="badge" title="Written by an admin rather than composed by a model.">
-      Curated by admin
-    </span>
+    <span class="badge"
+          title="Written by an admin rather than composed by a model.">Curated by admin</span>
   {% else %}
     <span class="small muted">Composed by <span class="badge">{{ model }}</span></span>
   {% endif %}
@@ -234,9 +255,7 @@
     </span>
   {% else %}
     <span class="badge badge--ok"
-          title="Composed from the curated safe index and approved by a human.">
-      Verified
-    </span>
+          title="Composed from the curated safe index and approved by a human.">Verified</span>
   {% endif %}
 {%- endmacro %}
 
@@ -278,9 +297,8 @@
       <ul class="chips">
         {% for ingredient in meal.ingredients %}
           {% set caution = meal.cautioned_ingredients | selectattr("name", "equalto", ingredient.name) | first %}
-          <li class="chip{% if caution %} chip--caution{% endif %}"{% if caution %} title="{{ caution.note }}"{% endif %}>
-            {{ ingredient.name }}
-          </li>
+          <li class="chip{% if caution %} chip--caution{% endif %}"
+              {% if caution %} title="{{ caution.note }}"{% endif %}>{{ ingredient.name }}</li>
         {% endfor %}
       </ul>
     </div>
@@ -321,7 +339,8 @@
    own words are the chip's tooltip, since a note is a sentence and a chip is not. #}
 {% macro dish_chip(chip) -%}
   {% set display = CHIP_READINGS.get(chip.reading, CHIP_READINGS.clear) %}
-  <li class="{{ ("chip " ~ display.tone) | trim }}"{% if chip.note %} title="{{ chip.note }}"{% endif %}>
+  <li class="{{ ("chip " ~ display.tone) | trim }}"
+      {% if chip.note %} title="{{ chip.note }}"{% endif %}>
     {{ chip.name }}{% if display.note %} · {{ display.note }}{% endif %}
   </li>
 {%- endmacro %}
@@ -332,9 +351,9 @@
    reading it was defaulted to. #}
 {% macro ingredient_chip(item) -%}
   {% if item.error %}
-    {% set tone, note = "badge--caution", "check failed" %}
+    {% set tone, note = 'badge--caution', 'check failed' %}
   {% elif not item.found %}
-    {% set tone, note = "", "no known concern" %}
+    {% set tone, note = '', 'no known concern' %}
   {% else %}
     {% set tone, note = SAFETY_LABELS[item.safety.value].tone, "" %}
   {% endif %}
@@ -353,13 +372,19 @@
      form's own hidden field, and the goal rides along as the pressed button's value.
      The fieldset is what the request disables, so a second goal cannot be pressed
      while the first is still being answered, and it leaves the state field alone. #}
-  <form class="stack" method="post" action="/lookup/alternatives" hx-disabled-elt="find fieldset">
+  <form class="stack"
+        method="post"
+        action="/lookup/alternatives"
+        hx-disabled-elt="find fieldset">
     <input type="hidden" name="state" value="{{ state_json }}" />
     <fieldset class="field field--wide">
       <legend>What are you after?</legend>
       <p class="row">
         {% for option in goals %}
-          <button class="button" type="submit" name="goal" value="{{ option.value }}"
+          <button class="button"
+                  type="submit"
+                  name="goal"
+                  value="{{ option.value }}"
                   {% if option == goal %}aria-current="true"{% endif %}>
             {{ alternative_goal_label(option.value) }}
           </button>
@@ -376,10 +401,9 @@
           <li class="notice stack">
             <div class="row">
               <strong>{{ item.name }}</strong>
-              {% if item.source == 'verified' %}
-                <span class="badge badge--ok" title="One of the meals composed from the index and approved by a human.">
-                  From our kitchen
-                </span>
+              {% if item.source == "verified" %}
+                <span class="badge badge--ok"
+                      title="One of the meals composed from the index and approved by a human.">From our kitchen</span>
               {% endif %}
             </div>
             {% if item.pitch %}<p class="small muted">{{ item.pitch }}</p>{% endif %}
@@ -404,13 +428,14 @@
    no dish text — counts only — so keeping it in the visitor's browser is harmless. #}
 {% macro model_call(call) -%}
   {% if call %}
-    <div id="llm-call" hidden
+    <div id="llm-call"
+         hidden
          data-step="{{ call.step }}"
          data-model="{{ call.model }}"
          data-calls="{{ call.usage.calls }}"
          data-input="{{ call.usage.input_tokens }}"
          data-output="{{ call.usage.output_tokens }}"
-         data-unreported="{{ call.usage.steps | rejectattr("reported") | list | length }}"></div>
+         data-unreported="{{ call.usage.steps | rejectattr('reported') | list | length }}"></div>
   {% endif %}
 {%- endmacro %}
 
@@ -427,7 +452,9 @@
    and the trailing blank row adds one. The remove and add controls are enhancements —
    the add button stays hidden until app.js unhides it, so nothing inert is ever shown. #}
 {% macro ingredient_editor(ingredients, known="", hint="") -%}
-  <fieldset class="field field--wide ingredients" data-ingredients data-max="{{ MAX_INGREDIENTS }}">
+  <fieldset class="field field--wide ingredients"
+            data-ingredients
+            data-max="{{ MAX_INGREDIENTS }}">
     <legend>
       Ingredients <span class="muted" data-ingredients-count>up to {{ MAX_INGREDIENTS }}</span>
     </legend>
@@ -438,9 +465,7 @@
       {% endfor %}
       {{ ingredient_row("", ingredients | length + 1) }}
     </ol>
-    <button class="ingredients__add" type="button" data-ingredients-add hidden>
-      + Add ingredient
-    </button>
+    <button class="ingredients__add" type="button" data-ingredients-add hidden>+ Add ingredient</button>
     <input type="hidden" name="ingredient_categories" value="{{ known }}" />
   </fieldset>
 {%- endmacro %}
@@ -449,11 +474,17 @@
 {# One row of the editor, also the template app.js clones for a new one. #}
 {% macro ingredient_row(name, position) -%}
   <li class="ingredients__row">
-    <input type="text" name="ingredient" value="{{ name }}"
-           maxlength="{{ MAX_INGREDIENT_CHARS }}" autocomplete="off"
+    <input type="text"
+           name="ingredient"
+           value="{{ name }}"
+           maxlength="{{ MAX_INGREDIENT_CHARS }}"
+           autocomplete="off"
            aria-label="Ingredient {{ position }}"
            {% if not name %}placeholder="Add an ingredient"{% endif %} />
-    <button class="ingredients__remove" type="button" data-ingredients-remove
-            aria-label="Remove ingredient {{ position }}" hidden>&times;</button>
+    <button class="ingredients__remove"
+            type="button"
+            data-ingredients-remove
+            aria-label="Remove ingredient {{ position }}"
+            hidden>×</button>
   </li>
 {%- endmacro %}
