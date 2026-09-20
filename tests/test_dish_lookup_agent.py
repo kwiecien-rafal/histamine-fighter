@@ -107,7 +107,7 @@ class _Structured:
         self._chat = chat
         self._reply = reply
 
-    async def ainvoke(self, messages: list[Any]) -> dict[str, Any]:
+    async def ainvoke(self, messages: list[Any], **_kwargs: Any) -> dict[str, Any]:
         self._chat.seen.append(messages)
         if isinstance(self._reply, Exception):
             raise self._reply
@@ -300,7 +300,7 @@ class _NoOutput:
     def with_structured_output(self, _schema: object, *, include_raw: bool = False) -> "_NoOutput":
         return self
 
-    async def ainvoke(self, _messages: list[Any]) -> dict[str, Any]:
+    async def ainvoke(self, _messages: list[Any], **_kwargs: Any) -> dict[str, Any]:
         return _raw_reply(None)
 
 

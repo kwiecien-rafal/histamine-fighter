@@ -131,7 +131,7 @@ class _ScriptedJudgeChat:
     def with_structured_output(self, _schema: Any, **_kwargs: Any) -> "_ScriptedJudgeChat":
         return self
 
-    async def ainvoke(self, _messages: Any) -> dict[str, Any]:
+    async def ainvoke(self, _messages: Any, **_kwargs: Any) -> dict[str, Any]:
         return {"raw": _ai(), "parsed": self._judgements.pop(0)}
 
 

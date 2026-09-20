@@ -28,7 +28,7 @@ class _Structured:
     def __init__(self, chat: "_ScriptedChat") -> None:
         self._chat = chat
 
-    async def ainvoke(self, messages: list[Any]) -> dict[str, Any]:
+    async def ainvoke(self, messages: list[Any], **_kwargs: Any) -> dict[str, Any]:
         self._chat.seen.append(messages)
         reply = self._chat.replies.pop(0)
         if isinstance(reply, Exception):
