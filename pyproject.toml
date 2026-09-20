@@ -27,6 +27,8 @@ dependencies = [
     "email-validator>=2.2",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.20",
+    "langfuse>=4.15.4",
+    "langchain>=1.0",
 ]
 
 # seed_data sits next to app in the Docker build context, so automatic

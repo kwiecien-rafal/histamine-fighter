@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.llm.errors import LLMInvocationError, LLMRejectedError, rejection_status
 from app.llm.langchain_factory import ChatModel
+from app.observability import trace_config
 from app.schemas.usage import LLMUsage, StepUsage
 
 log = structlog.get_logger(__name__)
@@ -70,7 +71,9 @@ class BaseAgent(ABC):
         """Make one structured-output call, tallying its token usage."""
         structured = self._chat.model.with_structured_output(schema, include_raw=True)
         try:
-            raw = cast(dict[str, Any], await structured.ainvoke(messages))
+            raw = cast(
+                dict[str, Any], await structured.ainvoke(messages, config=trace_config(step))
+            )
             reply, parsed = raw["raw"], raw["parsed"]
         except Exception as exc:
             raise self._invocation_failure(exc, step=step) from exc
